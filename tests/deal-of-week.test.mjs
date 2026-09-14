@@ -26,6 +26,13 @@ import {
 // Every expected endsAt below is a Monday morning in UTC for that reason.
 const SUNDAY_2_AUG_END = '2026-08-03T05:59:59.999Z';
 
+// The 10+ vial tier is not a constant: bulkDeal.mjs raises it to 35% for a
+// promotional week and drops it back to 20% afterwards. Both instants are
+// pinned here so the stacking assertions below cannot quietly change meaning
+// when that window moves again.
+const RAISED_TIER_WEEK = Date.UTC(2026, 8, 10); // inside the 35% bulk-deal week
+const STANDING_TIERS = Date.UTC(2026, 8, 20); // after it lapsed, back to 20%
+
 test('a midweek launch ends at the close of the coming Sunday, Costa Rica time', () => {
   // Thursday 30 Jul 2026, 10:00 CR = 16:00 UTC
   const window = weekWindow(new Date('2026-07-30T16:00:00Z'));
@@ -271,11 +278,62 @@ test('deal links use the real catalog host and preserve attribution', () => {
 
 test('stacking safety requires review at 30% and refuses dangerous totals', () => {
   assert.equal(stackedDiscountPercent(0.15, 20), 32);
-  assert.equal(dealSafety(0.29).ok, true);
-  assert.equal(dealSafety(0.3).needsConfirmation, true);
-  assert.equal(dealSafety(0.3, { confirmedHighDiscount: true }).ok, true);
-  assert.equal(dealSafety(0.5, { confirmedHighDiscount: true }).ok, false, '50% plus 20% exceeds the combined cap');
-  assert.match(dealSafety(0.51, { confirmedHighDiscount: true }).error, /cannot exceed 50%/);
+  assert.equal(dealSafety(0.29, { now: STANDING_TIERS }).ok, true);
+  assert.equal(dealSafety(0.3, { now: STANDING_TIERS }).needsConfirmation, true);
+  assert.equal(dealSafety(0.3, { confirmedHighDiscount: true, now: STANDING_TIERS }).ok, true);
+  assert.equal(
+    dealSafety(0.5, { confirmedHighDiscount: true, now: STANDING_TIERS }).ok,
+    false,
+    '50% plus 20% exceeds the combined cap',
+  );
+  assert.match(
+    dealSafety(0.51, { confirmedHighDiscount: true, now: STANDING_TIERS }).error,
+    /cannot exceed 50%/,
+  );
+});
+
+test('the safety check measures the volume tier in force, not a fixed 20%', () => {
+  // The bug this pins: the tiers were written into dealSafety as literal 15 and
+  // 20, so a deal launched during a raised bulk-discount week was measured
+  // against a discount nobody was getting.
+  const standing = dealSafety(0.4, { confirmedHighDiscount: true, now: STANDING_TIERS });
+  assert.equal(standing.tenPlusPct, 20);
+  assert.equal(standing.stackedAtTen, 52);
+  assert.equal(standing.ok, true, '40% is 52% at the standing tier, inside the 55% ceiling');
+
+  const bulkWeek = dealSafety(0.4, { confirmedHighDiscount: true, now: RAISED_TIER_WEEK });
+  assert.equal(bulkWeek.tenPlusPct, 35, 'the 10+ tier is raised during a bulk-discount week');
+  assert.equal(bulkWeek.stackedAtTen, 61, 'the same 40% deal really charges 61% off that week');
+  assert.equal(bulkWeek.ok, false, 'and 61% is past the 55% ceiling, so it must be refused');
+  assert.match(bulkWeek.error, /61% off/);
+});
+
+test('the five-plus tier is reported from the same source as the cart', () => {
+  const safety = dealSafety(0.2, { now: STANDING_TIERS });
+  assert.equal(safety.fivePlusPct, 15);
+  assert.equal(safety.stackedAtFive, 32);
+});
+
+test('announcement drafts quote the combined total, not the raw markdown', () => {
+  // These lines read "5+ vials another 15% off, 10+ vials 20%" as literals, so
+  // a deal announced during a raised week promised the standing rate.
+  const deal = { id: 'deal-1', discount_pct: 0.25, product_names: ['NAD+ 500mg'] };
+
+  const standing = dealBroadcastDrafts(deal, { now: STANDING_TIERS }).message;
+  assert.match(standing, /36\.25% off at 5\+ vials/);
+  assert.match(standing, /40% off at 10\+/);
+  assert.match(standing, /36\.25% con 5\+ viales/);
+
+  const bulkWeek = dealBroadcastDrafts(deal, { now: RAISED_TIER_WEEK }).message;
+  assert.match(bulkWeek, /51\.25% off at 10\+/, 'a raised tier has to reach the customer copy too');
+});
+
+test('the banner quotes a ceiling customers can actually reach', () => {
+  // It used to print the markdown twice ("25% off X — extra 25% on top"), which
+  // named a number nobody is charged.
+  const deal = { discount_pct: 0.25, product_names: ['NAD+ 500mg'] };
+  assert.match(dealBannerText(deal, 'en', { now: STANDING_TIERS }), /up to 40% with volume discounts/);
+  assert.match(dealBannerText(deal, 'es', { now: STANDING_TIERS }), /hasta 40% con los descuentos por volumen/);
 });
 
 test('expiry restores only when the product still matches what launch applied', () => {

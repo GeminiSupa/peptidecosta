@@ -16,6 +16,7 @@
  * in this file reads the clock or the network on its own.
  */
 
+import { STANDARD_FIVE_PLUS_PCT, tenPlusDiscountPct } from './bulkDeal.mjs';
 import { crWallToIso, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
 
@@ -178,24 +179,41 @@ export function isUnavailableForDeal(product) {
  * only after an explicit review, while a commercially dangerous combined
  * markdown is refused outright.
  */
-export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) {
+export function dealSafety(discountPct, { confirmedHighDiscount = false, now = Date.now() } = {}) {
   const pct = toPercent(discountPct);
-  const stackedAtFive = stackedDiscountPercent(discountPct, 15);
-  const stackedAtTen = stackedDiscountPercent(discountPct, 20);
+
+  // Read the tiers the cart is charging RIGHT NOW rather than restating them.
+  // These were hardcoded as 15 and 20, which is only the standing rate: the
+  // 10+ tier is raised for a bulk-discount week (bulkDeal.mjs), and during one
+  // this panel quoted a stacked total well under the real one and the safety
+  // ceiling below was measured against a discount nobody was actually getting.
+  // A 40% deal launched through the last 35% week reads 52% here and charges
+  // 61%, straight past a limit meant to stop exactly that.
+  const fivePlusPct = STANDARD_FIVE_PLUS_PCT;
+  const tenPlusPct = tenPlusDiscountPct(now);
+  const stackedAtFive = stackedDiscountPercent(discountPct, fivePlusPct);
+  const stackedAtTen = stackedDiscountPercent(discountPct, tenPlusPct);
+  // Whichever tier gives the most away is the one worth refusing on. Normally
+  // that is the 10+ tier, but the two are independent numbers and a five-plus
+  // rate set above the ten-plus one must not slip through unmeasured.
+  const worstStacked = Math.max(stackedAtFive, stackedAtTen);
+  const worstTierPct = stackedAtFive > stackedAtTen ? fivePlusPct : tenPlusPct;
+  const tiers = { fivePlusPct, tenPlusPct, worstStacked };
 
   if (pct <= 0 || pct >= 100) {
-    return { ok: false, error: 'The discount must be between 1% and 99%.', pct, stackedAtFive, stackedAtTen };
+    return { ok: false, error: 'The discount must be between 1% and 99%.', pct, stackedAtFive, stackedAtTen, ...tiers };
   }
   if (pct > DEAL_HARD_LIMIT_PCT) {
-    return { ok: false, error: `A weekly deal cannot exceed ${DEAL_HARD_LIMIT_PCT}% off.`, pct, stackedAtFive, stackedAtTen };
+    return { ok: false, error: `A weekly deal cannot exceed ${DEAL_HARD_LIMIT_PCT}% off.`, pct, stackedAtFive, stackedAtTen, ...tiers };
   }
-  if (stackedAtTen > DEAL_MAX_STACKED_DISCOUNT_PCT) {
+  if (worstStacked > DEAL_MAX_STACKED_DISCOUNT_PCT) {
     return {
       ok: false,
-      error: `With the 10+ vial discount this becomes ${stackedAtTen}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
+      error: `With the ${worstTierPct}% volume discount this becomes ${worstStacked}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
       pct,
       stackedAtFive,
       stackedAtTen,
+      ...tiers,
     };
   }
   if (pct >= DEAL_REVIEW_THRESHOLD_PCT && !confirmedHighDiscount) {
@@ -206,9 +224,10 @@ export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) 
       pct,
       stackedAtFive,
       stackedAtTen,
+      ...tiers,
     };
   }
-  return { ok: true, pct, stackedAtFive, stackedAtTen };
+  return { ok: true, pct, stackedAtFive, stackedAtTen, ...tiers };
 }
 
 /** A deal-specific catalog destination that survives channel handoffs and attributes orders. */
@@ -344,21 +363,25 @@ function joinNames(names, conjunction) {
  * names the product and the saving and nothing else — there is no room for
  * terms, and the catalog card already shows the struck-through price.
  */
-export function dealBannerText(deal, lang = 'en') {
+export function dealBannerText(deal, lang = 'en', { now = Date.now() } = {}) {
   const pct = toPercent(deal?.discount_pct);
   if (!pct) return '';
   const isEn = String(lang).toLowerCase().startsWith('en');
   const names = deal?.product_names || [];
+  // "25% off X — extra 25% on top of volume discounts" read as two separate
+  // quarter-offs and named a number nobody gets. The combined figure is the one
+  // the customer is actually charged, so the banner quotes that as a ceiling.
+  const upTo = stackedDiscountPercent(deal?.discount_pct, tenPlusDiscountPct(now));
 
   if (isEn) {
     const custom = String(deal?.title_en || '').trim();
     if (custom) return custom;
-    return `⚡ DEAL OF THE WEEK: ${pct}% off ${joinNames(names, 'and')} — extra ${pct}% on top of volume discounts. Ends Sunday.`;
+    return `⚡ DEAL OF THE WEEK: ${pct}% off ${joinNames(names, 'and')}, up to ${upTo}% with volume discounts. Ends Sunday.`;
   }
 
   const customEs = String(deal?.title_es || '').trim();
   if (customEs) return customEs;
-  return `⚡ OFERTA DE LA SEMANA: ${pct}% de descuento en ${joinNames(names, 'y')} — ${pct}% extra sobre los descuentos por volumen. Termina el domingo.`;
+  return `⚡ OFERTA DE LA SEMANA: ${pct}% de descuento en ${joinNames(names, 'y')}, hasta ${upTo}% con los descuentos por volumen. Termina el domingo.`;
 }
 
 /**
@@ -374,11 +397,17 @@ export function dealBannerText(deal, lang = 'en') {
  * picker and confirmation every other broadcast uses, rather than letting a deal
  * launch mail the whole customer list on one click.
  */
-export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
+export function dealBroadcastDrafts(deal, { catalogUrl, now = Date.now() } = {}) {
   const pct = toPercent(deal?.discount_pct);
   const namesEn = joinNames(deal?.product_names || [], 'and');
   const namesEs = joinNames(deal?.product_names || [], 'y');
   const destination = catalogUrl || dealCatalogUrl(deal);
+  // The tier percentages were written out as literal 15s and 20s, so a deal
+  // announced during a bulk-discount week told customers the standing rate
+  // instead of the raised one. Quote the combined total the cart will charge,
+  // computed from the tiers in force, so the message cannot promise one number
+  // and the checkout show another.
+  const { stackedAtFive, stackedAtTen } = dealSafety(deal?.discount_pct, { now });
 
   return {
     emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,
@@ -386,11 +415,11 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
       `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
       '',
       `${pct}% off ${namesEn} — already applied to the price, no code needed.`,
-      `Stacks on top of volume discounts: 5+ vials another 15% off, 10+ vials 20%.`,
+      `With the automatic volume discount: ${stackedAtFive}% off at 5+ vials, ${stackedAtTen}% off at 10+.`,
       `Ends Sunday at midnight.`,
       '',
       `${pct}% de descuento en ${namesEs} — ya aplicado al precio, sin código.`,
-      `Se suma a los descuentos por volumen (5+ viales 15%, 10+ viales 20%).`,
+      `Con el descuento por volumen: ${stackedAtFive}% con 5+ viales, ${stackedAtTen}% con 10+.`,
       `Termina el domingo a medianoche.`,
       '',
       destination,

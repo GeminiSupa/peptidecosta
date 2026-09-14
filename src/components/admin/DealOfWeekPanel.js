@@ -608,12 +608,22 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               </div>
               <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
                 These products get the orange sale ribbon and move to the top of the catalog.
-                A customer buying 5+ vials still gets their 15% volume discount on top of this price.
+                A customer buying 5+ vials still gets their {preview.safety?.fivePlusPct}% volume
+                discount on top of this price.
               </div>
+              {/* The number typed above is the markdown, not what anyone pays.
+                  These three rows are, so the bottom one is the figure to judge
+                  the deal on. It is labelled with the tier actually in force
+                  rather than a fixed 5+/10+ wording. */}
               <div className="weekly-deal-stack-summary">
                 <div><span>Deal alone</span><strong>{preview.safety?.pct}% off</strong></div>
-                <div><span>At 5+ vials</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
-                <div><span>At 10+ vials</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
+                <div><span>At 5+ vials (+{preview.safety?.fivePlusPct}%)</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
+                <div><span>At 10+ vials (+{preview.safety?.tenPlusPct}%)</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#fbbf24' }}>
+                Customers pay the bottom figure. A deal cannot require a minimum
+                quantity — every buyer gets the markdown, including someone taking
+                a single vial. Use a bulk promo code if the discount must be earned.
               </div>
               {preview.safety?.needsConfirmation && (
                 <label className="weekly-deal-confirm-row is-warning">
