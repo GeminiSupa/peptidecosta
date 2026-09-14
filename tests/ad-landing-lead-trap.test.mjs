@@ -15,11 +15,11 @@ import { HONEYPOT_FIELD } from '../src/lib/leadSpam.mjs';
  */
 
 const PAGES = [
-  ['/lp', '../public/lp/index.html'],
-  ['/glp-1', '../public/glp-1/index.html'],
+  ['/lp', '../public/lp/index.html', 'adwords_lp'],
+  ['/glp-1', '../public/glp-1/index.html', 'glp1_lp'],
 ];
 
-for (const [route, path] of PAGES) {
+for (const [route, path, source] of PAGES) {
   test(`${route} posts the honeypot for the route to judge, not just the browser`, async () => {
     const html = await readFile(new URL(path, import.meta.url), 'utf8');
 
@@ -53,6 +53,16 @@ for (const [route, path] of PAGES) {
       html,
       /Date\.now\(\) - (formOpenedAt|openedAt)/,
       'measured from when the visitor was shown the form',
+    );
+  });
+
+  test(`${route} keeps its Google Ads routing source fixed`, async () => {
+    const html = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(html, new RegExp(`source["']?\\s*:\\s*["']${source}["']`));
+    assert.doesNotMatch(
+      html,
+      /q\.get\(["']source["']\)/,
+      'campaign query parameters must not turn a paid lead into an ordinary website lead',
     );
   });
 }

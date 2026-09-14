@@ -14,6 +14,7 @@ import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
+import { sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
 import {
   hasLandingQualification,
   isDuplicateLandingLeadSubmission,
@@ -405,6 +406,28 @@ export async function POST(request) {
       if (eventError) console.warn('[leads/contact] Assignment audit skipped:', eventError.message);
     }
 
+    // /lp and /glp-1 are the paid Google Ads forms. Chatwoot is their working
+    // inbox; email/WhatsApp below are optional monitoring copies controlled by
+    // Team > Notification Settings. A Chatwoot outage cannot reject or retry a
+    // lead that is already safely stored in the CRM.
+    let chatwootResult = null;
+    if (isAdLandingSource(source)) {
+      chatwootResult = await sendAdLeadToChatwoot({
+        leadId,
+        name,
+        email,
+        phone,
+        source,
+        qualificationLines: landingQualificationNotes(qualification),
+        campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
+        assignedAgent: owner,
+        dueAt,
+      });
+      if (!chatwootResult.sent) {
+        console.error('[leads/contact] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
+      }
+    }
+
     // Saving the lead is the source of truth. A temporary email-provider issue
     // must never make the browser retry and create duplicate CRM activity.
     let notificationResult = null;
@@ -450,6 +473,9 @@ export async function POST(request) {
       leadId: saved?.id || existing?.id || null,
       record: existing ? 'updated' : 'created',
       assignedAgent: owner || null,
+      chatwoot: isAdLandingSource(source)
+        ? { configured: chatwootResult?.configured === true, sent: chatwootResult?.sent === true }
+        : undefined,
       notifications: notificationResult?.outbox
         ? {
           tracked: true,

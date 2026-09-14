@@ -186,6 +186,17 @@ test('the campaign agent keeps her own lead, on every destination she has', () =
   assert.deepEqual(audience.whatsapp.map((entry) => entry.destination), ['50687817225']);
 });
 
+test('Google Ads can suppress the automatic owner profile and obey explicit copies', () => {
+  const audience = leadAlertAudience({
+    rows: [ROWS[2]],
+    profiles: PROFILES,
+    owner: 'Dani',
+    includeOwnerProfile: false,
+  });
+  assert.deepEqual(audience.emails, ['info@peptidescostarica.net']);
+  assert.deepEqual(audience.whatsapp, []);
+});
+
 test('an agent with no number on file simply gets no WhatsApp, not a broken send', () => {
   const audience = leadAlertAudience({ rows: [], profiles: PROFILES, owner: 'Korinne' });
   assert.deepEqual(audience.whatsapp, []);

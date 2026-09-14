@@ -101,5 +101,16 @@ export async function getLeadAlertAudience(supabase = null, { source = '', owner
     ? []
     : splitList(process.env.LEAD_NOTIFICATION_TO || 'omerforce@gmail.com, info@peptidescostarica.net');
 
-  return leadAlertAudience({ rows, profiles, owner, fallback });
+  // Google Ads leads are worked in Chatwoot. Their direct email/WhatsApp copies
+  // therefore come only from the explicit Google Ads checkboxes on the admin
+  // screen. In particular, unticking Dani must not be undone by silently adding
+  // her Team Management profile back as the lead owner. Ordinary website leads
+  // retain the owner-first behaviour.
+  return leadAlertAudience({
+    rows,
+    profiles,
+    owner,
+    fallback,
+    includeOwnerProfile: !isAdLandingSource(source),
+  });
 }

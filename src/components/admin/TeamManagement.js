@@ -115,7 +115,7 @@ function NotificationSettings({
               )}
               {/* Offered on both channels: email goes to the ops inboxes, WhatsApp
                   to the agent working the campaign on their own phone. */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fbbf24', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Only leads from the Google Ads landing page at /lp. Nothing from the storefront.">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#fbbf24', cursor: canEdit ? 'pointer' : 'not-allowed' }} title="Email or WhatsApp copy for Google Ads leads from /lp and /glp-1. Chatwoot delivery stays enabled.">
                 <input
                   type="checkbox"
                   checked={!!r.adwords_lead}
@@ -148,8 +148,8 @@ function NotificationSettings({
   return (
     <div>
       <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-        Destinations for new-order alerts and backup landing-lead alerts. The assigned agent always receives their lead directly;
-        select Backup lead alert only for an owner or operations inbox that should provide coverage.
+        Destinations for new-order alerts and optional lead copies. Google Ads leads from /lp and /glp-1 go to Chatwoot;
+        use the Google Ads checkbox here only for email or WhatsApp monitoring copies. Ordinary leads still notify their assigned agent directly.
       </p>
 
       {!tableReady && (

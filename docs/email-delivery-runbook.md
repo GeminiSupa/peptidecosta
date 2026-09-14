@@ -90,7 +90,10 @@ Rules that decide who is included, all in `src/lib/leadAlertAudience.mjs`:
 
 - Ad-page leads (`adwords_lp`, `glp1_lp`) go **only** to rows with
   `adwords_lead` ticked. If any such row exists, the `new_lead` rows are
-  skipped entirely.
+  skipped entirely. These are monitoring copies: the primary working copy is
+  the Chatwoot conversation. The assigned agent's Team Management address is
+  not added automatically for these two sources, so unticking Dani really does
+  stop Dani's email/WhatsApp copy.
 - A row whose **label exactly matches a team member's name** is treated as that
   person's private address and only fires for leads they own. `Ops inbox` and
   `Joe (temp CC until info@ fixed)` are shared; `Dani` is not.
@@ -100,6 +103,10 @@ Rules that decide who is included, all in `src/lib/leadAlertAudience.mjs`:
 Note: this table has **no `updated_at`**, so `created_at` cannot tell you when
 a tickbox was changed. Do not build a theory on that column. Submit a live test
 lead instead; it settles the question in two minutes.
+
+Chatwoot delivery requires these server-only Vercel variables in Production:
+`CHATWOOT_BASE_URL`, `CHATWOOT_ACCOUNT_ID`, `CHATWOOT_INBOX_ID`, and
+`CHATWOOT_API_ACCESS_TOKEN`. Do not prefix the token with `NEXT_PUBLIC_`.
 
 ### 3. What settings is the running deployment actually using?
 

@@ -75,7 +75,9 @@ export function recipientOwnerProfile(row, profiles) {
  * @param owner     the agent who owns the lead, or '' when nobody does
  * @param fallback  email addresses to use when the managed table is unavailable
  */
-export function leadAlertAudience({ rows = [], profiles = [], owner = '', fallback = [] } = {}) {
+export function leadAlertAudience({
+  rows = [], profiles = [], owner = '', fallback = [], includeOwnerProfile = true,
+} = {}) {
   const ownerProfile = findAgentProfile(profiles, owner);
   const emails = [];
   const whatsapp = [];
@@ -90,7 +92,7 @@ export function leadAlertAudience({ rows = [], profiles = [], owner = '', fallba
   };
 
   // The owner first, from their own profile, so they head the list.
-  if (ownerProfile) {
+  if (ownerProfile && includeOwnerProfile) {
     addEmail(ownerProfile.email);
     addWhatsApp(ownerProfile.name || ownerProfile.email, ownerProfile.whatsapp_number);
   }
