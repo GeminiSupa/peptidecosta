@@ -88,3 +88,12 @@ test('bulk threshold controls live in Deal of the Week and checkout enforces exc
   assert.match(checkout, /suppressVolumeDiscount/);
   assert.match(catalog, /!getMatchedWeeklyDeal\(\) && <div/);
 });
+
+test('weekly deal pricing migration preserves legacy percent deals atomically', () => {
+  const migration = fs.readFileSync('add-weekly-deal-pricing-modes.sql', 'utf8');
+
+  assert.match(migration, /BEGIN;/);
+  assert.match(migration, /pricing_mode IN \('percent', 'shelf', 'bulk_threshold'\)/);
+  assert.doesNotMatch(migration, /UPDATE\s+public\.deals/i);
+  assert.match(migration, /COMMIT;/);
+});
