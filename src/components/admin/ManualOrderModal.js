@@ -20,6 +20,8 @@ import ManualCustomerCombobox from './ManualCustomerCombobox';
 import ProductCombobox from './ProductCombobox';
 
 const EMPTY_ITEM = { product: '', qty: 1, price: '' };
+// A superadmin must say who owns a manual order. This is the explicit "nobody".
+const HOUSE_SALE = '__house_sale__';
 const emptyForm = () => ({
   customer_name: '', customer_phone: '', customer_email: '', customer_id_number: '', customer_id_type: '1',
   shipping_address: '', currency: 'CRC', payment_method: 'whatsapp', status: 'Pending', promo_code: '',
@@ -195,7 +197,15 @@ export default function ManualOrderModal({
       }
     }
 
-    if (isSuperadmin && form.commission_mode !== 'default' && !form.sales_agent.trim()) {
+    // Left blank, an order sits with no owner until someone else takes it —
+    // which is how a sale Dani closed ended up credited to another agent.
+    if (isSuperadmin && !form.sales_agent.trim()) {
+      setError('Choose who owns this sale, or pick "No agent (house sale)".');
+      setSaving(false);
+      return;
+    }
+
+    if (isSuperadmin && form.commission_mode !== 'default' && (!form.sales_agent.trim() || form.sales_agent === HOUSE_SALE)) {
       setError('Choose a credited agent before setting a commission override.');
       setSaving(false);
       return;
@@ -246,7 +256,8 @@ export default function ManualOrderModal({
             notify_customer: form.notify_customer,
             apply_volume_discount: form.apply_volume_discount,
             ...(isSuperadmin ? {
-              ...(form.sales_agent.trim() ? { sales_agent: form.sales_agent.trim() } : {}),
+              ...(form.sales_agent.trim() && form.sales_agent !== HOUSE_SALE ? { sales_agent: form.sales_agent.trim() } : {}),
+              house_sale: form.sales_agent === HOUSE_SALE,
               affiliate_id: form.affiliate_id || null,
               agent_commission_rate_override: form.commission_mode === 'default'
                 ? null
@@ -560,12 +571,13 @@ export default function ManualOrderModal({
                 value={form.sales_agent}
                 onChange={(e) => setForm({ ...form, sales_agent: e.target.value })}
               >
-                <option value="">Credit this sale to… (nobody)</option>
+                <option value="">Who owns this sale? (required)</option>
                 {/* `agents` is a list of plain names, not profile objects. */}
                 {agents
                   .map((agent) => String(agent || '').trim())
                   .filter(Boolean)
                   .map((name) => <option key={name} value={name}>{name}</option>)}
+                <option value={HOUSE_SALE}>No agent (house sale)</option>
               </select>
 
               <select

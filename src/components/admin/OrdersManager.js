@@ -10,7 +10,9 @@ import {
   orderAgentFilterOptions,
   orderMatchesAgentFilter,
 } from '@/lib/orderAgentFilter.mjs';
-import { AWAITING_PAYMENT_STATUSES } from '@/lib/orderAwaitingPayment.mjs';
+import { AWAITING_PAYMENT_STATUSES, isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
+import OrderOwnerDialog from './OrderOwnerDialog';
+import OwnerRequestsPanel from './OwnerRequestsPanel';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -232,7 +234,7 @@ export default function OrdersManager({
   setExportModalType,
   loadingOrders,
   handleOrderStatusUpdate,
-  handleOrderSalesAgentUpdate,
+  handleOrderOwnerAction,
   handleMarkReadyToPrepare,
   setSelectedOrderDetails,
   openWhatsAppComposer,
@@ -244,7 +246,9 @@ export default function OrdersManager({
   onRefreshOrders,
   refreshingOrders = false,
   ordersRefreshError = '',
-  statusFilterRequest = null
+  statusFilterRequest = null,
+  isSuperadmin = false,
+  onOrderUpdated,
 }) {
   // These four only ever drove this table. Holding them in the 7,900-line admin
   // page meant every keystroke re-rendered the whole dashboard; owning them here
@@ -337,21 +341,42 @@ export default function OrdersManager({
     orderDbId: order.id,
     cartItems: order.cart_data || [],
   });
-  // Claim writes the same value the dropdown offers — the agent's display name.
-  // Storing the raw email instead left the select showing "-- Unassigned --" on
-  // an order that was in fact claimed.
-  const claimOrder = async (orderId) => {
-    const email = loggedInEmailRef?.current || (typeof window !== 'undefined' ? localStorage.getItem('admin_email') : '') || '';
-    const matchedAgent = agents.find((agent) => {
-      const value = String(agent || '').trim().toLowerCase();
-      const claimEmail = String(email).trim().toLowerCase();
-      return value === claimEmail || value === claimEmail.split('@')[0];
-    });
-    const claimName = matchedAgent || currentAgentName || email || 'info@peptidescostarica.net';
-    const result = await handleOrderSalesAgentUpdate(orderId, claimName, { onlyIfUnassigned: true });
-    if (result?.ok === false && result.takenBy) {
-      alert(`This order was just claimed by ${result.takenBy}.`);
+  // The server decides every ownership question: returning customers stay with
+  // their agent, claims close once an order is paid, and any other change by
+  // staff waits for a superadmin. This screen only offers the matching buttons.
+  const [ownerDialog, setOwnerDialog] = useState(null);
+  const [ownerRequestsKey, setOwnerRequestsKey] = useState(0);
+  const openOwnerRequest = (order) => setOwnerDialog({ order, mode: 'request', target: '' });
+
+  const claimOrder = async (order) => {
+    const result = await handleOrderOwnerAction(order.id, { action: 'claim' });
+    if (result.ok) return;
+    if (result.code === 'needs_approval') {
+      if (window.confirm(`${result.error}\n\nSend a request now?`)) openOwnerRequest(order);
+      return;
     }
+    alert(result.error);
+  };
+
+  // A superadmin picking from the owner dropdown. Filling an empty owner is
+  // immediate; replacing someone opens the dialog, because that needs a reason.
+  const changeOwnerFromList = async (order, target) => {
+    if (String(order.sales_agent || '').trim()) {
+      setOwnerDialog({ order, mode: 'assign', target });
+      return;
+    }
+    const result = await handleOrderOwnerAction(order.id, { action: 'assign', salesAgent: target });
+    if (!result.ok) alert(result.error);
+  };
+
+  const submitOwnerDialog = async ({ salesAgent, reason }) => {
+    const { order, mode } = ownerDialog;
+    const result = await handleOrderOwnerAction(order.id, { action: mode, salesAgent, reason });
+    if (result.ok) {
+      setOwnerRequestsKey((key) => key + 1);
+      if (mode === 'request') alert(result.message || 'Request sent. A superadmin will approve or reject it.');
+    }
+    return result;
   };
 
   /** Orders claimed before this fix hold an email, which is not in `agents`. */
@@ -379,12 +404,20 @@ export default function OrdersManager({
           }
         }
       `}} />
+      {isSuperadmin && (
+        <OwnerRequestsPanel
+          orders={orders}
+          refreshKey={ownerRequestsKey}
+          onOrderUpdated={onOrderUpdated}
+          onOpenOrder={setSelectedOrderDetails}
+        />
+      )}
       <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
           <h3>{isStaffAgent ? 'Team Orders' : 'Customer Orders Log Ledger'}</h3>
           <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 12px 0' }}>
             {isStaffAgent
-              ? 'Shared order queue for the sales team. Tag the managing agent on an order to claim commission ownership.'
+              ? 'Shared order queue for the sales team. Claim an unpaid order from a new customer, or use "Request change" if an order should be someone else\'s.'
               : 'A secure listing of all catalog order intents placed by customers. Double check entries here before coordinating dispatches on WhatsApp.'}
           </p>
           <div className="admin-toolbar-filters">
@@ -576,32 +609,49 @@ export default function OrdersManager({
                       ))}
                     </select>
                   </label>
-                  <label className="order-mobile-field" htmlFor={`order-agent-${order.id}`}>
+                  <div className="order-mobile-field">
                     <span>Owner</span>
-                    <select
-                      id={`order-agent-${order.id}`}
-                      className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}
-                      value={order.sales_agent || ''}
-                      onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {agentOptionsFor(order).map((agent) => (
-                        <option key={agent} value={agent}>{agent}</option>
-                      ))}
-                    </select>
+                    {isSuperadmin ? (
+                      <select
+                        id={`order-agent-${order.id}`}
+                        aria-label="Order owner"
+                        className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}
+                        value={order.sales_agent || ''}
+                        onChange={(e) => changeOwnerFromList(order, e.target.value)}
+                      >
+                        <option value="">Unassigned</option>
+                        {agentOptionsFor(order).map((agent) => (
+                          <option key={agent} value={agent}>{agent}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <strong className={`order-mobile-agent-select${order.sales_agent ? ' is-assigned' : ''}`}>
+                        {order.sales_agent || 'Unassigned'}
+                      </strong>
+                    )}
                     {order.sales_agent && (
                       <small style={{ color: '#a78bfa', fontWeight: 800 }}>
                         {getOrderAgentSourceLabel(order)}
                       </small>
                     )}
-                  </label>
+                    {!isSuperadmin && (order.sales_agent || !isAwaitingPayment(order.status)) && (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-secondary"
+                        onClick={() => openOwnerRequest(order)}
+                        style={{ marginTop: '4px', fontSize: '0.72rem', padding: '4px 8px' }}
+                      >
+                        Request owner change
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {!order.sales_agent && (
+                {!order.sales_agent && isAwaitingPayment(order.status) && (
                   <div className="order-mobile-claim-zone">
                     <button
                       type="button"
                       className="admin-btn admin-btn-primary order-mobile-claim-primary"
-                      onClick={() => claimOrder(order.id)}
+                      onClick={() => claimOrder(order)}
                       title="Assign this order to yourself"
                     >
                       Claim this order
@@ -819,10 +869,12 @@ export default function OrdersManager({
                       </td>
                       <td data-label="Agent" style={{ padding: '10px 12px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                          {isSuperadmin ? (
                           <select
                             className="cell-select"
+                            aria-label="Order owner"
                             value={order.sales_agent || ''}
-                            onChange={(e) => handleOrderSalesAgentUpdate(order.id, e.target.value)}
+                            onChange={(e) => changeOwnerFromList(order, e.target.value)}
                             style={{
                               padding: '4px 8px',
                               borderRadius: '6px',
@@ -841,9 +893,23 @@ export default function OrdersManager({
                               <option key={agent} value={agent}>{agent}</option>
                             ))}
                           </select>
+                          ) : (
+                            <strong style={{ fontSize: '0.8rem', color: order.sales_agent ? '#c084fc' : '#94a3b8' }}>
+                              {order.sales_agent || 'Unassigned'}
+                            </strong>
+                          )}
                           <span style={{ color: order.sales_agent ? '#a78bfa' : '#64748b', fontSize: '0.66rem', fontWeight: 800 }}>
                             {getOrderAgentSourceLabel(order)}
                           </span>
+                          {!isSuperadmin && (order.sales_agent || !isAwaitingPayment(order.status)) && (
+                            <button
+                              type="button"
+                              onClick={() => openOwnerRequest(order)}
+                              style={{ background: 'none', border: 'none', padding: 0, color: '#93c5fd', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}
+                            >
+                              Request change
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td data-label="Actions" style={{ padding: '10px 12px' }}>
@@ -911,10 +977,10 @@ export default function OrdersManager({
                           )}
 
                           {/* Quick Agent Claim CTA */}
-                          {!order.sales_agent && (
-                            <button 
-                              className="admin-btn admin-cta-btn" 
-                              onClick={() => claimOrder(order.id)}
+                          {!order.sales_agent && isAwaitingPayment(order.status) && (
+                            <button
+                              className="admin-btn admin-cta-btn"
+                              onClick={() => claimOrder(order)}
                               style={{ padding: '6px 12px', fontSize: '0.8rem', background: '#a855f7', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: 'bold' }}
                               title="Assign this order to yourself"
                             >
@@ -1011,6 +1077,16 @@ export default function OrdersManager({
             </select>
           </div>
         </div>
+      )}
+      {ownerDialog && (
+        <OrderOwnerDialog
+          order={ownerDialog.order}
+          mode={ownerDialog.mode}
+          agents={agents}
+          initialTarget={ownerDialog.target}
+          onClose={() => setOwnerDialog(null)}
+          onSubmit={submitOwnerDialog}
+        />
       )}
     </div>
   );

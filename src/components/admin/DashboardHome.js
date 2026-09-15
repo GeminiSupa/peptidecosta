@@ -8,7 +8,7 @@ import {
 import { orderCountsAsSale, orderGrossUsd, orderNetRevenueUsd, orderRevenueBasis } from '@/lib/orderRevenue.mjs';
 import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
-import { formatCrDate } from '@/lib/crTime.mjs';
+import { formatCrDate, formatCrInstant } from '@/lib/crTime.mjs';
 import { isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
 
 const FALLBACK_RATE = 454.48;
@@ -111,6 +111,7 @@ export default function DashboardHome({
   isSuperadmin = false,
   onOverrideStats,
   exchangeRate = FALLBACK_RATE,
+  manualExchangeRate = null,
 }) {
   // Which tile's breakdown is open: 'revenue' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
@@ -313,6 +314,32 @@ export default function DashboardHome({
           + Manual Order
         </button>
       </div>
+
+      {/* A hand-set rate never updates itself, so it is named here every day
+          it stays on rather than being forgotten. */}
+      {manualExchangeRate && (
+        <div
+          role="status"
+          style={{
+            margin: '0 0 16px', padding: '10px 14px', borderRadius: '10px',
+            border: '1px solid rgba(251, 191, 36, 0.4)', background: 'rgba(251, 191, 36, 0.08)',
+            color: '#fde68a', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap',
+            gap: '8px', alignItems: 'center', justifyContent: 'space-between',
+          }}
+        >
+          <span>
+            <strong>Manual exchange rate in use:</strong> $1 = ₡{Number(manualExchangeRate.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+            {manualExchangeRate.setBy ? `, set by ${manualExchangeRate.setBy}` : ''}
+            {manualExchangeRate.setAt ? ` on ${formatCrInstant(manualExchangeRate.setAt)}` : ''}.
+            {' '}The API rate is being ignored.
+          </span>
+          {isSuperadmin && onNavigate && (
+            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => onNavigate('spreadsheet')}>
+              Change
+            </button>
+          )}
+        </div>
+      )}
 
       <section className="dashboard-section dashboard-next-actions">
         <div className="dashboard-section-heading-row">

@@ -70,7 +70,6 @@ import { confirmDelete, confirmBulkDelete } from '@/lib/confirmDelete.mjs';
 import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import { shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import { isCompletedOrderStatus } from '@/lib/taxRecordsEmail.mjs';
-import { claimOrderInDb } from '@/lib/claimOrder';
 import { filterOrdersVisibleToAgent, orderVisibleToAgent } from '@/lib/agentOrders';
 import {
   ADMIN_NAV_GROUPS,
@@ -447,6 +446,8 @@ export default function AdminPage() {
   const [isDbConnected, setIsDbConnected] = useState(false);
   const [exchangeRate, setExchangeRate] = useState(FALLBACK_EXCHANGE_RATE);
   const [exchangeRateUpdatedAt, setExchangeRateUpdatedAt] = useState(null);
+  // Set only while a superadmin has put the shop on a hand-set rate.
+  const [manualExchangeRate, setManualExchangeRate] = useState(null);
   
   // Storage Bucket States
   const [bucketImages, setBucketImages] = useState([]);
@@ -2151,6 +2152,10 @@ Core Rules:
         + 'receipt was sent — add one to the order and resend if they need it.'
       );
     }
+
+    // A staff member typed up an order for a colleague's returning customer, so
+    // the colleague was credited instead. Said plainly so it is not a surprise.
+    if (alerts?.ownerNote) alert(alerts.ownerNote);
   };
 
   // Hold an order out of the money figures, or force one in. Applies across the
@@ -2236,6 +2241,9 @@ Core Rules:
           const now = data.updatedAt ? Date.parse(data.updatedAt) : Date.now();
           setExchangeRate(rate);
           setExchangeRateUpdatedAt(now);
+          setManualExchangeRate(data.mode === 'manual'
+            ? { rate, setAt: data.manualSetAt || null, setBy: data.manualSetBy || null }
+            : null);
           localStorage.setItem('exchangeRate_USDCRC', rate.toString());
           localStorage.setItem('exchangeRate_USDCRC_time', now.toString());
         }
@@ -2253,6 +2261,24 @@ Core Rules:
     };
     fetchRate();
   }, []);
+
+  // A superadmin saved the exchange rate setting. The dashboard adopts the new
+  // number at once instead of waiting for the next page load.
+  const handleExchangeRateChanged = (data) => {
+    const rate = Number(data?.effectiveRate);
+    if (!(rate > 0)) return;
+    setExchangeRate(rate);
+    setExchangeRateUpdatedAt(Date.now());
+    setManualExchangeRate(data.mode === 'manual'
+      ? { rate, setAt: data.manualSetAt || null, setBy: data.manualSetBy || null }
+      : null);
+    try {
+      localStorage.setItem('exchangeRate_USDCRC', String(rate));
+      localStorage.setItem('exchangeRate_USDCRC_time', String(Date.now()));
+    } catch {
+      // Storage blocked (private browsing).
+    }
+  };
 
   // Supabase Realtime subscription for live sync across all tables
   useEffect(() => {
@@ -3553,80 +3579,27 @@ Core Rules:
     await sendOrderCompletionNotification(orderForEmail);
   };
 
-  // Order sales agent update
-  //
-  // `onlyIfUnassigned` is for the agent-facing "Claim this order" button: the
-  // write is conditional on the order still being unclaimed, so two agents
-  // racing the same order cannot silently overwrite each other. Without it the
-  // update is an unconditional overwrite (admin reassigning via the dropdown).
-  // Resolves to { ok, takenBy } so the caller can tell the loser who won.
-  const handleOrderSalesAgentUpdate = async (orderId, agentName, { onlyIfUnassigned = false } = {}) => {
-    const finalAgentName = String(agentName || '').trim();
-    const previousOrder = orders.find((o) => o.id === orderId);
-
-    setOrders((prev) => prev.map(o => o.id === orderId ? { ...o, sales_agent: finalAgentName || null } : o));
-    if (selectedOrderDetails?.id === orderId) {
-      setSelectedOrderDetails({ ...selectedOrderDetails, sales_agent: finalAgentName || null });
-    }
-
-    if (!onlyIfUnassigned) {
-      try {
-        const response = await adminFetch('/api/admin/orders/update', {
-          method: 'PATCH',
-          body: JSON.stringify({
-            orderId,
-            updates: { sales_agent: finalAgentName || null },
-            activity: {
-              type: 'agent_assignment',
-              message: finalAgentName
-                ? `Sales agent assigned to ${finalAgentName}`
-                : 'Sales agent assignment cleared',
-            },
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || 'Could not update order agent');
-        }
-
-        if (data.order) {
-          if (orderVisibleToAgent(data.order, adminProfile)) {
-            handleOrderUpdated(data.order);
-          } else {
-            setOrders((prev) => prev.filter((o) => o.id !== orderId));
-            setSelectedOrderDetails((prev) => (prev?.id === orderId ? null : prev));
-            alert(`Order ${data.order.order_number || ''} was moved to ${data.order.sales_agent}. It is no longer in this account's queue.`);
-          }
-        }
-        return { ok: true };
-      } catch (err) {
-        console.error("Order sales agent update error:", err);
-        if (previousOrder) {
-          setOrders((prev) => prev.map((o) => (o.id === orderId ? previousOrder : o)));
-          setSelectedOrderDetails((prev) => (prev?.id === orderId ? previousOrder : prev));
-        }
-        alert(err.message || 'Could not update order agent.');
-        return { ok: false, error: err.message || 'Could not update order agent', takenBy: previousOrder?.sales_agent || '' };
-      }
-    }
-
-    if (!isSupabaseConfigured || !supabase) return { ok: true };
-
+  // Every order owner change — claim, superadmin assign, request for approval —
+  // goes through /api/admin/orders/owner, which applies the ownership rules in
+  // orderOwnership.mjs. Nothing is changed on screen until the server agrees,
+  // so a refused claim never flashes the wrong owner. Resolves to
+  // { ok, error, code, message } and never throws.
+  const handleOrderOwnerAction = async (orderId, { action, salesAgent = '', reason = '' }) => {
     try {
-      const result = await claimOrderInDb(supabase, orderId, finalAgentName);
-      if (!result.ok) {
-        // Put the real owner back on screen instead of our optimistic guess.
-        setOrders(prev => prev.map(
-          o => o.id === orderId ? { ...o, sales_agent: result.takenBy || null } : o
-        ));
+      const response = await adminFetch('/api/admin/orders/owner', {
+        method: 'POST',
+        body: JSON.stringify({ orderId, action, salesAgent, reason }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (data.order) handleOrderUpdated(data.order);
+      if (!response.ok) {
+        return { ok: false, error: data.error || 'Could not change the order owner.', code: data.code || '' };
       }
-      return result;
+      if (action === 'request') setNotifRefreshKey((key) => key + 1);
+      return { ok: true, message: data.message || '' };
     } catch (err) {
-      console.error("Order claim error:", err);
-      setOrders(prev => prev.map(
-        o => o.id === orderId ? { ...o, sales_agent: null } : o
-      ));
-      return { ok: false, takenBy: '' };
+      console.error('Order owner change error:', err);
+      return { ok: false, error: err.message || 'Could not change the order owner.', code: '' };
     }
   };
 
@@ -5534,6 +5507,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               isSuperadmin={Boolean(adminProfile?.is_superadmin)}
               onOverrideStats={handleStatsOverride}
               exchangeRate={exchangeRate}
+              manualExchangeRate={manualExchangeRate}
             />
           )
         )}
@@ -5563,6 +5537,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
             handleToggleHidden={handleToggleHidden}
             changedProductIds={changedProductIds}
+            isSuperadmin={Boolean(adminProfile?.is_superadmin)}
+            onExchangeRateChanged={handleExchangeRateChanged}
           />
           </ErrorBoundary>
         )}
@@ -5581,7 +5557,9 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             refreshingOrders={refreshingOrders}
             ordersRefreshError={ordersRefreshError}
             handleOrderStatusUpdate={handleOrderStatusUpdate}
-            handleOrderSalesAgentUpdate={handleOrderSalesAgentUpdate}
+            handleOrderOwnerAction={handleOrderOwnerAction}
+            isSuperadmin={!!adminProfile?.is_superadmin}
+            onOrderUpdated={handleOrderUpdated}
             handleMarkReadyToPrepare={handleMarkReadyToPrepare}
             setSelectedOrderDetails={setSelectedOrderDetails}
             openWhatsAppComposer={openWhatsAppComposer}
@@ -7888,6 +7866,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           onRequestRefund={setRefundOrder}
           exchangeRate={exchangeRate}
           currentAgentName={adminProfile?.name || adminProfile?.email || ''}
+          onOwnerAction={handleOrderOwnerAction}
         />
       )}
 

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
 
 import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
+import ExchangeRateSettings from './ExchangeRateSettings';
 
 export default function ProductsManager({
   products,
@@ -23,7 +24,9 @@ export default function ProductsManager({
   setEditDescProduct, setEditDescEn, setEditDescEs, setEditDescModalOpen,
   handleMoveRow, handleDeleteRow,
   handleToggleHidden,
-  changedProductIds
+  changedProductIds,
+  isSuperadmin = false,
+  onExchangeRateChanged,
 }) {
   const [mobileEditProduct, setMobileEditProduct] = useState(null);
   const [mobileProductError, setMobileProductError] = useState('');
@@ -203,6 +206,7 @@ export default function ProductsManager({
 
   return (
     <div>
+      {isSuperadmin && <ExchangeRateSettings onChanged={onExchangeRateChanged} />}
       <div className="admin-toolbar">
         <div>
           <h3>Master Inventory Products</h3>

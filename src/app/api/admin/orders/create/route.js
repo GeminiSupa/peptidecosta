@@ -17,6 +17,9 @@ import {
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
+import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
+import { profileOwnerName, resolveManualOrderOwner } from '@/lib/orderOwnership.mjs';
+import { customerOwnerFor, loadTeamProfiles } from '@/lib/orderOwnershipServer';
 import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
 import {
   ORDER_ATTRIBUTION_COLUMNS,
@@ -307,11 +310,37 @@ export async function POST(request) {
       if (requestedAgent && !agentMatchKeys(auth.profile).has(requestedAgent)) {
         return NextResponse.json({ error: 'Forbidden: staff can only create orders assigned to themselves' }, { status: 403 });
       }
-      row.sales_agent = row.sales_agent || auth.profile.name || auth.profile.email || auth.user.email;
     }
 
+    // Who owns the sale — see resolveManualOrderOwner. A superadmin must pick an
+    // agent or an explicit house sale. Staff are credited themselves, unless the
+    // customer already belongs to a colleague who is still on the team. A failed
+    // history lookup credits the person entering the order, as before: the order
+    // must still save, and a superadmin can move it afterwards.
+    let customerOwner = '';
+    if (!auth.profile.is_superadmin) {
+      try {
+        customerOwner = await customerOwnerFor(supabase, row, await loadTeamProfiles(supabase));
+      } catch (lookupError) {
+        console.warn('[admin/orders/create] customer owner lookup skipped:', lookupError.message);
+      }
+    }
+    const ownership = resolveManualOrderOwner({
+      isSuperadmin: Boolean(auth.profile.is_superadmin),
+      requestedOwner: row.sales_agent,
+      houseSale: order.house_sale === true,
+      customerOwner,
+      actorOwner: profileOwnerName(auth.profile) || auth.user.email,
+    });
+    if (ownership.error) {
+      return NextResponse.json({ error: ownership.error }, { status: 400 });
+    }
+    row.sales_agent = ownership.owner;
+    if (ownership.fromHistory) row.agent_commission_source = CUSTOMER_HISTORY_SOURCE;
+
     row = await applyAffiliateAttribution(supabase, row, promo, requestedAffiliateId);
-    row = await applyCustomerHistoryAttribution(supabase, row);
+    // A house sale is a deliberate "nobody", so history must not fill it back in.
+    if (!ownership.houseSale) row = await applyCustomerHistoryAttribution(supabase, row);
 
     // Last, so an explicitly chosen rate outranks anything the affiliate or
     // customer-history rules worked out for themselves.
@@ -476,7 +505,7 @@ export async function POST(request) {
       order: data,
       exchangeRate: liveExchangeRate,
       exchangeRateSource: rateResult.source,
-      alerts: alertStatus,
+      alerts: { ...alertStatus, ownerNote: ownership.note || null },
     });
   } catch (error) {
     if (inventory) await inventory.rollback().catch(() => {});

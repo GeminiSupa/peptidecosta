@@ -23,6 +23,9 @@ export function formatActivityType(type) {
     manual_discount_removed: 'Order discount removed',
     payment_method_change: 'Payment method changed',
     receipt_resent: 'Receipt resent to customer',
+    agent_assignment: 'Owner changed',
+    owner_change_requested: 'Owner change requested',
+    owner_change_rejected: 'Owner change rejected',
     email: 'Email',
   };
   return labels[type] || type;

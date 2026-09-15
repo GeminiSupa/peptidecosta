@@ -9,6 +9,7 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
+import { cleanReason, decideOwnerChange, sameOwner } from '@/lib/orderOwnership.mjs';
 import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_FULFILLMENT_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { recordReadyToPrepareNotification, sendAffiliateOrderWhatsApp, sendFulfillmentReadyWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
@@ -363,7 +364,33 @@ export async function PATCH(request) {
       );
     }
 
-    const authoritativeActivity = manualDiscountChanged
+    // Who owns an order decides who is paid for it. Staff move owners only
+    // through /api/admin/orders/owner — a claim, or a request a superadmin
+    // approves. A superadmin may change it here from the order panel, but
+    // replacing someone who already owns it needs a reason on the record.
+    // Checked after the affiliate block because a sales-agent affiliate moves
+    // the owner too.
+    let ownerChangeReason = '';
+    if ('sales_agent' in patch && !sameOwner(currentOrder.sales_agent, patch.sales_agent)) {
+      if (!auth.profile.is_superadmin) {
+        return NextResponse.json({
+          error: 'Order owners can only be changed with "Claim" or "Request owner change". This order has not been changed.',
+          code: 'needs_approval',
+        }, { status: 403 });
+      }
+      const ownerDecision = decideOwnerChange({
+        currentOwner: currentOrder.sales_agent,
+        targetOwner: patch.sales_agent,
+        isSuperadmin: true,
+        reason: body.ownerChangeReason,
+      });
+      if (ownerDecision.outcome === 'refused') {
+        return NextResponse.json({ error: ownerDecision.message, code: ownerDecision.code }, { status: 400 });
+      }
+      ownerChangeReason = cleanReason(body.ownerChangeReason);
+    }
+
+    let authoritativeActivity = manualDiscountChanged
       ? {
           type: patch.manual_discount_type ? 'manual_discount_applied' : 'manual_discount_removed',
           message: patch.manual_discount_type
@@ -371,6 +398,14 @@ export async function PATCH(request) {
             : 'Order discount removed',
         }
       : activity;
+
+    if (ownerChangeReason) {
+      const ownerLine = `Owner changed from ${String(currentOrder.sales_agent || '').trim() || 'Unassigned'} `
+        + `to ${String(patch.sales_agent || '').trim() || 'Unassigned'} — Reason: ${ownerChangeReason}`;
+      authoritativeActivity = authoritativeActivity
+        ? { ...authoritativeActivity, message: `${authoritativeActivity.message || ''} · ${ownerLine}` }
+        : { type: 'agent_assignment', message: ownerLine };
+    }
 
     let activityLog;
     if (authoritativeActivity) {

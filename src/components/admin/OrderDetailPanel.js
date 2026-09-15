@@ -13,6 +13,8 @@ import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
 
 const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
+import { OWNER_REASON_MAX, OWNER_REASON_MIN, sameOwner } from '@/lib/orderOwnership.mjs';
+import OrderOwnerDialog from './OrderOwnerDialog';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
 import { formatAmount as formatRefundMoney, orderCanBeRefunded } from '@/lib/orderRefund.mjs';
 import {
@@ -156,6 +158,7 @@ export default function OrderDetailPanel({
   onRequestRefund,
   exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE,
   currentAgentName = '',
+  onOwnerAction,
 }) {
   const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
@@ -193,6 +196,8 @@ export default function OrderDetailPanel({
   const [commissionMode, setCommissionMode] = useState(order.agent_commission_rate_override ? 'custom' : 'default');
   const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
   const [savingAttribution, setSavingAttribution] = useState(false);
+  const [ownerReason, setOwnerReason] = useState('');
+  const [ownerRequestOpen, setOwnerRequestOpen] = useState(false);
   const [attributionError, setAttributionError] = useState('');
   const [resendingReceipt, setResendingReceipt] = useState(false);
   const [receiptResendNotice, setReceiptResendNotice] = useState('');
@@ -221,6 +226,7 @@ export default function OrderDetailPanel({
     setCardLinkCopied(false);
     setCardLinkError('');
     setCreditedAgent(order.sales_agent || '');
+    setOwnerReason('');
     setAttributionAffiliateId(order.affiliate_id || '');
     setCommissionMode(
       isAgentReferralSource(order.agent_commission_source)
@@ -440,9 +446,18 @@ export default function OrderDetailPanel({
     ? `${currentAgentOverride}%${isAgentReferralSource(order.agent_commission_source) ? ' agent referral' : ' override'}`
     : 'Profile rate';
 
+  // Replacing someone who already owns the order needs a reason on the record;
+  // filling an empty owner does not.
+  const replacingOwner = Boolean(String(order.sales_agent || '').trim())
+    && !sameOwner(order.sales_agent, creditedAgent);
+
   const saveAttribution = async () => {
     if (commissionMode !== 'default' && !creditedAgent.trim()) {
       setAttributionError('Choose a credited agent before setting a commission override.');
+      return;
+    }
+    if (replacingOwner && ownerReason.trim().length < OWNER_REASON_MIN) {
+      setAttributionError(`Type a short reason for moving this order away from ${order.sales_agent}. It is saved in the timeline.`);
       return;
     }
 
@@ -464,8 +479,10 @@ export default function OrderDetailPanel({
         {
           type: 'attribution_updated',
           message: `Attribution updated: ${creditedAgent.trim() || 'unassigned'} / ${selectedAffiliate?.name || 'no affiliate'} / ${overrideRate ? `${overrideRate}%` : 'profile rate'}`,
-        }
+        },
+        replacingOwner ? { ownerChangeReason: ownerReason.trim() } : {}
       );
+      setOwnerReason('');
     } catch (err) {
       setAttributionError(err.message);
     } finally {
@@ -1092,19 +1109,57 @@ export default function OrderDetailPanel({
             <div>
               <label>Credited agent</label>
               {isSuperadmin ? (
-                <select
-                  className="admin-select"
-                  value={creditedAgent}
-                  onChange={(e) => setCreditedAgent(e.target.value)}
-                  style={{ width: '100%', marginTop: '4px' }}
-                >
-                  <option value="">Unassigned</option>
-                  {agentOptions.map((agent) => (
-                    <option key={agent} value={agent}>{agent}</option>
-                  ))}
-                </select>
+                <>
+                  <select
+                    className="admin-select"
+                    value={creditedAgent}
+                    onChange={(e) => setCreditedAgent(e.target.value)}
+                    style={{ width: '100%', marginTop: '4px' }}
+                  >
+                    <option value="">Unassigned</option>
+                    {agentOptions.map((agent) => (
+                      <option key={agent} value={agent}>{agent}</option>
+                    ))}
+                  </select>
+                  {replacingOwner && (
+                    <input
+                      className="admin-input"
+                      aria-label="Reason for changing the owner"
+                      value={ownerReason}
+                      maxLength={OWNER_REASON_MAX}
+                      onChange={(e) => setOwnerReason(e.target.value)}
+                      placeholder={`Why move it from ${order.sales_agent}? (required)`}
+                      style={{ width: '100%', marginTop: '6px' }}
+                    />
+                  )}
+                </>
               ) : (
-                <span>{order.sales_agent || 'Unassigned'}</span>
+                <>
+                  <span>{order.sales_agent || 'Unassigned'}</span>
+                  {onOwnerAction && (
+                    <button
+                      type="button"
+                      className="admin-btn admin-btn-secondary"
+                      onClick={() => setOwnerRequestOpen(true)}
+                      style={{ display: 'block', marginTop: '6px', fontSize: '0.75rem', padding: '4px 10px' }}
+                    >
+                      Request owner change
+                    </button>
+                  )}
+                  {ownerRequestOpen && (
+                    <OrderOwnerDialog
+                      order={order}
+                      mode="request"
+                      agents={agents}
+                      onClose={() => setOwnerRequestOpen(false)}
+                      onSubmit={async ({ salesAgent, reason }) => {
+                        const result = await onOwnerAction(order.id, { action: 'request', salesAgent, reason });
+                        if (result.ok) alert(result.message || 'Request sent. A superadmin will approve or reject it.');
+                        return result;
+                      }}
+                    />
+                  )}
+                </>
               )}
             </div>
             <div>

@@ -7,6 +7,7 @@ import {
   isPlausibleRate,
 } from '@/lib/pricing';
 import { maybeAlertStaleExchangeRate } from '@/lib/exchangeRateAlert.mjs';
+import { RATE_MODE_API, RATE_MODE_MANUAL, readRateMode } from '@/lib/exchangeRateMode.mjs';
 
 export const EXCHANGE_RATE_SETTING_ID = 'exchange_rate';
 export const EXCHANGE_RATE_MAX_AGE_MS = 60 * 60 * 1000;
@@ -35,6 +36,7 @@ function buildRatePayload(rate, source, now = new Date()) {
     usd_crc: rate,
     source,
     fetched_at: iso,
+    mode: RATE_MODE_API,
   };
 }
 
@@ -47,7 +49,8 @@ async function readStoredRate(supabase) {
 
   if (error) throw error;
 
-  const rate = normalizeRate(data?.value);
+  const modeInfo = readRateMode(data?.value);
+  const rate = modeInfo.mode === RATE_MODE_MANUAL ? modeInfo.manualRate : normalizeRate(data?.value);
   if (!rate) return null;
 
   const updatedAt = data?.value?.fetched_at || data?.updated_at || null;
@@ -56,6 +59,25 @@ async function readStoredRate(supabase) {
     updatedAt,
     ageMs: normalizeDate(updatedAt) ? Date.now() - normalizeDate(updatedAt) : Infinity,
     source: data?.value?.source || 'database',
+    mode: modeInfo.mode,
+    manualSetAt: modeInfo.manualSetAt,
+    manualSetBy: modeInfo.manualSetBy,
+  };
+}
+
+/**
+ * A superadmin's hand-set rate. Never refreshed, never "stale", and never
+ * reported as such: it is exactly as old as they chose to leave it.
+ */
+function manualResult(stored) {
+  return {
+    rate: stored.rate,
+    updatedAt: stored.manualSetAt || stored.updatedAt,
+    source: 'manual',
+    mode: RATE_MODE_MANUAL,
+    manualSetAt: stored.manualSetAt,
+    manualSetBy: stored.manualSetBy,
+    productRowsSynced: 0,
   };
 }
 
@@ -99,6 +121,9 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
   try {
     supabase = getSupabaseAdmin();
     const stored = await readStoredRate(supabase);
+    // Manual mode: the feed is not asked at all. Product CRC prices were
+    // already resynced when the superadmin saved the rate.
+    if (stored?.mode === RATE_MODE_MANUAL) return manualResult(stored);
     if (stored && stored.ageMs < EXCHANGE_RATE_MAX_AGE_MS) {
       return { ...stored, productRowsSynced: 0 };
     }
@@ -132,15 +157,31 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
     const rate = live ? live.rate : FALLBACK_EXCHANGE_RATE;
     const payload = buildRatePayload(rate, live ? live.source : 'fallback');
 
-    const { error } = await supabase
-      .from('site_settings')
-      .upsert({
-        id: EXCHANGE_RATE_SETTING_ID,
-        value: payload,
-        updated_at: payload.fetched_at,
-      });
-
-    if (error) throw error;
+    if (stored) {
+      // A superadmin may switch to a manual rate while this refresh is in
+      // flight. Writing only over a row that is not manual stops the refresh
+      // from quietly undoing that choice; if it was switched, use theirs.
+      const { data: written, error } = await supabase
+        .from('site_settings')
+        .update({ value: payload, updated_at: payload.fetched_at })
+        .eq('id', EXCHANGE_RATE_SETTING_ID)
+        .or('value->>mode.is.null,value->>mode.neq.manual')
+        .select('id');
+      if (error) throw error;
+      if (!written?.length) {
+        const current = await readStoredRate(supabase);
+        if (current?.mode === RATE_MODE_MANUAL) return manualResult(current);
+      }
+    } else {
+      const { error } = await supabase
+        .from('site_settings')
+        .upsert({
+          id: EXCHANGE_RATE_SETTING_ID,
+          value: payload,
+          updated_at: payload.fetched_at,
+        });
+      if (error) throw error;
+    }
 
     const productRowsSynced = syncProducts ? await syncProductCrcPrices(supabase, rate) : 0;
 
@@ -148,6 +189,7 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
       rate,
       updatedAt: payload.fetched_at,
       source: payload.source,
+      mode: RATE_MODE_API,
       productRowsSynced,
     };
   } catch (err) {
@@ -156,6 +198,7 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
     try {
       if (supabase) {
         const stored = await readStoredRate(supabase);
+        if (stored?.mode === RATE_MODE_MANUAL) return manualResult(stored);
         if (stored) return { ...stored, source: `${stored.source}:stale`, productRowsSynced: 0 };
       }
     } catch {
@@ -167,6 +210,7 @@ export async function getDatabaseBackedUsdToCrcRate({ syncProducts = false } = {
       rate: normalizeRate(rate) || FALLBACK_EXCHANGE_RATE,
       updatedAt: new Date().toISOString(),
       source: 'fallback',
+      mode: RATE_MODE_API,
       productRowsSynced: 0,
     };
   }
