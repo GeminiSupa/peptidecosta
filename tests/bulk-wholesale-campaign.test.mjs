@@ -12,6 +12,14 @@ test('public campaign follows the admin-created weekly deal without a code', () 
   assert.equal(new URL(bulkWholesaleCatalogHref({product:'A'}), 'https://x.test').searchParams.has('promo_code'), false);
 });
 
+test('the build-my-order link narrows the catalog to deal products, product links do not', () => {
+  const orderLink = new URL(bulkWholesaleCatalogHref({ lang: 'en', dealOnly: true }), 'https://x.test');
+  assert.equal(orderLink.searchParams.get('deal'), 'week');
+  const productLink = new URL(bulkWholesaleCatalogHref({ product: 'A', dealOnly: true }), 'https://x.test');
+  assert.equal(productLink.searchParams.has('deal'), false);
+  assert.equal(new URL(bulkWholesaleCatalogHref({}), 'https://x.test').searchParams.has('deal'), false);
+});
+
 test('mix-and-match threshold counts only selected products and applies automatically', () => {
   const items = [{product:'A',qty:12},{product:'B',qty:8},{product:'C',qty:99}];
   assert.equal(dealEligibleUnits(deal, items), 20);

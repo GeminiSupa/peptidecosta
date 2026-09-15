@@ -16,8 +16,10 @@ export function bulkWholesaleDealState(deal, now = new Date()) {
   };
 }
 
-export function bulkWholesaleCatalogHref({ lang = 'es', variant = 'a', product = '' } = {}) {
+export function bulkWholesaleCatalogHref({ lang = 'es', variant = 'a', product = '', dealOnly = false } = {}) {
   const params = new URLSearchParams({ lang: lang === 'en' ? 'en' : 'es', gate: 'skip', utm_source: 'bulk_wholesale', utm_medium: 'landing_page', utm_campaign: `bulk_wholesale_${variant === 'b' ? 'b' : 'a'}` });
   if (product) params.set('product', product);
+  // Opens the catalog narrowed to the weekly deal's products (see readCatalogParams).
+  if (dealOnly && !product) params.set('deal', 'week');
   return `/catalog?${params.toString()}`;
 }

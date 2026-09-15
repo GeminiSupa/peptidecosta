@@ -1,11 +1,15 @@
 "use client";
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { Check, PackageCheck, ShieldCheck } from 'lucide-react';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { usePublicPageContent, localized } from '@/hooks/usePublicPageContent';
 import { useBulkWholesaleCampaign, useBulkWholesaleVariant } from '@/hooks/useBulkWholesaleCampaign';
 import { bulkWholesaleCatalogHref } from '@/lib/bulkWholesaleCampaign.mjs';
+import { catalogNameKey } from '@/lib/catalogFilters.mjs';
+import { getProductFallbackImage } from '@/lib/catalogProducts';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
 import styles from './bulk-discounts.module.css';
@@ -16,10 +20,28 @@ export default function BulkDiscountsPage() {
   const { links } = useBusinessLinks();
   const campaign = useBulkWholesaleCampaign();
   const variant = useBulkWholesaleVariant();
+  // Photos for the eligible-product cards, matched by name the same loose way
+  // the catalog does. A product with no stored photo gets the catalog's
+  // fallback image, so every card shows one.
+  const [productImages, setProductImages] = useState({});
+  const productKey = campaign.products.join('|');
+  useEffect(() => {
+    if (!productKey || !isSupabaseConfigured || !supabase) return;
+    supabase
+      .from('products')
+      .select('product, category, image_url')
+      .then(({ data }) => {
+        setProductImages(Object.fromEntries((data || []).map((row) => [
+          catalogNameKey(row.product),
+          row.image_url || getProductFallbackImage(row.product, row.category),
+        ])));
+      });
+  }, [productKey]);
   const en = lang === 'en';
   const parsedFeatured = Number.parseInt(pageSettings.featuredTierIndex, 10);
   const featuredIndex = Number.isNaN(parsedFeatured) ? 1 : parsedFeatured;
-  const catalogHref = bulkWholesaleCatalogHref({ lang, variant, active: campaign.active });
+  // While the deal is live, the button opens the catalog showing only its products.
+  const catalogHref = bulkWholesaleCatalogHref({ lang, variant, active: campaign.active, dealOnly: campaign.active });
   // The deal's banner text is written for a one-line ticker. Used as this
   // page's title it filled four lines at 72px, so the title is always short.
   const heroTitle = en
@@ -52,7 +74,9 @@ export default function BulkDiscountsPage() {
             <li><ShieldCheck />{en ? 'This offer does not combine with promo codes or automatic volume discounts.' : 'Esta oferta no se combina con códigos promocionales ni descuentos automáticos por volumen.'}</li>
             <li><PackageCheck />{en ? 'Stock is limited. Availability is subject to confirmation and quantities may be limited.' : 'El inventario es limitado. La disponibilidad está sujeta a confirmación y las cantidades pueden limitarse.'}</li>
           </ul></div>
-          <div><h2>{en ? 'Eligible products' : 'Productos elegibles'}</h2><div className={styles.products}>{campaign.products.map((product) => <Link key={product} href={bulkWholesaleCatalogHref({ lang, variant, product, active: campaign.active })}><Check aria-hidden="true" />{product}</Link>)}</div></div>
+          <div><h2>{en ? 'Eligible products' : 'Productos elegibles'}</h2><div className={styles.products}>{campaign.products.map((product) => <Link key={product} href={bulkWholesaleCatalogHref({ lang, variant, product, active: campaign.active })}>{productImages[catalogNameKey(product)]
+            ? <img src={productImages[catalogNameKey(product)]} alt="" width="44" height="44" loading="lazy" className={styles.thumb} />
+            : <Check aria-hidden="true" />}<span>{product}</span></Link>)}</div></div>
         </section>}
 
         <section className={styles.evergreen}>

@@ -79,6 +79,7 @@ import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
 import {
+  productInDeal,
   readCatalogParams,
   resolveCategoryParam,
   productMatchesCatalogSearch,
@@ -363,6 +364,8 @@ export default function CatalogPage() {
   // A ?category= value held until products load, so it can be resolved against
   // the real category names rather than trusted verbatim.
   const [pendingCategory, setPendingCategory] = useState(null);
+  // Set by `?deal=week`: show only this week's deal products until cleared.
+  const [dealOnly, setDealOnly] = useState(false);
   const [landingSettings, setLandingSettings] = useState(() => mergeLandingPageSettings());
   const [showFilters, setShowFilters] = useState(false);
   const [priceFilter, setPriceFilter] = useState('all');
@@ -1014,6 +1017,7 @@ export default function CatalogPage() {
     const deepLink = readCatalogParams(window.location.search);
     if (deepLink.search) setSearchQuery(deepLink.search);
     if (deepLink.category) setPendingCategory(deepLink.category);
+    if (deepLink.dealOnly) setDealOnly(true);
 
     const hasUserSelectedLang = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true';
     let initialLang = hasUserSelectedLang ? localStorage.getItem('lang') || 'es' : 'es';
@@ -3241,6 +3245,10 @@ export default function CatalogPage() {
     // 1. Search Query
     if (!productMatchesCatalogSearch(p, searchQuery)) return false;
 
+    // 1b. This week's deal products only (?deal=week). Ignored when no deal is
+    // live, so an old link shows the whole catalog rather than an empty page.
+    if (dealOnly && weeklyDeal && !productInDeal(p, weeklyDeal.product_names)) return false;
+
     // 2. Category Bubble Filter
     if (activeCategory !== 'all' && p.category !== activeCategory) return false;
 
@@ -3308,7 +3316,7 @@ export default function CatalogPage() {
   // with different stock/category/price rules. Ten covers the largest family;
   // the final row submits the search and reveals the complete grid.
   const searchSuggestions = filteredProducts.slice(0, searchQuery.trim() ? 10 : 3);
-  const hasRestrictiveFilters = activeCategory !== 'all' || priceFilter !== 'all' || inStockOnly;
+  const hasRestrictiveFilters = activeCategory !== 'all' || priceFilter !== 'all' || inStockOnly || (dealOnly && Boolean(weeklyDeal));
 
   const revealSearchResults = () => {
     closeSearch();
@@ -3932,11 +3940,21 @@ export default function CatalogPage() {
             <ChevronLeft size={18} />
           </button>
           <div className="category-scroll" ref={categoryScrollRef}>
+            {dealOnly && weeklyDeal && (
+              <button
+                type="button"
+                className="cat-chip active"
+                onClick={() => setDealOnly(false)}
+                aria-label={lang === 'en' ? 'Showing Deal of the Week products. Show all products' : 'Mostrando productos de la Oferta de la Semana. Ver todos los productos'}
+              >
+                ⚡ {lang === 'en' ? 'Deal of the Week products' : 'Productos de la Oferta'} ✕
+              </button>
+            )}
             {categoriesList.map(cat => (
               <button
                 key={cat}
-                className={`cat-chip ${activeCategory === cat ? 'active' : ''}`}
-                onClick={() => setActiveCategory(cat)}
+                className={`cat-chip ${activeCategory === cat && !(dealOnly && weeklyDeal) ? 'active' : ''}`}
+                onClick={() => { setDealOnly(false); setActiveCategory(cat); }}
               >
                 {cat === 'all'
                   ? (lang === 'en' ? 'All Products' : 'Todos los Productos')
