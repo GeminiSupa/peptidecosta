@@ -81,7 +81,9 @@ test('bulk threshold controls live in Deal of the Week and checkout enforces exc
   const checkout = fs.readFileSync('src/app/api/orders/create/route.js', 'utf8');
   const catalog = fs.readFileSync('src/app/catalog/page.js', 'utf8');
 
-  assert.match(dealPanel, /Bulk mix-and-match sale/);
+  assert.match(dealPanel, /Minimum total vials for discount/);
+  assert.doesNotMatch(dealPanel, /Instant product sale/);
+  assert.doesNotMatch(dealPanel, /Bulk mix-and-match sale/);
   assert.match(dealPanel, /pricing_mode: pricingMode/);
   assert.match(dealPanel, /Promo codes<\/span><strong>Blocked/);
   assert.match(checkout, /promo: resolvedPromo \|\| dealPromo/);

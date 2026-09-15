@@ -57,7 +57,6 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
   const [selected, setSelected] = useState([]);
   const [percent, setPercent] = useState(15);
-  const [pricingMode, setPricingMode] = useState('shelf');
   const [minUnits, setMinUnits] = useState(20);
   const [maxUnits, setMaxUnits] = useState('');
   const [titleEn, setTitleEn] = useState('');
@@ -78,8 +77,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
   const parsedMinUnits = Math.floor(Number(minUnits));
   const parsedMaxUnits = Math.floor(Number(maxUnits));
-  const bulkUnitRangeError = pricingMode === 'bulk_threshold' && (!Number.isFinite(parsedMinUnits) || parsedMinUnits < 1)
-    ? 'Minimum selected units must be at least 1.'
+  const pricingMode = Number.isFinite(parsedMinUnits) && parsedMinUnits > 1 ? 'bulk_threshold' : 'shelf';
+  const bulkUnitRangeError = minUnits !== '' && (!Number.isFinite(parsedMinUnits) || parsedMinUnits < 1)
+    ? 'Minimum selected units must be at least 1. Use 1 when the deal should apply immediately.'
     : (pricingMode === 'bulk_threshold' && maxUnits !== '' && (!Number.isFinite(parsedMaxUnits) || parsedMaxUnits < parsedMinUnits)
       ? 'Maximum selected units cannot be lower than the minimum.'
       : '');
@@ -130,8 +130,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (!saved) return;
       if (Array.isArray(saved.selected)) setSelected(saved.selected);
       if (saved.percent) setPercent(saved.percent);
-      if (saved.pricingMode) setPricingMode(saved.pricingMode);
       if (saved.minUnits) setMinUnits(saved.minUnits);
+      else if (saved.pricingMode === 'shelf') setMinUnits(1);
       if (saved.maxUnits !== undefined) setMaxUnits(saved.maxUnits);
       if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
       if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
@@ -435,11 +435,6 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         <div style={card}>
           <h4 style={{ margin: '0 0 14px', color: '#f8fafc', fontSize: '0.95rem' }}>Set up this week&apos;s deal</h4>
 
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'12px', marginBottom:'14px' }}>
-            <label className="weekly-deal-confirm-row"><input type="radio" name="pricingMode" checked={pricingMode==='shelf'} onChange={()=>setPricingMode('shelf')}/><span><strong>Instant product sale</strong><br/>Discount selected products automatically. No code and no stacking.</span></label>
-            <label className="weekly-deal-confirm-row"><input type="radio" name="pricingMode" checked={pricingMode==='bulk_threshold'} onChange={()=>setPricingMode('bulk_threshold')}/><span><strong>Bulk mix-and-match sale</strong><br/>Discount starts only after the selected-product minimum. No code and no stacking.</span></label>
-          </div>
-
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '14px' }}>
             <div>
               <label style={labelStyle}>Deal discount (%)</label>
@@ -456,8 +451,34 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 This replaces volume discounts; percentages never compound.
               </div>
             </div>
-            {pricingMode === 'bulk_threshold' && <div><label style={labelStyle}>Minimum selected units</label><input className="admin-input" type="number" min="1" value={minUnits} onChange={(e)=>setMinUnits(e.target.value)} style={{width:'100%'}}/></div>}
-            {pricingMode === 'bulk_threshold' && <div><label style={labelStyle}>Maximum selected units (optional)</label><input className="admin-input" type="number" min={minUnits || 1} value={maxUnits} onChange={(e)=>setMaxUnits(e.target.value)} placeholder="No cap" style={{width:'100%'}}/></div>}
+            <div>
+              <label style={labelStyle}>Minimum total vials for discount</label>
+              <input
+                className="admin-input"
+                type="number"
+                min="1"
+                value={minUnits}
+                onChange={(e) => setMinUnits(e.target.value)}
+                style={{ width: '100%' }}
+              />
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
+                Use 20 for a bulk deal. Use 1 when the weekly deal should apply immediately.
+              </div>
+            </div>
+            {pricingMode === 'bulk_threshold' && (
+              <div>
+                <label style={labelStyle}>Maximum total vials per order (optional)</label>
+                <input
+                  className="admin-input"
+                  type="number"
+                  min={minUnits || 1}
+                  value={maxUnits}
+                  onChange={(e) => setMaxUnits(e.target.value)}
+                  placeholder="No cap"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            )}
             <div>
               <label style={labelStyle}>Ends</label>
               <div className="admin-input" style={{ width: '100%', color: preview ? '#f8fafc' : '#64748b' }}>
@@ -642,7 +663,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 <strong>Banner:</strong> {preview.banner.en}
               </div>
               <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                {pricingMode === 'bulk_threshold' ? `Customers may mix these products; the ${minUnits}+ selected-unit minimum is counted automatically.` : 'These products get the orange sale ribbon and move to the top of the catalog.'}
+                {pricingMode === 'bulk_threshold' ? `Customers may mix these products; the ${minUnits}+ selected-vial minimum is counted automatically.` : 'These products get the orange sale ribbon and move to the top of the catalog.'}
                 {' '}Volume discounts and promo codes do not stack with this deal.
               </div>
               <div className="weekly-deal-stack-summary"><div><span>Final discount</span><strong>{preview.safety?.pct}% off</strong></div><div><span>Volume discount</span><strong>Replaced</strong></div><div><span>Promo codes</span><strong>Blocked</strong></div></div>
