@@ -34,6 +34,7 @@ import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
 import { hasPositivePayout, summarizeCommissionScan } from '@/lib/commissionScan.mjs';
 import { PAYOUT_RESERVED_STATUSES } from '@/lib/payoutSettlement.mjs';
 import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
+import { buildCommissionAdminRecipients } from '@/lib/commissionReportRecipients.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -178,6 +179,8 @@ export async function GET(request) {
       console.error('Error fetching admin profiles:', profilesError);
       return NextResponse.json({ error: 'Failed to fetch agent profiles' }, { status: 500 });
     }
+
+    const adminRecipients = buildCommissionAdminRecipients(profiles, ADMIN_CC_EMAILS);
 
     const reportResults = [];
     const skippedNoPay = [];
@@ -480,25 +483,6 @@ export async function GET(request) {
         );
       }
 
-      let agentEmailSent = false;
-      let agentEmailError = null;
-      if (transporter && agent.email && !saveError) {
-        try {
-          await transporter.sendMail({
-            bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
-            from: NOTIFICATION_FROM,
-            to: agent.email,
-            subject: `Your weekly pay report · ${periodDisplay}`,
-            html: emailHtml,
-            text: emailText,
-          });
-          agentEmailSent = true;
-        } catch (mailErr) {
-          console.error(`[Weekly Commissions] Failed to email ${agent.email}:`, mailErr);
-          agentEmailError = mailErr.message;
-        }
-      }
-
       // Approval is what makes a payout an accounting record. When an already
       // approved week is scanned again, resend a dedicated copy directly to
       // the accounting inbox; merely rebuilding the report used to send only
@@ -538,8 +522,6 @@ export async function GET(request) {
         overrideBreakdown,
         totalPayoutUsd,
         totalPayoutCrc,
-        agentEmailSent,
-        agentEmailError,
         accountingCopy,
         savedSuccessfully: !saveError,
         alreadySettled: Boolean(settledPayout),
@@ -605,7 +587,7 @@ export async function GET(request) {
         await transporter.sendMail({
           bcc: process.env.BCC_EMAIL || 'omerforce@gmail.com',
           from: NOTIFICATION_FROM,
-          to: ADMIN_CC_EMAILS,
+          to: adminRecipients,
           subject: `Weekly team pay report · ${periodDisplay}`,
           html: adminEmailHtml,
           text: `Weekly team pay report for ${periodDisplay}\n\n${reportResults.map(r => `${r.name || r.email}: ${formatMoney(r.totalPayoutUsd, 'USD')} OR ${formatMoney(r.totalPayoutCrc, 'CRC')}`).join('\n')}\n\nEach pair is one payout expressed in two currencies. Choose one—not both.`

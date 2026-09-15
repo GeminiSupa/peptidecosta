@@ -24,6 +24,7 @@ import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
 import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { stripOwnerAddress } from '@/lib/orderEmailAddressing.mjs';
+import { buildCommissionAdminRecipients } from '@/lib/commissionReportRecipients.mjs';
 
 // The owner is BCC'd on this mail, so they are stripped from the visible
 // recipients rather than named twice on the same envelope.
@@ -205,6 +206,14 @@ export async function POST(request) {
     let accountingCopy = { sent: false, skipped: 'no email dispatched' };
 
     if (payout.agent_email) {
+      const { data: adminProfiles, error: adminProfilesError } = await supabaseAdmin
+        .from('admin_profiles')
+        .select('email, is_superadmin, status');
+      if (adminProfilesError) {
+        console.warn('[Commission Approval] Could not refresh superadmin recipients:', adminProfilesError.message);
+      }
+      const adminRecipients = buildCommissionAdminRecipients(adminProfiles || [], ADMIN_CC_EMAILS);
+
       const { smtp, from: notificationFrom } = getOrderMailSettings();
       const transporter = smtp.configured ? nodemailer.createTransport({
         host: smtp.host,
@@ -227,7 +236,7 @@ export async function POST(request) {
             // the Elastic transport, and PBAG's mailbox refuses that sender for
             // its own domain, so a CC was silently discarded every week. They
             // get their own copy below, on the transport that reaches them.
-            cc: ADMIN_CC_EMAILS,
+            cc: adminRecipients,
             subject: subject,
             html: refreshedEmailHtml,
             text: refreshedEmailText,

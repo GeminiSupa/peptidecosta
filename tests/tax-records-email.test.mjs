@@ -139,7 +139,8 @@ test('an approved commission reaches accounting on its own transport, not as a C
   // mailboxes. Every approved payout was therefore recorded as sent while PBAG
   // received none of them, the same failure the order copy already fixed.
   assert.doesNotMatch(approvalRoute, /withTaxRecordsCc/);
-  assert.match(approvalRoute, /cc: ADMIN_CC_EMAILS/);
+  assert.match(approvalRoute, /cc: adminRecipients/);
+  assert.match(approvalRoute, /buildCommissionAdminRecipients/);
 
   // Accounting gets its own message on the accounting mailbox instead.
   assert.match(approvalRoute, /resolveTaxRecordsMailer\(\)/);

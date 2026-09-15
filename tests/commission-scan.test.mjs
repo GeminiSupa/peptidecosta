@@ -53,3 +53,15 @@ test('an approved weekly rerun sends a dedicated accounting copy', () => {
   assert.match(route, /accountingCopy,/);
   assert.match(route, /skippedNoPay/);
 });
+
+test('a commission scan never emails an agent before approval', () => {
+  const scanRoute = fs.readFileSync('src/app/api/admin/commissions/weekly-report/route.js', 'utf8');
+  const approvalRoute = fs.readFileSync('src/app/api/admin/commissions/approve/route.js', 'utf8');
+
+  // The scan stores a pending report and may notify admins, but employees do
+  // not receive that unapproved draft. Approval is the sole employee send.
+  assert.doesNotMatch(scanRoute, /to:\s*agent\.email/);
+  assert.doesNotMatch(scanRoute, /subject:\s*`Your weekly pay report/);
+  assert.match(approvalRoute, /requireSuperadmin:\s*true/);
+  assert.match(approvalRoute, /to:\s*payout\.agent_email\.trim\(\)/);
+});
