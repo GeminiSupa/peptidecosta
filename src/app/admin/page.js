@@ -7195,7 +7195,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <AffiliatesManager products={products} isSuperadmin={Boolean(adminProfile?.is_superadmin)} />
+            <AffiliatesManager products={products} />
           </div>
         )}
 
