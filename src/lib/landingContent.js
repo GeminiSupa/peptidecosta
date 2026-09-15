@@ -465,7 +465,6 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     get tiers() { return [
       { labelEn: '5+ Vials', labelEs: '5+ Viales', valueEn: '15% OFF', valueEs: '15% DESC.', textEn: 'Automatic discount at checkout.', textEs: 'Descuento automático en caja.' },
       { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: `${tenPlusDiscountPct()}% OFF`, valueEs: `${tenPlusDiscountPct()}% DESC.`, textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
-      { labelEn: '25+ Vials', labelEs: '25+ Viales', valueEn: 'Contact Us', valueEs: 'Contáctanos', textEn: 'Custom wholesale pricing available.', textEs: 'Precios mayoristas personalizados.' },
     ]; },
     // Index of the tier rendered with the highlighted/scaled treatment.
     featuredTierIndex: 1,
