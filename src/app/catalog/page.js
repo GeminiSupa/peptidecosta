@@ -3648,7 +3648,7 @@ export default function CatalogPage() {
 
             {/* Press feature band — outlets come from the CMS (site_settings.landing_page) */}
             <PressBand lang={lang} settings={landingSettings} variant="catalog" />
-            <BulkWholesaleSpotlight lang={lang} />
+            <BulkWholesaleSpotlight lang={lang} compact />
           </div>
         </div>
       </section>

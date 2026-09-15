@@ -36,6 +36,29 @@
   text-decoration: none;
 }
 
+.strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 10px auto;
+  padding: 8px 14px;
+  border: 1px solid rgba(200, 83, 12, 0.35);
+  border-radius: 10px;
+  background: rgba(200, 83, 12, 0.08);
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  text-decoration: none;
+  text-align: center;
+}
+
+.strip strong { color: #c8530c; }
+.strip:hover { background: rgba(200, 83, 12, 0.14); }
+.strip:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 2px; }
+.stripMore { font-weight: 800; color: #15803d; white-space: nowrap; }
+
 @media (max-width: 700px) {
   .spotlight { grid-template-columns: 1fr; padding: 21px; }
   .action { width: 100%; }
