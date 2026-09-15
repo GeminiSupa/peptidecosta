@@ -30,6 +30,7 @@ import {
   hasUntrackedStock,
   isUnavailableForDeal,
 } from '@/lib/dealOfWeek.mjs';
+import { dealPromoConflictMessage, findBulkPromoConflictForDeal } from '@/lib/promoStackingSafety.mjs';
 
 const BANNERS_SETTING_ID = 'announcement_banners';
 
@@ -293,6 +294,13 @@ export async function launchDeal({
   }
 
   const products = await resolveProducts(supabase, productNames);
+  const promoConflict = await findBulkPromoConflictForDeal(
+    supabase,
+    products.map((product) => product.product),
+    now,
+  );
+  if (promoConflict) throw new Error(dealPromoConflictMessage(promoConflict));
+
   const unavailable = products.filter(isUnavailableForDeal);
   if (unavailable.length > 0) {
     throw new Error(`These products cannot be promoted because they are not available: ${unavailable.map((p) => p.product).join(', ')}`);

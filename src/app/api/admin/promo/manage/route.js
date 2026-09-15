@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { parseUnitLimit, validateUnitRange } from '@/lib/promoEligibility.mjs';
+import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 
 export const runtime = 'nodejs';
 
@@ -37,10 +38,20 @@ export async function POST(request) {
       const hidden = !!body.hidden;
       const minUnits = parseUnitLimit(body.min_units);
       const maxUnits = parseUnitLimit(body.max_units);
+      const targetProduct = String(body.target_product || '').trim().slice(0, 500) || null;
 
       const rangeError = validateUnitRange(minUnits, maxUnits);
       if (rangeError) {
         return NextResponse.json({ error: rangeError }, { status: 400 });
+      }
+
+      const conflict = await findLiveDealConflictForPromo(supabase, {
+        is_active: true,
+        min_units: minUnits,
+        target_product: targetProduct,
+      });
+      if (conflict) {
+        return NextResponse.json({ error: promoDealConflictMessage({ code }, conflict.products) }, { status: 409 });
       }
 
       const { data, error } = await supabase
@@ -60,8 +71,8 @@ export async function POST(request) {
           badge_style: BADGE_STYLES.includes(body.badge_style) ? body.badge_style : 'code',
           badge_text: body.badge_style === 'custom' ? (String(body.badge_text || '').trim() || null) : null,
           badge_text_es: body.badge_style === 'custom' ? (String(body.badge_text_es || '').trim() || null) : null,
-          target_product: String(body.target_product || '').trim().slice(0, 500) || null,
-          is_flash_sale: !!String(body.target_product || '').trim(),
+          target_product: targetProduct,
+          is_flash_sale: !!targetProduct,
         }])
         .select('*, affiliates(name)')
         .single();
@@ -74,6 +85,20 @@ export async function POST(request) {
 
     if (action === 'toggle') {
       if (!body.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+      if (body.is_active) {
+        const { data: promo, error: readError } = await supabase
+          .from('promo_codes')
+          .select('id, code, min_units, target_product')
+          .eq('id', body.id)
+          .single();
+        if (readError || !promo) {
+          return NextResponse.json({ error: readError?.message || 'Promo code not found' }, { status: 404 });
+        }
+        const conflict = await findLiveDealConflictForPromo(supabase, { ...promo, is_active: true });
+        if (conflict) {
+          return NextResponse.json({ error: promoDealConflictMessage(promo, conflict.products) }, { status: 409 });
+        }
+      }
       const { data, error } = await supabase
         .from('promo_codes')
         .update({ is_active: !!body.is_active })

@@ -22,6 +22,7 @@ import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
 import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mjs';
 import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/lib/researchAcknowledgement.mjs';
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
+import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 import {
   consumeDurableRateLimit,
   getRequestIp,
@@ -494,6 +495,12 @@ export async function POST(request) {
       }
       if (promoData.usage_limit !== null && promoData.usage_count >= promoData.usage_limit) {
         return NextResponse.json({ error: 'Promo code has reached its usage limit' }, { status: 400 });
+      }
+      const dealConflict = await findLiveDealConflictForPromo(supabase, promoData);
+      if (dealConflict) {
+        return NextResponse.json({
+          error: promoDealConflictMessage({ ...promoData, code: order.promo_code }, dealConflict.products),
+        }, { status: 409 });
       }
       // Unit conditions, re-checked against the items actually being ordered.
       // The browser already blocks this, but the browser is not the authority:

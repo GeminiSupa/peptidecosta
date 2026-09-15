@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { parseUnitLimit, validateUnitRange } from '@/lib/promoEligibility.mjs';
+import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 
 export const runtime = 'nodejs';
 
@@ -26,6 +27,24 @@ export async function POST(request) {
     }
 
     const supabase = getSupabaseAdmin();
+    const { data: currentPromo, error: currentPromoError } = await supabase
+      .from('promo_codes')
+      .select('code, is_active')
+      .eq('id', id)
+      .single();
+    if (currentPromoError || !currentPromo) {
+      return NextResponse.json({ error: currentPromoError?.message || 'Promo code not found' }, { status: 404 });
+    }
+
+    const conflict = await findLiveDealConflictForPromo(supabase, {
+      ...currentPromo,
+      min_units: minUnits,
+      target_product,
+    });
+    if (conflict && currentPromo.is_active) {
+      return NextResponse.json({ error: promoDealConflictMessage(currentPromo, conflict.products) }, { status: 409 });
+    }
+
     const { data, error } = await supabase
       .from('promo_codes')
       .update({

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
+import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -61,6 +62,14 @@ export async function POST(request) {
       return NextResponse.json({ valid: false, error: 'Promo code has already been used or reached its usage limit.' });
     }
 
+    const dealConflict = await findLiveDealConflictForPromo(supabase, promo);
+    if (dealConflict) {
+      return NextResponse.json({
+        valid: false,
+        error: promoDealConflictMessage(promo, dealConflict.products),
+      });
+    }
+
     // Unit conditions (minimum and maximum). Checked here rather than only in
     // the browser so they cannot be sidestepped by calling this endpoint
     // directly.
@@ -79,6 +88,11 @@ export async function POST(request) {
     if (!unitCheck.ok) {
       return NextResponse.json({
         valid: false,
+        pending: unitCheck.reason === 'min',
+        code: promo.code,
+        discount_pct: promo.discount_pct,
+        target_product: promo.target_product,
+        is_flash_sale: promo.is_flash_sale,
         error: unitLimitsMessage(promo, unitCheck.unitCount, body?.lang || 'es'),
         min_units: unitCheck.minUnits,
         max_units: unitCheck.maxUnits,

@@ -17,6 +17,7 @@ import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import ContactLeadModal from '@/components/ContactLeadModal';
 import MobileActionBar from '@/components/MobileActionBar';
 import PressBand from '@/components/PressBand';
+import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import {
   DEFAULT_LANDING_PAGE_SETTINGS,
@@ -263,6 +264,7 @@ export default function LandingPage() {
 
         <div className="clone-shell">
           <PressBand lang={lang} settings={settings} variant="landing" />
+          <BulkWholesaleSpotlight lang={lang} />
         </div>
 
         <section className="clone-section clone-shell">

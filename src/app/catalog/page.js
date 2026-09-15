@@ -73,6 +73,7 @@ import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
 import PressBand from '@/components/PressBand';
+import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
@@ -2393,6 +2394,9 @@ export default function CatalogPage() {
         }
         setPromoData(data);
         setPromoError('');
+      } else if (data.pending) {
+        setPromoData({ ...data, valid: false, pending: true });
+        setPromoError(data.error || unitLimitsMessage(data, data.unit_count || 0, lang));
       } else {
         setPromoData(null);
         setPromoError(data.error || (lang === 'en' ? 'Invalid code' : 'Código inválido'));
@@ -2438,6 +2442,15 @@ export default function CatalogPage() {
     setPromoData(null);
     setPromoError(unitLimitsMessage(promoData, check.unitCount, lang));
   }, [cart, promoData, lang]);
+
+  // Keep a threshold campaign code ready while the shopper builds the basket,
+  // then apply it automatically the moment the qualifying count is reached.
+  useEffect(() => {
+    if (!promoData?.pending || promoLoading) return;
+    const check = checkUnitLimits(promoData, getPromoUnitCount(promoData));
+    if (!check.ok) return;
+    handleApplyPromo(promoData.code);
+  }, [cart, promoData, promoLoading, lang]);
 
   useEffect(() => {
     if (autoPromoAppliedRef.current || typeof window === 'undefined') return;
@@ -3595,6 +3608,7 @@ export default function CatalogPage() {
 
             {/* Press feature band — outlets come from the CMS (site_settings.landing_page) */}
             <PressBand lang={lang} settings={landingSettings} variant="catalog" />
+            <BulkWholesaleSpotlight lang={lang} />
           </div>
         </div>
       </section>

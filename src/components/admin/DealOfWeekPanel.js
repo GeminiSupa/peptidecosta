@@ -278,6 +278,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             discount is applied to the shelf price — customers do not enter a code — and it
             stacks on top of the automatic volume discounts.
           </p>
+          <p style={{ color: '#fbbf24', fontSize: '0.82rem', margin: '7px 0 0', fontWeight: 700 }}>
+            For threshold offers such as 40% off 20+ units, use Affiliates → Promo Codes.
+            Overlapping bulk promos and shelf-price deals are blocked to prevent stacking.
+          </p>
         </div>
       </div>
 
