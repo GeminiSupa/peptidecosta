@@ -1,5 +1,4 @@
 import { promoTargetsProduct } from './promoBadge.mjs';
-import { getMinUnits } from './promoEligibility.mjs';
 
 const normalize = (value) => String(value || '').trim().toLowerCase();
 
@@ -13,7 +12,7 @@ export function isPromoCurrentlyActive(promo, now = new Date()) {
 }
 
 export function overlappingPromoProducts(promo, productNames = []) {
-  if (getMinUnits(promo) === 0 || !String(promo?.target_product || '').trim()) return [];
+  if (!String(promo?.target_product || '').trim()) return [...new Set(productNames.filter(Boolean))];
   return [...new Set((productNames || [])
     .filter((name) => promoTargetsProduct(promo, name))
     .map((name) => String(name || '').trim())
@@ -30,8 +29,6 @@ export function findActiveBulkPromoConflict(promos = [], productNames = [], now 
 }
 
 export async function findLiveDealConflictForPromo(supabase, promo) {
-  if (getMinUnits(promo) === 0 || !String(promo?.target_product || '').trim()) return null;
-
   const { data, error } = await supabase
     .from('deals')
     .select('id, title_en, product_names, status')
@@ -41,6 +38,10 @@ export async function findLiveDealConflictForPromo(supabase, promo) {
   for (const deal of data || []) {
     const products = overlappingPromoProducts(promo, deal.product_names || []);
     if (products.length) return { deal, products };
+    // Weekly deals are exclusive cart offers. Even a product-targeted code on
+    // another line would create two simultaneous discount systems and make the
+    // order total difficult for staff and customers to audit.
+    return { deal, products: deal.product_names || [] };
   }
   return null;
 }

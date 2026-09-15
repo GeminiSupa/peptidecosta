@@ -1,24 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BULK_WHOLESALE_PRODUCTS, bulkWholesaleCatalogHref, bulkWholesalePromoState } from '../src/lib/bulkWholesaleCampaign.mjs';
+import { bulkWholesaleDealState, bulkWholesaleCatalogHref } from '../src/lib/bulkWholesaleCampaign.mjs';
+import { automaticDealPromo, dealEligibleUnits } from '../src/lib/dealOfWeek.mjs';
 
-const promo = {
-  code: 'WHOLESALE40', discount_pct: 0.4, min_units: 20, is_active: true,
-  target_product: BULK_WHOLESALE_PRODUCTS.join(','),
-};
+const deal = { status:'live', pricing_mode:'bulk_threshold', discount_pct:.4, min_units:20, max_units:50, product_names:['A','B'], starts_at:'2026-09-01', ends_at:'2026-09-30', title_en:'Bulk week' };
 
-test('campaign is live only when the exact safety-critical setup is active', () => {
-  assert.equal(bulkWholesalePromoState(promo).active, true);
-  assert.equal(bulkWholesalePromoState({ ...promo, discount_pct: 0.5 }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, min_units: 19 }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, target_product: 'GLP-1 10mg' }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, is_active: false }).active, false);
+test('public campaign follows the admin-created weekly deal without a code', () => {
+  const state = bulkWholesaleDealState(deal, new Date('2026-09-15'));
+  assert.equal(state.active, true); assert.equal(state.code, ''); assert.equal(state.discountPct, 40);
+  assert.equal(state.minUnits, 20); assert.deepEqual(state.products, ['A','B']);
+  assert.equal(new URL(bulkWholesaleCatalogHref({product:'A'}), 'https://x.test').searchParams.has('promo_code'), false);
 });
 
-test('campaign catalog link preserves variant, product, and code', () => {
-  const href = bulkWholesaleCatalogHref({ lang: 'en', variant: 'b', product: 'NAD+ 500mg' });
-  const url = new URL(href, 'https://example.test');
-  assert.equal(url.searchParams.get('promo_code'), 'WHOLESALE40');
-  assert.equal(url.searchParams.get('utm_campaign'), 'bulk_wholesale_40_b');
-  assert.equal(url.searchParams.get('product'), 'NAD+ 500mg');
+test('mix-and-match threshold counts only selected products and applies automatically', () => {
+  const items = [{product:'A',qty:12},{product:'B',qty:8},{product:'C',qty:99}];
+  assert.equal(dealEligibleUnits(deal, items), 20);
+  assert.equal(automaticDealPromo(deal, items).discount_pct, .4);
+  assert.equal(automaticDealPromo(deal, items).exact_target_match, true);
+  assert.equal(automaticDealPromo(deal, [{product:'A',qty:19}]), null);
+  assert.equal(automaticDealPromo(deal, [{product:'A',qty:51}]), null);
 });

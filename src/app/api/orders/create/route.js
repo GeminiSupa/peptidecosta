@@ -23,6 +23,7 @@ import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mj
 import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/lib/researchAcknowledgement.mjs';
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
+import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import {
   consumeDurableRateLimit,
   getRequestIp,
@@ -548,21 +549,40 @@ export async function POST(request) {
       .filter((item) => !isGiftLine(item))
       .map((item) => stripGiftSuffix(item?.product || item?.name))
       .filter(Boolean))];
-    const [{ data: currentProducts, error: productError }, rateResult] = await Promise.all([
+    const [{ data: currentProducts, error: productError }, rateResult, { data: liveDealRows, error: liveDealError }] = await Promise.all([
       supabase
         .from('products')
         .select('id,product,price_usd,price_crc,status,inventory_count')
         .in('product', requestedProductNames),
       getDatabaseBackedUsdToCrcRate(),
+      // select('*') keeps ordinary checkout compatible during a rolling deploy:
+      // pre-migration databases simply return legacy shelf-deal rows, while a
+      // bulk launch itself still refuses until its required columns exist.
+      supabase.from('deals').select('*').eq('status', 'live').limit(1),
     ]);
     if (productError) {
       return NextResponse.json({ error: `Could not verify current prices: ${productError.message}` }, { status: 503 });
     }
+    if (liveDealError) {
+      return NextResponse.json({ error: `Could not verify weekly-deal pricing: ${liveDealError.message}` }, { status: 503 });
+    }
+    const liveDeal = (liveDealRows || [])[0] || null;
+    const matchedDeal = activeDealForOrder(liveDeal ? [liveDeal] : [], order.items);
+    const dealMaximum = dealMaxUnits(matchedDeal);
+    const dealUnits = dealEligibleUnits(matchedDeal, order.items);
+    if (matchedDeal && dealPricingMode(matchedDeal) === 'bulk_threshold' && dealMaximum && dealUnits > dealMaximum) {
+      return NextResponse.json({
+        error: `This limited-stock weekly deal covers up to ${dealMaximum} selected vials. Remove ${dealUnits - dealMaximum} to continue.`,
+        errorCode: 'weekly_deal_quantity_limit',
+      }, { status: 409 });
+    }
+    const dealPromo = resolvedPromo ? null : automaticDealPromo(matchedDeal, order.items);
     const authoritative = authoritativeCheckout({
       postedOrder: order,
       products: currentProducts || [],
-      promo: resolvedPromo,
+      promo: resolvedPromo || dealPromo,
       exchangeRate: rateResult.rate,
+      suppressVolumeDiscount: Boolean(matchedDeal && dealPricingMode(matchedDeal) === 'shelf'),
     });
     if (!authoritative.ok) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
@@ -609,11 +629,6 @@ export async function POST(request) {
 
     // Attribution is derived from the live deal and the products actually
     // priced, never from a query parameter supplied by the shopper.
-    const { data: liveDeals } = await supabase
-      .from('deals')
-      .select('id,status,starts_at,ends_at,product_names')
-      .eq('status', 'live');
-    const matchedDeal = activeDealForOrder(liveDeals || [], order.items);
     if (matchedDeal) order.deal_id = matchedDeal.id;
 
     // A marketing tag must never cost us the sale. A free-text campaign name

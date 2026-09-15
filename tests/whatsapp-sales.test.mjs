@@ -38,6 +38,26 @@ test('a live weekly deal is quoted with current catalog prices', () => {
   assert.match(buildWhatsAppSalesReply(snapshot, 'en'), /these offers are active now/i);
 });
 
+test('a bulk weekly deal is quoted as automatic threshold pricing without shelf-price claims', () => {
+  const snapshot = buildWhatsAppSalesSnapshot({
+    now: NOW,
+    liveDeal: {
+      status: 'live',
+      pricing_mode: 'bulk_threshold',
+      discount_pct: 0.4,
+      min_units: 20,
+      product_names: ['GLP-1 10mg', 'NAD+ 500mg'],
+      starts_at: '2026-08-24T00:00:00.000Z',
+      ends_at: '2026-08-31T00:00:00.000Z',
+    },
+    products: [{ product: 'GLP-1 10mg', price_usd: '100' }],
+  });
+
+  assert.match(snapshot.offers[0].en, /40% off when you mix and match 20\+/i);
+  assert.match(snapshot.offers[0].en, /automatically; no code, no stacking/i);
+  assert.doesNotMatch(snapshot.offers[0].en, /\$100/);
+});
+
 test('tablet questions use only explicit current catalog format data', () => {
   const products = [{ product: 'BPC-157', description_en: 'Research vial' }];
   const unavailable = buildWhatsAppCatalogFormatReply(products, 'Do u got tablets?', 'en');

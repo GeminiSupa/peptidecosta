@@ -18,6 +18,6 @@ test('non-overlapping and inactive promos do not conflict', () => {
   assert.equal(findActiveBulkPromoConflict([{ ...active, is_active: false }], ['Tirzepatide 20mg']), null);
 });
 
-test('ordinary promo without a unit threshold is not treated as a bulk conflict', () => {
-  assert.deepEqual(overlappingPromoProducts({ ...active, min_units: 0 }, ['Tirzepatide 20mg']), []);
+test('ordinary promo still overlaps a weekly deal, so it cannot stack', () => {
+  assert.deepEqual(overlappingPromoProducts({ ...active, min_units: 0 }, ['Tirzepatide 20mg']), ['Tirzepatide 20mg']);
 });

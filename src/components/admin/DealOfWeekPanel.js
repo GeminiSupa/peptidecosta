@@ -9,8 +9,8 @@ import { toPercent, hasUntrackedStock, isUnavailableForDeal } from '@/lib/dealOf
  *
  * A deal marks the chosen products' prices down for the week rather than issuing
  * a promo code, so the discount applies with nothing for the customer to type
- * and shows up identically in the cart, the order, the WhatsApp receipt and any
- * bot-generated checkout link. The automatic volume discount then stacks on top.
+ * and shows up identically in the cart and authoritative checkout. Weekly deals
+ * never stack with volume pricing or promo codes.
  *
  * Launch does NOT send the announcement. It marks the prices down and raises the
  * site banner, then hands the email and WhatsApp copy to the Announcements panel
@@ -57,6 +57,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
   const [selected, setSelected] = useState([]);
   const [percent, setPercent] = useState(15);
+  const [pricingMode, setPricingMode] = useState('shelf');
+  const [minUnits, setMinUnits] = useState(20);
+  const [maxUnits, setMaxUnits] = useState('');
   const [titleEn, setTitleEn] = useState('');
   const [titleEs, setTitleEs] = useState('');
 
@@ -73,6 +76,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
   const discountPct = useMemo(() => Number(percent) / 100, [percent]);
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
+  const parsedMinUnits = Math.floor(Number(minUnits));
+  const parsedMaxUnits = Math.floor(Number(maxUnits));
+  const bulkUnitRangeError = pricingMode === 'bulk_threshold' && (!Number.isFinite(parsedMinUnits) || parsedMinUnits < 1)
+    ? 'Minimum selected units must be at least 1.'
+    : (pricingMode === 'bulk_threshold' && maxUnits !== '' && (!Number.isFinite(parsedMaxUnits) || parsedMaxUnits < parsedMinUnits)
+      ? 'Maximum selected units cannot be lower than the minimum.'
+      : '');
 
   const outOfStockSelected = useMemo(() => (
     selected.filter((name) => {
@@ -120,6 +130,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (!saved) return;
       if (Array.isArray(saved.selected)) setSelected(saved.selected);
       if (saved.percent) setPercent(saved.percent);
+      if (saved.pricingMode) setPricingMode(saved.pricingMode);
+      if (saved.minUnits) setMinUnits(saved.minUnits);
+      if (saved.maxUnits !== undefined) setMaxUnits(saved.maxUnits);
       if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
       if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
     } catch {}
@@ -127,17 +140,17 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
   useEffect(() => {
     try {
-      localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({ selected, percent, titleEn, titleEs }));
+      localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({ selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs }));
     } catch {}
-  }, [selected, percent, titleEn, titleEs]);
+  }, [selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs]);
 
   // The preview is the only place the resolved Sunday and the real before/after
   // prices appear, so it refreshes whenever the inputs change rather than
   // sitting behind a button the admin might not press.
   useEffect(() => {
-    if (selected.length === 0 || !percentIsValid) {
+    if (selected.length === 0 || !percentIsValid || bulkUnitRangeError) {
       setPreview(null);
-      setPreviewError('');
+      setPreviewError(bulkUnitRangeError);
       return;
     }
 
@@ -155,6 +168,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             title_en: titleEn,
             title_es: titleEs,
             confirm_high_discount: confirmedHighDiscount,
+            pricing_mode: pricingMode,
+            min_units: minUnits,
+            max_units: maxUnits,
           }),
         });
         const data = await res.json();
@@ -169,7 +185,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
     }, 350);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selected, discountPct, titleEn, titleEs, percentIsValid, confirmedHighDiscount]);
+  }, [selected, discountPct, pricingMode, minUnits, maxUnits, titleEn, titleEs, percentIsValid, confirmedHighDiscount, bulkUnitRangeError]);
 
   const toggleProduct = (name) => {
     setSelected((current) => (
@@ -198,6 +214,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           title_es: titleEs,
           confirm_high_discount: confirmedHighDiscount,
           allow_untracked_stock: allowUntrackedStock,
+          pricing_mode: pricingMode,
+          min_units: minUnits,
+          max_units: maxUnits,
         }),
       });
       const data = await res.json();
@@ -265,6 +284,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const announcementDeal = launched || (live?.drafts ? { deal: live, drafts: live.drafts } : null);
   const announcementStatus = live?.announcement?.status || live?.announcement_status || (launched ? 'not_sent' : null);
   const announcementNeedsAction = announcementDeal && !['queued', 'scheduled', 'sending', 'completed'].includes(announcementStatus);
+  const liveIsBulk = live?.pricing_mode === 'bulk_threshold';
+  const announcementIsBulk = announcementDeal?.deal?.pricing_mode === 'bulk_threshold';
 
   return (
     <div className="admin-orders-tab">
@@ -275,12 +296,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           </h3>
           <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '4px 0 0' }}>
             One promotion for the week, ending Sunday at midnight Costa Rica time. The
-            discount is applied to the shelf price — customers do not enter a code — and it
-            stacks on top of the automatic volume discounts.
-          </p>
-          <p style={{ color: '#fbbf24', fontSize: '0.82rem', margin: '7px 0 0', fontWeight: 700 }}>
-            For threshold offers such as 40% off 20+ units, use Affiliates → Promo Codes.
-            Overlapping bulk promos and shelf-price deals are blocked to prevent stacking.
+            discount is applied automatically — customers do not enter a code. Weekly deals
+            replace volume pricing and cannot stack with promo codes.
           </p>
         </div>
       </div>
@@ -305,6 +322,11 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={13} /> Ends {formatCrInstant(live.ends_at)}
               </div>
+              <div style={{ color: '#fbbf24', fontSize: '0.78rem', marginTop: '6px' }}>
+                {liveIsBulk
+                  ? `Automatic mix-and-match · ${live.min_units}+ selected units${live.max_units ? ` · maximum ${live.max_units}` : ''}`
+                  : 'Automatic instant product sale'} · no code · no stacking
+              </div>
             </div>
             <button
               className="admin-btn"
@@ -313,11 +335,13 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               style={{ background: '#7f1d1d', border: '1px solid #b91c1c', color: '#fee2e2', alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               {isEnding ? <Loader size={14} className="spin" /> : <RotateCcw size={14} />}
-              End deal & restore prices
+              {liveIsBulk ? 'End deal' : 'End deal & restore prices'}
             </button>
           </div>
           <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#94a3b8' }}>
-            Prices are restored automatically when the deal ends. This button is for ending it early.
+            {liveIsBulk
+              ? 'The automatic checkout discount and banner stop when the deal ends. This button ends it early.'
+              : 'Prices are restored automatically when the deal ends. This button is for ending it early.'}
           </div>
           <div className="weekly-deal-health-grid">
             <div className="weekly-deal-stat">
@@ -374,8 +398,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             {announcementNeedsAction ? 'DEAL IS LIVE — ANNOUNCEMENT STILL NEEDS TO BE SENT' : `ANNOUNCEMENT ${String(announcementStatus || '').toUpperCase()}`}
           </div>
           <div style={{ color: '#d1fae5', fontSize: '0.84rem', margin: '10px 0 14px' }}>
-            Prices are marked down and the site banner is up. Review the announcement below and
-            send it from the Announcements screen, where you pick the audience.
+            {announcementIsBulk ? 'The automatic threshold discount' : 'The marked-down prices'} and site banner are live.
+            {' '}Review the announcement below and send it from the Announcements screen, where you pick the audience.
           </div>
 
           <label style={labelStyle}>Email subject</label>
@@ -411,9 +435,14 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         <div style={card}>
           <h4 style={{ margin: '0 0 14px', color: '#f8fafc', fontSize: '0.95rem' }}>Set up this week&apos;s deal</h4>
 
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'12px', marginBottom:'14px' }}>
+            <label className="weekly-deal-confirm-row"><input type="radio" name="pricingMode" checked={pricingMode==='shelf'} onChange={()=>setPricingMode('shelf')}/><span><strong>Instant product sale</strong><br/>Discount selected products automatically. No code and no stacking.</span></label>
+            <label className="weekly-deal-confirm-row"><input type="radio" name="pricingMode" checked={pricingMode==='bulk_threshold'} onChange={()=>setPricingMode('bulk_threshold')}/><span><strong>Bulk mix-and-match sale</strong><br/>Discount starts only after the selected-product minimum. No code and no stacking.</span></label>
+          </div>
+
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '14px' }}>
             <div>
-              <label style={labelStyle}>Extra discount (%)</label>
+              <label style={labelStyle}>Deal discount (%)</label>
               <input
                 className="admin-input"
                 type="number"
@@ -424,9 +453,11 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 style={{ width: '100%' }}
               />
               <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
-                On top of volume discounts, not instead of them.
+                This replaces volume discounts; percentages never compound.
               </div>
             </div>
+            {pricingMode === 'bulk_threshold' && <div><label style={labelStyle}>Minimum selected units</label><input className="admin-input" type="number" min="1" value={minUnits} onChange={(e)=>setMinUnits(e.target.value)} style={{width:'100%'}}/></div>}
+            {pricingMode === 'bulk_threshold' && <div><label style={labelStyle}>Maximum selected units (optional)</label><input className="admin-input" type="number" min={minUnits || 1} value={maxUnits} onChange={(e)=>setMaxUnits(e.target.value)} placeholder="No cap" style={{width:'100%'}}/></div>}
             <div>
               <label style={labelStyle}>Ends</label>
               <div className="admin-input" style={{ width: '100%', color: preview ? '#f8fafc' : '#64748b' }}>
@@ -552,7 +583,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '1px' }} />
               <span>
                 <strong>{outOfStockSelected.join(', ')}</strong> {outOfStockSelected.length === 1 ? 'is' : 'are'} not in stock.
-                The price will be marked down and the deal will still run, but the catalog sorts
+                 The deal will still include {outOfStockSelected.length === 1 ? 'it' : 'them'}, but the catalog sorts
                 out-of-stock products to the bottom and nobody can add them to a cart. Fix the
                 stock status in the Products tab first, or leave {outOfStockSelected.length === 1 ? 'it' : 'them'} out.
               </span>
@@ -594,7 +625,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                   <tr style={{ color: '#94a3b8', textAlign: 'left', fontSize: '0.75rem' }}>
                     <th style={{ padding: '4px 0' }}>Product</th>
                     <th style={{ padding: '4px 0' }}>Was</th>
-                    <th style={{ padding: '4px 0' }}>Now</th>
+                    <th style={{ padding: '4px 0' }}>{pricingMode === 'bulk_threshold' ? 'At threshold' : 'Now'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -611,14 +642,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 <strong>Banner:</strong> {preview.banner.en}
               </div>
               <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                These products get the orange sale ribbon and move to the top of the catalog.
-                A customer buying 5+ vials still gets their 15% volume discount on top of this price.
+                {pricingMode === 'bulk_threshold' ? `Customers may mix these products; the ${minUnits}+ selected-unit minimum is counted automatically.` : 'These products get the orange sale ribbon and move to the top of the catalog.'}
+                {' '}Volume discounts and promo codes do not stack with this deal.
               </div>
-              <div className="weekly-deal-stack-summary">
-                <div><span>Deal alone</span><strong>{preview.safety?.pct}% off</strong></div>
-                <div><span>At 5+ vials</span><strong>{preview.safety?.stackedAtFive}% off</strong></div>
-                <div><span>At 10+ vials</span><strong>{preview.safety?.stackedAtTen}% off</strong></div>
-              </div>
+              <div className="weekly-deal-stack-summary"><div><span>Final discount</span><strong>{preview.safety?.pct}% off</strong></div><div><span>Volume discount</span><strong>Replaced</strong></div><div><span>Promo codes</span><strong>Blocked</strong></div></div>
               {preview.safety?.needsConfirmation && (
                 <label className="weekly-deal-confirm-row is-warning">
                   <input
@@ -626,7 +653,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                     checked={confirmedHighDiscount}
                     onChange={(event) => setConfirmedHighDiscount(event.target.checked)}
                   />
-                  <span><strong>High-discount review:</strong> I understand that the 10+ vial total becomes {preview.safety.stackedAtTen}% off.</span>
+                  <span><strong>High-discount review:</strong> I approve a final discount of {preview.safety.pct}% with no additional discounts.</span>
                 </label>
               )}
             </div>
@@ -635,15 +662,17 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <button
             className="admin-btn primary"
             onClick={handleLaunch}
-            disabled={!preview || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount)}
+            disabled={!preview || Boolean(bulkUnitRangeError) || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount)}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
             {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
             Launch deal
           </button>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
-            Launching changes prices on the live site right away. The email and WhatsApp
-            announcement is drafted for you to review and send afterwards.
+            {pricingMode === 'bulk_threshold'
+              ? 'Launching activates the automatic cart discount and site banner right away.'
+              : 'Launching changes the selected live prices and activates the site banner right away.'}
+            {' '}The email and WhatsApp announcement is drafted for you to review and send afterwards.
           </div>
         </div>
       )}
@@ -687,21 +716,21 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             <div className="weekly-deal-review-summary">
               <div><span>Products</span><strong>{preview.products.length}</strong></div>
               <div><span>Ends</span><strong>{formatCrInstant(preview.window.endsAt)}</strong></div>
-              <div><span>Maximum stacked saving</span><strong>{preview.safety?.stackedAtTen}%</strong></div>
+              <div><span>Final customer saving</span><strong>{preview.safety?.pct}%</strong></div>
             </div>
 
             <div className="weekly-deal-review-products">
               {preview.products.map((product) => (
                 <div key={product.product}>
                   <span>{product.product}</span>
-                  <strong><s>{product.wasUsd}</s> → {product.nowUsd}</strong>
+                  <strong><s>{product.wasUsd}</s> → {product.nowUsd}{pricingMode === 'bulk_threshold' ? ' at threshold' : ''}</strong>
                   <small>{product.inventoryCount === null ? 'Stock manually verified' : `${product.inventoryCount} available`}</small>
                 </div>
               ))}
             </div>
 
             <div className="weekly-deal-inline-alert is-warning">
-              <AlertTriangle size={16} /> Launch changes the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.
+              <AlertTriangle size={16} /> Launch activates the deal on the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.
             </div>
 
             <div className="weekly-deal-modal-actions">

@@ -44,6 +44,9 @@ export async function POST(request) {
         titleEn: body.title_en,
         titleEs: body.title_es,
         confirmedHighDiscount: body.confirm_high_discount === true,
+        pricingMode: body.pricing_mode,
+        minUnits: body.min_units,
+        maxUnits: body.max_units,
       }));
     }
 
@@ -56,6 +59,9 @@ export async function POST(request) {
         createdBy: auth.user?.id || null,
         confirmedHighDiscount: body.confirm_high_discount === true,
         allowUntrackedStock: body.allow_untracked_stock === true,
+        pricingMode: body.pricing_mode,
+        minUnits: body.min_units,
+        maxUnits: body.max_units,
       });
       return NextResponse.json({ ok: true, ...result });
     }

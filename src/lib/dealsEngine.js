@@ -29,6 +29,7 @@ import {
   toPercent,
   hasUntrackedStock,
   isUnavailableForDeal,
+  dealPricingMode,
 } from '@/lib/dealOfWeek.mjs';
 import { dealPromoConflictMessage, findBulkPromoConflictForDeal } from '@/lib/promoStackingSafety.mjs';
 
@@ -71,12 +72,13 @@ export async function getDealOperations(supabase, deal) {
   ]);
   if (productsError) throw new Error(`Could not verify deal products: ${productsError.message}`);
 
+  const thresholdDeal = dealPricingMode(deal) === 'bulk_threshold';
   const productHealth = (products || []).map((product) => ({
     product: product.product,
     status: product.status,
     inventoryCount: product.inventory_count,
     priceUsd: product.price_usd,
-    matchesDeal: deal.applied?.[product.id]
+    matchesDeal: thresholdDeal ? true : deal.applied?.[product.id]
       ? canSafelyRestoreProduct(product, deal.applied[product.id])
       : String(product.discount || '').includes('Deal of the Week'),
   }));
@@ -264,7 +266,8 @@ async function resolveProducts(supabase, productNames) {
 }
 
 /**
- * Launch a deal: snapshot the current prices, mark them down, raise the banner.
+ * Launch a deal: snapshot/mark down shelf deals or register a threshold deal,
+ * then raise the banner. Threshold deals never mutate product shelf prices.
  *
  * Announcements are NOT sent from here. The drafts come back for the admin to
  * review and send through the existing Announcements panel, so launching a deal
@@ -278,11 +281,18 @@ export async function launchDeal({
   createdBy,
   confirmedHighDiscount = false,
   allowUntrackedStock = false,
+  pricingMode = 'shelf',
+  minUnits = 0,
+  maxUnits = 0,
   now = new Date(),
 }) {
   const supabase = getSupabaseAdmin();
 
   const pct = Number(discountPct);
+  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
+  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
+  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
+  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok) throw new Error(safety.error);
 
@@ -317,8 +327,10 @@ export async function launchDeal({
   const baseline = {};
   const applied = {};
   for (const product of products) {
-    baseline[product.id] = snapshotBaseline(product);
-    applied[product.id] = buildMarkdown(baseline[product.id], pct, window, rate);
+    if (mode === 'shelf') {
+      baseline[product.id] = snapshotBaseline(product);
+      applied[product.id] = buildMarkdown(baseline[product.id], pct, window, rate);
+    }
   }
 
   const dealId = randomUUID();
@@ -331,6 +343,9 @@ export async function launchDeal({
     starts_at: window.startsAt,
     ends_at: window.endsAt,
     status: 'live',
+    pricing_mode: mode,
+    min_units: minimum,
+    max_units: maximum || null,
   };
   const drafts = dealBroadcastDrafts(draftDeal);
   const insertPayload = {
@@ -342,6 +357,9 @@ export async function launchDeal({
       starts_at: window.startsAt,
       ends_at: window.endsAt,
       status: 'live',
+      pricing_mode: mode,
+      min_units: minimum,
+      max_units: maximum || null,
       baseline,
       applied,
       announcement_drafts: drafts,
@@ -365,8 +383,10 @@ export async function launchDeal({
   // identify an interrupted process after a hard platform termination.
   try {
     for (const product of products) {
-      const { error } = await supabase.from('products').update(applied[product.id]).eq('id', product.id);
-      if (error) throw new Error(`${product.product}: ${error.message}`);
+      if (mode === 'shelf') {
+        const { error } = await supabase.from('products').update(applied[product.id]).eq('id', product.id);
+        if (error) throw new Error(`${product.product}: ${error.message}`);
+      }
     }
 
     const dealWithDrafts = { ...deal, ...draftDeal, applied, announcement_drafts: drafts };
@@ -381,8 +401,8 @@ export async function launchDeal({
       safety,
       products: products.map((p) => ({
         product: p.product,
-        was: baseline[p.id].price_usd,
-        now: applied[p.id].price_usd,
+        was: mode === 'shelf' ? baseline[p.id].price_usd : snapshotBaseline(p).price_usd,
+        now: mode === 'shelf' ? applied[p.id].price_usd : snapshotBaseline(p).price_usd,
         inventoryCount: p.inventory_count,
       })),
       drafts,
@@ -507,10 +527,14 @@ export async function expireDueDeals(now = new Date()) {
  * Lets the panel show the resolved Sunday and the real before/after prices
  * before the admin commits.
  */
-export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, now = new Date() }) {
+export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, pricingMode = 'shelf', minUnits = 0, maxUnits = 0, now = new Date() }) {
   const supabase = getSupabaseAdmin();
 
   const pct = Number(discountPct);
+  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
+  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
+  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
+  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok && !safety.needsConfirmation) throw new Error(safety.error);
 
@@ -523,6 +547,9 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     title_es: String(titleEs || '').trim() || null,
     product_names: products.map((p) => p.product),
     discount_pct: pct,
+    pricing_mode: mode,
+    min_units: minimum,
+    max_units: maximum || null,
   };
 
   return {
@@ -533,6 +560,8 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     liveDeal: await getLiveDeal(supabase),
     products: products.map((product) => {
       const baseline = snapshotBaseline(product);
+      // Threshold deals keep the shelf price unchanged, but the preview still
+      // shows the per-unit price customers receive after qualifying.
       const markdown = buildMarkdown(baseline, pct, window, rate);
       return {
         product: product.product,
@@ -547,5 +576,8 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     }),
     banner: { en: dealBannerText(draftDeal, 'en'), es: dealBannerText(draftDeal, 'es') },
     drafts: dealBroadcastDrafts(draftDeal),
+    pricingMode: mode,
+    minUnits: minimum,
+    maxUnits: maximum || null,
   };
 }

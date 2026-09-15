@@ -1,5 +1,7 @@
 /** Pure helpers for turning live catalog promotions into safe WhatsApp copy. */
 
+import { dealMinUnits, dealPricingMode } from './dealOfWeek.mjs';
+
 function percent(value) {
   const numeric = Number(value || 0);
   if (!Number.isFinite(numeric) || numeric <= 0) return 0;
@@ -80,6 +82,7 @@ export function buildWhatsAppSalesSnapshot({
 
   if (dealIsLive) {
     const pct = percent(liveDeal.discount_pct);
+    const bulk = dealPricingMode(liveDeal) === 'bulk_threshold';
     const dealProducts = (products || []).filter((product) => dealNames.has(String(product.product || '').toLowerCase()));
     const prices = dealProducts
       .map((product) => `${product.product}: ${currentPrice(product)}`)
@@ -88,8 +91,12 @@ export function buildWhatsAppSalesSnapshot({
     const namesEs = readableNames(liveDeal.product_names, 'es');
     offers.push({
       kind: 'weekly_deal',
-      en: `${String(liveDeal.title_en || '').trim() || `Deal of the Week: ${pct}% off ${namesEn}`}${prices.length ? ` (${prices.join('; ')})` : ''}. No code needed.`,
-      es: `${String(liveDeal.title_es || '').trim() || `Oferta de la semana: ${pct}% de descuento en ${namesEs}`}${prices.length ? ` (${prices.join('; ')})` : ''}. No requiere código.`,
+      en: bulk
+        ? `${String(liveDeal.title_en || '').trim() || `Deal of the Week: ${pct}% off when you mix and match ${dealMinUnits(liveDeal)}+ selected vials from ${namesEn}`}. Applied automatically; no code, no stacking. Stock is limited.`
+        : `${String(liveDeal.title_en || '').trim() || `Deal of the Week: ${pct}% off ${namesEn}`}${prices.length ? ` (${prices.join('; ')})` : ''}. No code needed; other discounts do not stack.`,
+      es: bulk
+        ? `${String(liveDeal.title_es || '').trim() || `Oferta de la semana: ${pct}% de descuento al combinar ${dealMinUnits(liveDeal)}+ viales seleccionados de ${namesEs}`}. Se aplica automáticamente; sin código ni acumulación. Inventario limitado.`
+        : `${String(liveDeal.title_es || '').trim() || `Oferta de la semana: ${pct}% de descuento en ${namesEs}`}${prices.length ? ` (${prices.join('; ')})` : ''}. Sin código; otros descuentos no se acumulan.`,
     });
   }
 

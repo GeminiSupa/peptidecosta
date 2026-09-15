@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,14 @@ export async function POST(request) {
     const cleanCode = code.trim().toUpperCase();
 
     const supabase = getSupabaseAdmin();
+    const conflict = await findLiveDealConflictForPromo(supabase, {
+      code: cleanCode,
+      is_active: true,
+      target_product: target_product || null,
+    });
+    if (conflict) {
+      return NextResponse.json({ error: promoDealConflictMessage({ code: cleanCode }, conflict.products) }, { status: 409 });
+    }
     const { data, error } = await supabase
       .from('promo_codes')
       .insert([{

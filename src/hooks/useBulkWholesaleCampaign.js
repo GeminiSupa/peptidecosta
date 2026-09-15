@@ -2,21 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
-import { bulkWholesalePromoState } from '@/lib/bulkWholesaleCampaign.mjs';
+import { bulkWholesaleDealState } from '@/lib/bulkWholesaleCampaign.mjs';
 
 const VARIANT_KEY = 'bulk_wholesale_campaign_variant';
 
 export function useBulkWholesaleCampaign() {
-  const [campaign, setCampaign] = useState(() => ({ ...bulkWholesalePromoState(null), loading: true }));
+  const [campaign, setCampaign] = useState(() => ({ ...bulkWholesaleDealState(null), loading: true }));
 
   useEffect(() => {
-    fetch('/api/promo/bulk-wholesale', { cache: 'no-store' })
+    fetch('/api/deals/bulk-wholesale', { cache: 'no-store' })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Campaign lookup failed (${response.status})`);
         return response.json();
       })
       .then((data) => setCampaign({ ...data, loading: false }))
-      .catch(() => setCampaign({ ...bulkWholesalePromoState(null), loading: false }));
+      .catch(() => setCampaign({ ...bulkWholesaleDealState(null), loading: false }));
   }, []);
 
   return campaign;

@@ -72,6 +72,7 @@ import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
+import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
@@ -404,6 +405,7 @@ export default function CatalogPage() {
   const [promoData, setPromoData] = useState(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [promoError, setPromoError] = useState('');
+  const [weeklyDeal, setWeeklyDeal] = useState(null);
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
@@ -2249,6 +2251,24 @@ export default function CatalogPage() {
       : getCartVialCount()
   );
 
+  const getMatchedWeeklyDeal = () => {
+    if (!weeklyDeal) return null;
+    const targets = new Set((weeklyDeal.product_names || []).map((name) => String(name).toLowerCase()));
+    return cart.some((item) => targets.has(String(item.product).toLowerCase())) ? weeklyDeal : null;
+  };
+
+  const getAutomaticDealDiscount = () => automaticDealPromo(getMatchedWeeklyDeal(), cart);
+  const getAppliedPromoData = () => (!getMatchedWeeklyDeal() && promoData?.valid ? promoData : null);
+  const getWeeklyDealLimitError = () => {
+    const deal = getMatchedWeeklyDeal();
+    const max = dealMaxUnits(deal);
+    const units = dealEligibleUnits(deal, cart);
+    if (!deal || dealPricingMode(deal) !== 'bulk_threshold' || !max || units <= max) return '';
+    return lang === 'en'
+      ? `This limited-stock deal covers up to ${max} selected vials. Remove ${units - max} to continue.`
+      : `Esta oferta de inventario limitado cubre hasta ${max} viales seleccionados. Quita ${units - max} para continuar.`;
+  };
+
   // Must stay identical to getVolumeDiscountPct in src/lib/pricing.js, which
   // is what the server re-charges on; both now read the same module.
   const getVolumeDiscountPct = (vialCount) => {
@@ -2272,10 +2292,12 @@ export default function CatalogPage() {
   // percentage the customer actually gets. Single source of truth - every
   // checkout path reads this rather than getVolumeDiscountPct directly.
   const getEffectiveVolumePct = () =>
-    effectiveVolumeDiscountPct(promoData?.valid ? promoData : null, getVolumeDiscountPct(getCartVialCount()));
+    getMatchedWeeklyDeal() && (dealPricingMode(getMatchedWeeklyDeal()) === 'shelf' || Boolean(getWeeklyDealLimitError()))
+      ? 0
+      : effectiveVolumeDiscountPct(getAppliedPromoData() || getAutomaticDealDiscount(), getVolumeDiscountPct(getCartVialCount()));
 
   // True when an applied code has taken the volume tiers off the table.
-  const volumeTierHintSuppressed = Boolean(promoData?.valid && replacesVolumeDiscount(promoData));
+  const volumeTierHintSuppressed = Boolean(getMatchedWeeklyDeal() || (getAppliedPromoData() && replacesVolumeDiscount(getAppliedPromoData())));
 
   // The discount lands on the non-BAC subtotal only; the BAC charge is added
   // back afterwards at face value.
@@ -2325,16 +2347,22 @@ export default function CatalogPage() {
   };
 
   const getPromoDiscountAmount = () => {
-    if (!promoData || !promoData.valid) return 0;
+    // A live weekly deal is the only promotion on an order containing one of
+    // its selected products. Prefer it even if a stale code was validated just
+    // before the deal became live; the server enforces the same rule again.
+    const appliedDiscount = getAutomaticDealDiscount() || getAppliedPromoData();
+    if (!appliedDiscount) return 0;
     
     // The BAC charge is excluded from every promo base — it is a flat side
     // charge, not discountable merchandise.
     let targetTotal = getDiscountableSubtotal();
 
-    if (promoData.is_flash_sale && promoData.target_product) {
-      const targets = promoData.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (appliedDiscount.is_flash_sale && appliedDiscount.target_product) {
+      const targets = appliedDiscount.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       targetTotal = cart
-        .filter(item => !isBacWater(item.product) && targets.some(t => item.product.toLowerCase().includes(t)))
+        .filter(item => !isBacWater(item.product) && targets.some(t => appliedDiscount.exact_target_match
+          ? item.product.toLowerCase() === t
+          : item.product.toLowerCase().includes(t)))
         .reduce((sum, item) => sum + getPriceAsNumber(item, currency) * item.qty, 0);
     }
     
@@ -2343,8 +2371,13 @@ export default function CatalogPage() {
       targetTotal = targetTotal * (1 - volumePct / 100);
     }
 
-    return currency === 'USD' ? parseFloat((targetTotal * promoData.discount_pct).toFixed(2)) : Math.round(targetTotal * promoData.discount_pct);
+    return currency === 'USD' ? parseFloat((targetTotal * appliedDiscount.discount_pct).toFixed(2)) : Math.round(targetTotal * appliedDiscount.discount_pct);
   };
+
+  useEffect(() => {
+    fetch('/api/deals/current', { cache: 'no-store' }).then((res) => res.json())
+      .then((data) => setWeeklyDeal(data.deal || null)).catch(() => setWeeklyDeal(null));
+  }, []);
 
   const getFinalTotal = () => {
     const items = getDiscountedTotal();
@@ -2868,12 +2901,12 @@ export default function CatalogPage() {
       location_data: customerMetadata?.location_data || null,
       device_info: customerMetadata?.device_info || null,
       sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
-      promo_code: promoData?.valid ? promoData.code : null,
-      discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
-      discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
-      affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
-      affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
-      affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
+      promo_code: getAppliedPromoData()?.code || null,
+      discount_amount_usd: getAppliedPromoData() ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+      discount_amount_crc: getAppliedPromoData() ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+      affiliate_id: getAppliedPromoData()?.affiliate_id || null,
+      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoData().commission_rate).toFixed(2)) : 0,
+      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoData().commission_rate) : 0,
     });
 
     if (!cardSave.ok) {
@@ -3057,12 +3090,12 @@ export default function CatalogPage() {
       device_info: customerMetadata?.device_info || null,
       whatsapp_source: whatsappSource || null,
       sales_agent: typeof window !== 'undefined' ? localStorage.getItem('checkout_sales_agent') : null,
-      promo_code: promoData?.valid ? promoData.code : null,
-      discount_amount_usd: promoData?.valid ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
-      discount_amount_crc: promoData?.valid ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
-      affiliate_id: promoData?.valid ? promoData.affiliate_id : null,
-      affiliate_commission_usd: promoData?.valid ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * promoData.commission_rate).toFixed(2)) : 0,
-      affiliate_commission_crc: promoData?.valid ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * promoData.commission_rate) : 0,
+      promo_code: getAppliedPromoData()?.code || null,
+      discount_amount_usd: getAppliedPromoData() ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
+      discount_amount_crc: getAppliedPromoData() ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
+      affiliate_id: getAppliedPromoData()?.affiliate_id || null,
+      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoData().commission_rate).toFixed(2)) : 0,
+      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoData().commission_rate) : 0,
     });
 
     if (!saveResult.ok) {
@@ -3322,7 +3355,8 @@ export default function CatalogPage() {
     const shipFee = getShippingFee();
     const isFreeShip = qualifiesForFreeShipping();
     const hasVolumeDiscount = getEffectiveVolumePct() > 0;
-    const hasPromoDiscount = promoData?.valid;
+    const hasPromoDiscount = Boolean(getAppliedPromoData());
+    const hasWeeklyDealDiscount = Boolean(getAutomaticDealDiscount());
     const itemsBeforeShipping = getItemsTotalBeforeShipping();
 
     return (
@@ -3362,6 +3396,12 @@ export default function CatalogPage() {
             <span className="cart-total-val" style={{ color: '#38bdf8', fontSize: compact ? '1rem' : undefined }}>
               -{formatPriceVal(getPromoDiscountAmount(), currency)}
             </span>
+          </div>
+        )}
+        {hasWeeklyDealDiscount && (
+          <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+            <span className="cart-total-label" style={{ color: '#f97316' }}>{lang === 'en' ? 'DEAL OF THE WEEK' : 'OFERTA DE LA SEMANA'}</span>
+            <span className="cart-total-val" style={{ color: '#f97316' }}>-{formatPriceVal(getPromoDiscountAmount(), currency)}</span>
           </div>
         )}
 
@@ -4754,7 +4794,12 @@ export default function CatalogPage() {
             )}
 
             {/* Promo Code UI */}
-            <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {getMatchedWeeklyDeal() && <div style={{ marginBottom:'10px', padding:'9px 12px', borderRadius:'10px', background:'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#ef4444' : '#f97316', fontSize:'.78rem', fontWeight:700 }}>
+              {getWeeklyDealLimitError() || (dealPricingMode(getMatchedWeeklyDeal()) === 'bulk_threshold'
+                ? (lang === 'en' ? `Weekly bulk deal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} selected vials. It applies automatically and does not stack.` : `Oferta mayorista semanal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} viales seleccionados. Se aplica automáticamente y no se acumula.`)
+                : (lang === 'en' ? 'Deal of the Week applied automatically. Other discounts do not stack.' : 'Oferta de la Semana aplicada automáticamente. Otros descuentos no se acumulan.'))}
+            </div>}
+            {!getMatchedWeeklyDeal() && <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <CheckoutLabel htmlFor="field-promoCode">
                 {lang === 'en' ? 'Promo code' : 'Código promocional'}
               </CheckoutLabel>
@@ -4768,13 +4813,13 @@ export default function CatalogPage() {
                   value={promoCodeInput}
                   onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
                   style={{ flex: 1, textTransform: 'uppercase', marginBottom: 0 }}
-                  disabled={promoData?.valid}
+                  disabled={Boolean(promoData?.valid || getMatchedWeeklyDeal())}
                 />
                 {!promoData?.valid ? (
                   <button
                     type="button"
                     onClick={() => handleApplyPromo()}
-                    disabled={promoLoading || !promoCodeInput}
+                    disabled={Boolean(promoLoading || !promoCodeInput || getMatchedWeeklyDeal())}
                     style={{
                       background: promoCodeInput && !promoLoading ? '#38bdf8' : '#334155',
                       color: '#fff',
@@ -4782,7 +4827,7 @@ export default function CatalogPage() {
                       borderRadius: '12px',
                       padding: '0 16px',
                       fontWeight: '600',
-                      cursor: promoCodeInput && !promoLoading ? 'pointer' : 'not-allowed',
+                      cursor: promoCodeInput && !promoLoading && !getMatchedWeeklyDeal() ? 'pointer' : 'not-allowed',
                       fontSize: '0.85rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -4820,7 +4865,7 @@ export default function CatalogPage() {
                   {lang === 'en' ? `Code applied: ${promoData.discount_pct * 100}% off` : `Código aplicado: ${promoData.discount_pct * 100}% de descuento`}
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* The research-use gate. Our card processor's bank requires that
                 nobody reaches a payment form without passing this first, so the
@@ -5381,7 +5426,7 @@ export default function CatalogPage() {
                       themselves; validateForm now names it and scrolls to it. */}
                   <button
                     type="button"
-                    disabled={cardSubmitting || cardRetryBlocked || cart.length === 0 || checkBacOnlyMinimum(cart).blocked}
+                    disabled={cardSubmitting || cardRetryBlocked || cart.length === 0 || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
                     onClick={startCardCheckout}
                     className="card-payment-btn"
                   >
@@ -5425,7 +5470,7 @@ export default function CatalogPage() {
                     type="submit"
                     form="checkout-form-main"
                     className="whatsapp-btn"
-                    disabled={orderSubmitting || checkBacOnlyMinimum(cart).blocked}
+                    disabled={orderSubmitting || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
                     style={{ width: '100%', padding: '16px', fontSize: '1.05rem', boxShadow: '0 -4px 20px rgba(0,0,0,0.1)' }}
                   >
                     {orderSubmitting ? (
@@ -5901,10 +5946,10 @@ export default function CatalogPage() {
         cartTotalUsd={currency === 'USD'
           ? getDiscountableSubtotal()
           : getDiscountableSubtotal() / exchangeRate}
-        hasPromoApplied={Boolean(promoData?.valid)}
+        hasPromoApplied={Boolean(getMatchedWeeklyDeal() || getAppliedPromoData())}
         gateVisible={!gateAccessGranted && gateVisible}
         checkoutBusy={orderSubmitting || orderSuccess}
-        appliedCode={promoData?.valid ? promoData.code : null}
+        appliedCode={getAppliedPromoData()?.code || null}
         onApply={handleExitOfferApply}
         onExpire={handleExitOfferExpire}
         whatsappNumber={links.whatsappNumber}

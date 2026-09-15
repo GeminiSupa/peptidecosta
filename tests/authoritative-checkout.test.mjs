@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { activeDealForOrder, authoritativeCheckout } from '../src/lib/authoritativeCheckout.mjs';
+import { automaticDealPromo } from '../src/lib/dealOfWeek.mjs';
 
 const RATE = 454.48;
 const peptide = {
@@ -113,4 +114,36 @@ test('deal attribution is derived from live dates and canonical item names', () 
   ];
   assert.equal(activeDealForOrder(deals, [{ product: peptide.product, qty: 1 }], new Date('2026-08-22T00:00:00Z'))?.id, 'live');
   assert.equal(activeDealForOrder(deals, [{ product: 'Other', qty: 1 }], new Date('2026-08-22T00:00:00Z')), null);
+});
+
+test('a qualifying bulk weekly deal is exactly 40% off selected products with no volume stacking', () => {
+  const lookalike = {
+    ...peptide,
+    id: 'p2',
+    product: 'BPC-157 10mg Blend',
+    price_usd: '$50',
+    price_crc: '₡22,724',
+  };
+  const items = [
+    { product: peptide.product, qty: 20, price: 100 },
+    { product: lookalike.product, qty: 1, price: 50 },
+  ];
+  const deal = {
+    pricing_mode: 'bulk_threshold',
+    discount_pct: 0.4,
+    min_units: 20,
+    product_names: [peptide.product],
+  };
+  const result = authoritativeCheckout({
+    postedOrder: posted(items, 1250),
+    products: [{ ...peptide, inventory_count: 30 }, lookalike],
+    promo: automaticDealPromo(deal, items),
+    exchangeRate: RATE,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, false);
+  assert.equal(result.volumeDiscountPct, 0);
+  assert.equal(result.promoDiscount, 800);
+  assert.equal(result.total, 1250);
 });

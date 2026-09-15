@@ -221,18 +221,18 @@ test('a deal is live only inside its own window and only while marked live', () 
   assert.equal(isDealLive(null), false);
 });
 
-test('banner copy names the product and says the discount stacks', () => {
+test('banner copy names the product and says discounts do not stack', () => {
   const deal = { discount_pct: 0.15, product_names: ['GHK-Cu 50mg'] };
 
   const en = dealBannerText(deal, 'en');
   assert.match(en, /DEAL OF THE WEEK/);
   assert.match(en, /15%/);
   assert.match(en, /GHK-Cu 50mg/);
-  assert.match(en, /volume/i);
+  assert.match(en, /do not stack/i);
 
   const es = dealBannerText(deal, 'es');
   assert.match(es, /OFERTA DE LA SEMANA/);
-  assert.match(es, /volumen/i);
+  assert.match(es, /no se acumulan/i);
 });
 
 test('banner copy lists several products readably', () => {
@@ -269,12 +269,12 @@ test('deal links use the real catalog host and preserve attribution', () => {
   assert.match(dealBroadcastDrafts({ ...deal, discount_pct: 0.15 }).message, /catalog\.peptidescostarica\.net/);
 });
 
-test('stacking safety requires review at 30% and refuses dangerous totals', () => {
+test('weekly deal safety reviews large final discounts without compounding', () => {
   assert.equal(stackedDiscountPercent(0.15, 20), 32);
   assert.equal(dealSafety(0.29).ok, true);
   assert.equal(dealSafety(0.3).needsConfirmation, true);
   assert.equal(dealSafety(0.3, { confirmedHighDiscount: true }).ok, true);
-  assert.equal(dealSafety(0.5, { confirmedHighDiscount: true }).ok, false, '50% plus 20% exceeds the combined cap');
+  assert.equal(dealSafety(0.5, { confirmedHighDiscount: true }).ok, true, '50% remains exactly 50%');
   assert.match(dealSafety(0.51, { confirmedHighDiscount: true }).error, /cannot exceed 50%/);
 });
 

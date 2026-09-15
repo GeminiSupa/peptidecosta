@@ -1,15 +1,10 @@
 /**
  * Deal of the Week — one promotion per week, ending Sunday midnight Costa Rica.
  *
- * A deal is a SCHEDULED PRICE MARKDOWN, not a promo code. products.price_usd is
- * read by every pricing path there is: the catalog cart, order creation, the
- * WhatsApp receipt, and src/lib/pricing.js for bot-generated checkout links.
- * Lowering it applies the deal to all of them at once, with nothing for the
- * customer to type and no second copy of the discount math to drift out of sync.
- *
- * The automatic volume discount then compounds on top of the reduced price,
- * which lands on the same total the equivalent stacking promo code produced:
- * 15% off, then 20% volume, is 0.85 x 0.80 = 0.68 of list either way.
+ * A deal is an automatic promotion, not a promo code. Shelf deals mark the
+ * selected products down immediately. Bulk-threshold deals leave shelf prices
+ * alone and apply at checkout after the selected-unit minimum is reached.
+ * Neither mode may combine with volume pricing or promo codes.
  *
  * Everything here is pure so the money math and the week boundary are testable
  * without a database. The caller supplies `now` and the exchange rate; nothing
@@ -139,7 +134,7 @@ export function toPercent(discountPct) {
   return Math.round(value <= 1 ? value * 100 : value);
 }
 
-/** The real saving after the shelf markdown and an automatic volume tier stack. */
+/** Legacy display helper retained for old deal-history tests and records. */
 export function stackedDiscountPercent(discountPct, volumePct = 0) {
   const deal = Math.min(1, Math.max(0, Number(discountPct) || 0));
   const volume = Math.min(1, Math.max(0, (Number(volumePct) || 0) / 100));
@@ -180,8 +175,8 @@ export function isUnavailableForDeal(product) {
  */
 export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) {
   const pct = toPercent(discountPct);
-  const stackedAtFive = stackedDiscountPercent(discountPct, 15);
-  const stackedAtTen = stackedDiscountPercent(discountPct, 20);
+  const stackedAtFive = pct;
+  const stackedAtTen = pct;
 
   if (pct <= 0 || pct >= 100) {
     return { ok: false, error: 'The discount must be between 1% and 99%.', pct, stackedAtFive, stackedAtTen };
@@ -189,20 +184,11 @@ export function dealSafety(discountPct, { confirmedHighDiscount = false } = {}) 
   if (pct > DEAL_HARD_LIMIT_PCT) {
     return { ok: false, error: `A weekly deal cannot exceed ${DEAL_HARD_LIMIT_PCT}% off.`, pct, stackedAtFive, stackedAtTen };
   }
-  if (stackedAtTen > DEAL_MAX_STACKED_DISCOUNT_PCT) {
-    return {
-      ok: false,
-      error: `With the 10+ vial discount this becomes ${stackedAtTen}% off, above the ${DEAL_MAX_STACKED_DISCOUNT_PCT}% safety limit.`,
-      pct,
-      stackedAtFive,
-      stackedAtTen,
-    };
-  }
   if (pct >= DEAL_REVIEW_THRESHOLD_PCT && !confirmedHighDiscount) {
     return {
       ok: false,
       needsConfirmation: true,
-      error: `Review required: ${pct}% becomes ${stackedAtTen}% off on 10+ vials.`,
+      error: `Review required for a ${pct}% weekly discount. No other discounts will stack with it.`,
       pct,
       stackedAtFive,
       stackedAtTen,
@@ -339,6 +325,41 @@ function joinNames(names, conjunction) {
   return `${list.slice(0, -1).join(', ')} ${conjunction} ${list[list.length - 1]}`;
 }
 
+export function dealPricingMode(deal) {
+  return deal?.pricing_mode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
+}
+
+export function dealMinUnits(deal) {
+  return dealPricingMode(deal) === 'bulk_threshold' ? Math.max(1, Math.floor(Number(deal?.min_units || 1))) : 0;
+}
+
+export function dealMaxUnits(deal) {
+  const value = Math.floor(Number(deal?.max_units || 0));
+  return value > 0 ? value : null;
+}
+
+export function dealEligibleUnits(deal, items = []) {
+  const names = new Set((deal?.product_names || []).map((name) => String(name).trim().toLowerCase()));
+  return (items || []).reduce((sum, item) => names.has(String(item?.product || item?.name || '').trim().toLowerCase())
+    ? sum + Math.max(0, Math.floor(Number(item?.qty || item?.quantity || 0))) : sum, 0);
+}
+
+export function automaticDealPromo(deal, items = []) {
+  if (!deal || dealPricingMode(deal) !== 'bulk_threshold') return null;
+  const units = dealEligibleUnits(deal, items);
+  const min = dealMinUnits(deal);
+  const max = dealMaxUnits(deal);
+  if (units < min || (max && units > max)) return null;
+  return {
+    discount_pct: Number(deal.discount_pct),
+    min_units: min,
+    max_units: max,
+    is_flash_sale: true,
+    exact_target_match: true,
+    target_product: (deal.product_names || []).join(', '),
+  };
+}
+
 /**
  * Banner ticker copy. The banner is one line scrolling across every page, so it
  * names the product and the saving and nothing else — there is no room for
@@ -349,16 +370,22 @@ export function dealBannerText(deal, lang = 'en') {
   if (!pct) return '';
   const isEn = String(lang).toLowerCase().startsWith('en');
   const names = deal?.product_names || [];
+  const bulk = dealPricingMode(deal) === 'bulk_threshold';
+  const minimum = dealMinUnits(deal);
 
   if (isEn) {
     const custom = String(deal?.title_en || '').trim();
     if (custom) return custom;
-    return `⚡ DEAL OF THE WEEK: ${pct}% off ${joinNames(names, 'and')} — extra ${pct}% on top of volume discounts. Ends Sunday.`;
+    return bulk
+      ? `⚡ DEAL OF THE WEEK: ${pct}% off when you mix and match ${minimum}+ selected vials. No code needed. Stock is limited.`
+      : `⚡ DEAL OF THE WEEK: ${pct}% off ${joinNames(names, 'and')}. No code needed; discounts do not stack. Ends Sunday.`;
   }
 
   const customEs = String(deal?.title_es || '').trim();
   if (customEs) return customEs;
-  return `⚡ OFERTA DE LA SEMANA: ${pct}% de descuento en ${joinNames(names, 'y')} — ${pct}% extra sobre los descuentos por volumen. Termina el domingo.`;
+  return bulk
+    ? `⚡ OFERTA DE LA SEMANA: ${pct}% de descuento al combinar ${minimum}+ viales seleccionados. Sin código. Inventario limitado.`
+    : `⚡ OFERTA DE LA SEMANA: ${pct}% de descuento en ${joinNames(names, 'y')}. Sin código; los descuentos no se acumulan. Termina el domingo.`;
 }
 
 /**
@@ -379,18 +406,21 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
   const namesEn = joinNames(deal?.product_names || [], 'and');
   const namesEs = joinNames(deal?.product_names || [], 'y');
   const destination = catalogUrl || dealCatalogUrl(deal);
+  const bulk = dealPricingMode(deal) === 'bulk_threshold';
+  const requirementEn = bulk ? ` when you mix and match ${dealMinUnits(deal)}+ selected vials` : '';
+  const requirementEs = bulk ? ` al combinar ${dealMinUnits(deal)}+ viales seleccionados` : '';
 
   return {
     emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,
     message: [
       `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
       '',
-      `${pct}% off ${namesEn} — already applied to the price, no code needed.`,
-      `Stacks on top of volume discounts: 5+ vials another 15% off, 10+ vials 20%.`,
+      `${pct}% off ${namesEn}${requirementEn} — automatically applied, no code needed.`,
+      `One deal only: this does not stack with volume discounts or promo codes. Stock is limited.`,
       `Ends Sunday at midnight.`,
       '',
-      `${pct}% de descuento en ${namesEs} — ya aplicado al precio, sin código.`,
-      `Se suma a los descuentos por volumen (5+ viales 15%, 10+ viales 20%).`,
+      `${pct}% de descuento en ${namesEs}${requirementEs} — se aplica automáticamente, sin código.`,
+      `Una sola oferta: no se acumula con descuentos por volumen ni códigos. Inventario limitado.`,
       `Termina el domingo a medianoche.`,
       '',
       destination,

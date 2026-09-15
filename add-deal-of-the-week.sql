@@ -9,7 +9,8 @@
 -- so lowering it applies the deal everywhere with no per-path discount math to
 -- keep in sync, and with nothing for the customer to type. The automatic volume
 -- discount then compounds on top of the marked-down price, which is the same
--- total the equivalent stacking promo code produced (0.85 x 0.80 = 0.68 of list).
+-- Weekly deals are exclusive pricing: volume discounts and promo codes are
+-- suppressed so the configured percentage is the customer's final saving.
 --
 -- baseline is the reason this table exists. Marking a product down overwrites
 -- columns that already hold data, and the catalog will happily keep charging a

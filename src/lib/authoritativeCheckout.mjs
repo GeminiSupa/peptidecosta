@@ -37,8 +37,11 @@ function promoDiscountAmount(cart, totals, promo, currency) {
       .split(',')
       .map(normalize)
       .filter(Boolean);
+    const targetMatches = (name, target) => promo.exact_target_match
+      ? normalize(name) === target
+      : normalize(name).includes(target);
     base = cart
-      .filter((item) => !isBacWater(item.product) && targets.some((target) => normalize(item.product).includes(target)))
+      .filter((item) => !isBacWater(item.product) && targets.some((target) => targetMatches(item.product, target)))
       .reduce((sum, item) => sum + (item.unitPrice * item.qty), 0);
   }
   if (totals.discountPct > 0) base *= (1 - totals.discountPct / 100);
@@ -137,7 +140,9 @@ export function authoritativeCheckout({
   if (promo?.is_flash_sale && promo?.target_product) {
     const targets = String(promo.target_product).split(',').map(normalize).filter(Boolean);
     const hasTarget = requested.some((item) => (
-      !isBacWater(item.product) && targets.some((target) => normalize(item.product).includes(target))
+      !isBacWater(item.product) && targets.some((target) => (
+        promo.exact_target_match ? normalize(item.product) === target : normalize(item.product).includes(target)
+      ))
     ));
     if (!hasTarget) {
       return { ok: false, error: `This promo requires ${promo.target_product} in the cart.` };

@@ -75,3 +75,16 @@ test('Weekly Deal refreshes Products and uses message-mode WhatsApp templates', 
   assert.match(broadcasts, /draft\.sourceDealId \? 'message'/);
   assert.match(broadcasts, /<option value="message">Message Composer text<\/option>/);
 });
+
+test('bulk threshold controls live in Deal of the Week and checkout enforces exclusivity', () => {
+  const dealPanel = fs.readFileSync('src/components/admin/DealOfWeekPanel.js', 'utf8');
+  const checkout = fs.readFileSync('src/app/api/orders/create/route.js', 'utf8');
+  const catalog = fs.readFileSync('src/app/catalog/page.js', 'utf8');
+
+  assert.match(dealPanel, /Bulk mix-and-match sale/);
+  assert.match(dealPanel, /pricing_mode: pricingMode/);
+  assert.match(dealPanel, /Promo codes<\/span><strong>Blocked/);
+  assert.match(checkout, /promo: resolvedPromo \|\| dealPromo/);
+  assert.match(checkout, /suppressVolumeDiscount/);
+  assert.match(catalog, /!getMatchedWeeklyDeal\(\) && <div/);
+});
