@@ -9,6 +9,7 @@ import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant, formatCrDate }
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
+import { DEFAULT_BULK_WHOLESALE_SETTINGS } from '@/lib/bulkWholesaleCampaign.mjs';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -62,7 +63,7 @@ const parseCommissionPercent = (value) => {
   return Math.max(0, Math.min(100, pct)) / 100;
 };
 
-export default function AffiliatesManager({ products = [] }) {
+export default function AffiliatesManager({ products = [], isSuperadmin = false }) {
   const [affiliates, setAffiliates] = useState([]);
   const [promoCodes, setPromoCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +82,8 @@ export default function AffiliatesManager({ products = [] }) {
   const [qrModal, setQrModal] = useState(null);
   const [qrLoadingId, setQrLoadingId] = useState(null);
   const [settlementPayout, setSettlementPayout] = useState(null);
+  const [bulkCampaign, setBulkCampaign] = useState(DEFAULT_BULK_WHOLESALE_SETTINGS);
+  const [savingBulkCampaign, setSavingBulkCampaign] = useState(false);
 
   // Forms State
   const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
@@ -255,6 +258,25 @@ export default function AffiliatesManager({ products = [] }) {
     loadData();
     if (activeSubTab === 'payouts') fetchPayouts();
   }, [activeSubTab]);
+
+  useEffect(() => {
+    adminFetch('/api/admin/promo/bulk-wholesale').then((res) => res.json())
+      .then((data) => { if (data.settings) setBulkCampaign(data.settings); })
+      .catch((err) => console.error('Could not load wholesale campaign settings:', err));
+  }, []);
+
+  const saveBulkCampaign = async (e) => {
+    e.preventDefault();
+    setSavingBulkCampaign(true);
+    try {
+      const res = await adminFetch('/api/admin/promo/bulk-wholesale', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings: bulkCampaign }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      setBulkCampaign(data.settings);
+      alert(data.settings.enabled ? '✅ Wholesale campaign published.' : '✅ Wholesale campaign saved and hidden.');
+    } catch (err) { alert(`Could not save wholesale campaign: ${err.message}`); }
+    finally { setSavingBulkCampaign(false); }
+  };
 
   const handleCreateAffiliate = async (e) => {
     e.preventDefault();
@@ -577,6 +599,21 @@ export default function AffiliatesManager({ products = [] }) {
             </div>
 
             {promoFilter === 'standard' && (
+              <>
+              {isSuperadmin && <form onSubmit={saveBulkCampaign} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '24px', padding: '20px', background: 'rgba(56,189,248,.07)', borderRadius: '12px', border: '1px solid rgba(56,189,248,.3)' }}>
+                <h3 style={{ margin: 0, color: '#f8fafc' }}>Bulk Wholesale Campaign Page</h3>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '.82rem' }}>Choose any threshold promo below. Its percentage, unit limits, dates, products, ribbon, and active status control the offer; this section controls the public page and wording.</p>
+                <label style={{ display: 'flex', gap: '10px', color: '#e2e8f0' }}><input type="checkbox" checked={bulkCampaign.enabled} onChange={(e) => setBulkCampaign({...bulkCampaign, enabled:e.target.checked})}/><strong>Publish campaign on the website and catalog</strong></label>
+                <select value={bulkCampaign.promoCode} onChange={(e) => setBulkCampaign({...bulkCampaign, promoCode:e.target.value})} style={inputStyle}>
+                  <option value="">Select the promo that powers this page…</option>
+                  {promoCodes.filter((p) => Number(p.min_units)>0 && p.target_product).map((p) => <option key={p.id} value={p.code}>{p.code} — {Math.round(Number(p.discount_pct)*100)}% off {p.min_units}+ units</option>)}
+                </select>
+                <label style={{ display: 'flex', gap: '10px', color: '#e2e8f0' }}><input type="checkbox" checked={bulkCampaign.abTestEnabled} onChange={(e) => setBulkCampaign({...bulkCampaign, abTestEnabled:e.target.checked})}/>Enable automatic A/B headline test</label>
+                <div className="admin-form-grid-2">
+                  {[['titleAEn','Headline A — English'],['titleAEs','Headline A — Español'],['titleBEn','Headline B — English'],['titleBEs','Headline B — Español'],['leadEn','Description — English'],['leadEs','Description — Español'],['stockDisclaimerEn','Stock disclaimer — English'],['stockDisclaimerEs','Stock disclaimer — Español'],['ctaEn','Button — English'],['ctaEs','Button — Español']].map(([key,label]) => <textarea key={key} rows={key.startsWith('stock')?3:2} placeholder={label} value={bulkCampaign[key]} onChange={(e) => setBulkCampaign({...bulkCampaign,[key]:e.target.value})} style={inputStyle}/>) }
+                </div>
+                <button type="submit" disabled={savingBulkCampaign} style={btnStyle('#0284c7')}>{savingBulkCampaign ? 'Saving…' : 'Save Campaign Page'}</button>
+              </form>}
               <form onSubmit={handleCreatePromo} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px', padding: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px dashed rgba(255,255,255,0.1)' }}>
                 <h3 style={{ margin: '0', fontSize: '0.9rem', fontWeight: 'bold', color: '#e2e8f0' }}>Generate Promo Code</h3>
                 <div className="admin-form-grid-2">
@@ -765,6 +802,7 @@ export default function AffiliatesManager({ products = [] }) {
                   </div>
                 )}
               </form>
+              </>
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '400px', overflowY: 'auto' }}>

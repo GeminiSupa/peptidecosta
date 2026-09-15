@@ -1,24 +1,31 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BULK_WHOLESALE_PRODUCTS, bulkWholesaleCatalogHref, bulkWholesalePromoState } from '../src/lib/bulkWholesaleCampaign.mjs';
+import { bulkWholesaleCatalogHref, bulkWholesalePromoState, normalizeBulkWholesaleSettings } from '../src/lib/bulkWholesaleCampaign.mjs';
 
-const promo = {
-  code: 'WHOLESALE40', discount_pct: 0.4, min_units: 20, is_active: true,
-  target_product: BULK_WHOLESALE_PRODUCTS.join(','),
-};
+const settings = { enabled: true, promoCode: 'BULK45', titleAEn: 'Admin headline' };
+const promo = { code: 'BULK45', discount_pct: 0.45, min_units: 24, is_active: true, target_product: 'Product A,Product B' };
 
-test('campaign is live only when the exact safety-critical setup is active', () => {
-  assert.equal(bulkWholesalePromoState(promo).active, true);
-  assert.equal(bulkWholesalePromoState({ ...promo, discount_pct: 0.5 }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, min_units: 19 }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, target_product: 'GLP-1 10mg' }).active, false);
-  assert.equal(bulkWholesalePromoState({ ...promo, is_active: false }).active, false);
+test('campaign content and offer mechanics come from admin-managed data', () => {
+  const state = bulkWholesalePromoState(promo, settings);
+  assert.equal(state.active, true);
+  assert.equal(state.code, 'BULK45');
+  assert.equal(state.discountPct, 45);
+  assert.equal(state.minUnits, 24);
+  assert.deepEqual(state.products, ['Product A', 'Product B']);
+  assert.equal(state.settings.titleAEn, 'Admin headline');
 });
 
-test('campaign catalog link preserves variant, product, and code', () => {
-  const href = bulkWholesaleCatalogHref({ lang: 'en', variant: 'b', product: 'NAD+ 500mg' });
+test('campaign stays hidden until an admin publishes a valid threshold promo', () => {
+  assert.equal(bulkWholesalePromoState(promo, { ...settings, enabled: false }).active, false);
+  assert.equal(bulkWholesalePromoState({ ...promo, min_units: 0 }, settings).active, false);
+  assert.equal(bulkWholesalePromoState(promo, { ...settings, promoCode: 'OTHER' }).active, false);
+});
+
+test('settings normalize safely and catalog links use the selected admin code', () => {
+  assert.equal(normalizeBulkWholesaleSettings({ promoCode: ' bulk45 ' }).promoCode, 'BULK45');
+  const href = bulkWholesaleCatalogHref({ lang: 'en', variant: 'b', product: 'Product A', code: 'BULK45' });
   const url = new URL(href, 'https://example.test');
-  assert.equal(url.searchParams.get('promo_code'), 'WHOLESALE40');
-  assert.equal(url.searchParams.get('utm_campaign'), 'bulk_wholesale_40_b');
-  assert.equal(url.searchParams.get('product'), 'NAD+ 500mg');
+  assert.equal(url.searchParams.get('promo_code'), 'BULK45');
+  assert.equal(url.searchParams.get('utm_campaign'), 'bulk_wholesale_b');
+  assert.equal(url.searchParams.get('product'), 'Product A');
 });
