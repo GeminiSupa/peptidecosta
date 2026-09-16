@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
-import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { isGiftLine } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCheckout.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
@@ -545,15 +545,10 @@ export async function POST(request) {
     // Rebuild every public order from current product rows. A saved browser cart
     // can straddle a deal start/end, and callers can edit posted prices; neither
     // is allowed to decide what the customer is charged.
-    const requestedProductNames = [...new Set(order.items
-      .filter((item) => !isGiftLine(item))
-      .map((item) => stripGiftSuffix(item?.product || item?.name))
-      .filter(Boolean))];
     const [{ data: currentProducts, error: productError }, rateResult, { data: liveDealRows, error: liveDealError }] = await Promise.all([
       supabase
         .from('products')
-        .select('id,product,price_usd,price_crc,status,inventory_count')
-        .in('product', requestedProductNames),
+        .select('id,product,price_usd,price_crc,status,inventory_count'),
       getDatabaseBackedUsdToCrcRate(),
       // select('*') keeps ordinary checkout compatible during a rolling deploy:
       // pre-migration databases simply return legacy shelf-deal rows, while a

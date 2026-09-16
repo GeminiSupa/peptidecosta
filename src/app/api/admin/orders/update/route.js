@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
-import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
-import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
+import { stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { authoritativeCheckout, productNameResolver } from '@/lib/authoritativeCheckout.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
@@ -162,15 +162,10 @@ export async function PATCH(request) {
       const shippingUsd = Number(('shipping_cost_usd' in patch ? patch.shipping_cost_usd : currentOrder.shipping_cost_usd) || 0);
       const shipping = currency === 'CRC' ? shippingCrc : shippingUsd;
 
-      const productNames = [...new Set(items
-        .filter((item) => !isGiftLine(item))
-        .map((item) => stripGiftSuffix(item?.product || item?.name))
-        .filter(Boolean))];
       const [{ data: products, error: productsError }, rateResult] = await Promise.all([
         supabase
           .from('products')
-          .select('id,product,price_usd,price_crc,status,inventory_count')
-          .in('product', productNames),
+          .select('id,product,price_usd,price_crc,status,inventory_count'),
         getDatabaseBackedUsdToCrcRate(),
       ]);
       if (productsError) {
@@ -194,8 +189,12 @@ export async function PATCH(request) {
         ? currentOrder.inventory_deducted
         : (currentOrder.items || []);
       const reservedByProduct = new Map();
+      const findProduct = productNameResolver(products);
       for (const line of currentReserved || []) {
-        const name = stripGiftSuffix(line?.product || line?.name);
+        const lineName = stripGiftSuffix(line?.product || line?.name);
+        // Keyed by the current catalog spelling, so stock this order already
+        // holds is still counted after the product was renamed.
+        const name = findProduct(lineName)?.product || lineName;
         reservedByProduct.set(name, (reservedByProduct.get(name) || 0) + Number(line?.qty || 0));
       }
       const productsAvailableToThisOrder = (products || []).map((product) => ({

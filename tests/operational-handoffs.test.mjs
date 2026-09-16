@@ -44,3 +44,16 @@ test('paid payouts are immutable and failed payouts require a reason', () => {
   assert.equal(planPayoutSettlement('Paid', { status: 'Failed', failureReason: 'reversed' }).status, 409);
   assert.equal(planPayoutSettlement('Approved', { status: 'Failed' }).status, 400);
 });
+
+test('inventory plan releases an old-spelling line from the renamed product row', () => {
+  const plan = inventoryReservationPlan(
+    [{ product: 'Slu-pp332 5mg', qty: 1 }],
+    [{ product: 'SLU-PP-332 5mg', qty: 1 }],
+    [{ product: 'SLU-PP-332 5mg', inventory_count: 23, low_stock_threshold: 5 }],
+  );
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.changes.map(({ product, before, after }) => ({ product, before, after })), [
+    { product: 'SLU-PP-332 5mg', before: 23, after: 23 },
+  ]);
+  assert.deepEqual(plan.reservations, [{ product: 'SLU-PP-332 5mg', qty: 1 }]);
+});

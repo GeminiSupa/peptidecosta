@@ -20,6 +20,32 @@ import { computeOrderTotals, getUnitPrice, getVolumeDiscountPct } from './pricin
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 const roundCurrency = (value, currency) => currency === 'USD' ? round2(value) : Math.round(Number(value || 0));
 const normalize = (value) => String(value || '').trim().toLowerCase();
+// Looser than normalize: also ignores dashes, spaces and other punctuation, so
+// a product renamed "Slu-pp332 5mg" -> "SLU-PP-332 5mg" still matches the
+// orders saved under its old name.
+const looseKey = (value) => normalize(value).normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * Build a lookup that finds a catalog row by name. An exact (case-insensitive)
+ * match wins; otherwise a match that ignores dashes and spaces is used, but
+ * only when exactly one product has that shape, so two genuinely different
+ * products are never merged.
+ */
+export function productNameResolver(products) {
+  const exact = new Map();
+  const loose = new Map();
+  for (const product of products || []) {
+    const name = product?.product;
+    if (!name) continue;
+    exact.set(normalize(name), product);
+    const key = looseKey(name);
+    loose.set(key, loose.has(key) ? null : product);
+  }
+  return (name) => {
+    if (!name) return null;
+    return exact.get(normalize(name)) || loose.get(looseKey(name)) || null;
+  };
+}
 
 function qtyOf(item) {
   const qty = Number.parseInt(item?.qty ?? item?.quantity ?? 0, 10);
@@ -65,7 +91,7 @@ export function authoritativeCheckout({
   volumeDiscountPctOverride = null,
 }) {
   const currency = postedOrder?.currency === 'USD' ? 'USD' : 'CRC';
-  const productByName = new Map((products || []).map((product) => [normalize(product.product), product]));
+  const findProduct = productNameResolver(products);
   const requestedByName = new Map();
   const missing = [];
 
@@ -74,7 +100,7 @@ export function authoritativeCheckout({
     const productName = stripGiftSuffix(item?.product || item?.name);
     const qty = qtyOf(item);
     if (!productName || qty <= 0) continue;
-    const product = productByName.get(normalize(productName));
+    const product = findProduct(productName);
     if (!product) {
       missing.push(productName);
       continue;

@@ -147,3 +147,24 @@ test('a qualifying bulk weekly deal is exactly 40% off selected products with no
   assert.equal(result.promoDiscount, 800);
   assert.equal(result.total, 1250);
 });
+
+test('a product renamed with different dashes, spaces or case still matches old orders', () => {
+  const renamed = { ...peptide, product: 'SLU-PP-332 5mg' };
+  const result = authoritativeCheckout({
+    postedOrder: posted([{ product: 'Slu-pp332 5mg', qty: 1 }]),
+    products: [renamed],
+    exchangeRate: RATE,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.products[0].product, 'SLU-PP-332 5mg');
+});
+
+test('loose name matching never guesses between two products with the same shape', () => {
+  const result = authoritativeCheckout({
+    postedOrder: posted([{ product: 'BPC157 10mg', qty: 1 }]),
+    products: [peptide, { ...peptide, id: 'p2', product: 'BPC 157 10mg' }],
+    exchangeRate: RATE,
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /no longer available: BPC157 10mg/);
+});
