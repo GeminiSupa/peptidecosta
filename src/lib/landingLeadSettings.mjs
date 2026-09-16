@@ -4,15 +4,16 @@ export const LANDING_LEAD_SETTINGS_ID = 'lead_landing_page';
 
 export const DEFAULT_LANDING_LEAD_SETTINGS = {
   // Who a new landing lead goes to. 'fixed' sends every one to
-  // assignedAgentEmail; 'unassigned' leaves it for an agent to claim in the
-  // Leads tab. Either way, a contact an agent already owns still goes to that
-  // agent — this only decides where a genuinely new lead lands.
+  // assignedAgentEmail; 'rotation' takes turns through rotationAgentEmails
+  // (see leadRotation.mjs); 'unassigned' leaves it for an agent to claim in
+  // the Leads tab. In every mode, a contact an agent already owns still goes to
+  // that agent — this only decides where a genuinely new lead lands.
   //
-  // The old 'round_robin' mode is gone. It had never assigned a single lead in
-  // production, and any stored value other than 'fixed' normalizes to
-  // 'unassigned' below, so settings saved under the old name keep working.
+  // The retired 'round_robin' value still normalizes to 'unassigned' below, so
+  // an old saved setting cannot switch on a rotation with no agents chosen.
   assignmentMode: 'unassigned',
   assignedAgentEmail: '',
+  rotationAgentEmails: [],
   autoOpenEnabled: true,
   timeTriggerMs: 5000,
   scrollTriggerPct: 55,
@@ -109,8 +110,11 @@ export function normalizeLandingLeadSettings(value = {}) {
     .map(normalizeQuestion);
   return {
     ...DEFAULT_LANDING_LEAD_SETTINGS,
-    assignmentMode: source.assignmentMode === 'fixed' ? 'fixed' : 'unassigned',
+    assignmentMode: ['fixed', 'rotation'].includes(source.assignmentMode) ? source.assignmentMode : 'unassigned',
     assignedAgentEmail: clean(source.assignedAgentEmail, 200).toLowerCase(),
+    rotationAgentEmails: [...new Set((Array.isArray(source.rotationAgentEmails) ? source.rotationAgentEmails : [])
+      .map((email) => clean(email, 200).toLowerCase())
+      .filter(Boolean))].slice(0, 30),
     autoOpenEnabled: source.autoOpenEnabled !== false,
     timeTriggerMs: Math.min(60000, Math.max(0, Number(source.timeTriggerMs) || DEFAULT_LANDING_LEAD_SETTINGS.timeTriggerMs)),
     scrollTriggerPct: Math.min(95, Math.max(10, Number(source.scrollTriggerPct) || DEFAULT_LANDING_LEAD_SETTINGS.scrollTriggerPct)),

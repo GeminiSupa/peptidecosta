@@ -78,9 +78,10 @@ export function buildChatwootLeadMessage({
   source,
   qualificationLines = [],
   campaign,
-  assignedAgent,
   dueAt,
 }) {
+  // No owner line: the chat itself is assigned to the agent, and a name typed
+  // into the message goes stale the moment someone reassigns it.
   return [
     source === 'glp1_lp' ? 'New Google Ads lead — /glp-1' : 'New Google Ads lead — /lp',
     `Name: ${clean(name) || 'Not provided'}`,
@@ -88,10 +89,35 @@ export function buildChatwootLeadMessage({
     `Phone: ${clean(phone) || 'Not provided'}`,
     ...qualificationLines.map(clean).filter(Boolean),
     campaign ? `Campaign: ${clean(campaign)}` : null,
-    assignedAgent ? `CRM owner: ${clean(assignedAgent)}` : 'CRM owner: Unassigned',
     dueAt ? `Response due: ${new Date(dueAt).toLocaleString('en-US', { timeZone: 'America/Costa_Rica' })} Costa Rica time` : null,
     `CRM lead ID: ${clean(leadId)}`,
   ].filter(Boolean).join('\n');
+}
+
+/**
+ * Assigns the chat to the Chatwoot agent whose login email matches the CRM
+ * owner. The message is already delivered by now, so a failure here only
+ * leaves the chat unassigned — it is reported, never thrown.
+ */
+async function assignConversation({ config, conversationId, assigneeEmail, fetchImpl }) {
+  const wanted = clean(assigneeEmail).toLowerCase();
+  if (!wanted) return { assigneeId: null };
+  try {
+    const agents = await chatwootRequest(
+      `${config.baseUrl}/api/v1/accounts/${config.accountId}/agents`,
+      { accessToken: config.accessToken, fetchImpl },
+    );
+    const agent = (Array.isArray(agents) ? agents : [])
+      .find((entry) => clean(entry?.email).toLowerCase() === wanted);
+    if (!agent?.id) return { assigneeId: null, error: `No Chatwoot agent uses ${wanted}` };
+    await chatwootRequest(
+      `${config.baseUrl}/api/v1/accounts/${config.accountId}/conversations/${conversationId}/assignments`,
+      { accessToken: config.accessToken, fetchImpl, method: 'POST', body: { assignee_id: agent.id } },
+    );
+    return { assigneeId: agent.id };
+  } catch (error) {
+    return { assigneeId: null, error: clean(error?.message) || 'Chatwoot assignment failed' };
+  }
 }
 
 /**
@@ -107,7 +133,7 @@ export async function sendAdLeadToChatwoot({
   source,
   qualificationLines,
   campaign,
-  assignedAgent,
+  assigneeEmail,
   dueAt,
   env = process.env,
   fetchImpl = fetch,
@@ -154,12 +180,16 @@ export async function sendAdLeadToChatwoot({
     if (!conversation?.id) throw new Error('Chatwoot did not return a conversation ID');
 
     const content = buildChatwootLeadMessage({
-      leadId, name, email, phone, source, qualificationLines, campaign, assignedAgent, dueAt,
+      leadId, name, email, phone, source, qualificationLines, campaign, dueAt,
     });
     const message = await chatwootRequest(
       `${contactsUrl}/${encodeURIComponent(sourceId)}/conversations/${conversation.id}/messages`,
       { fetchImpl, method: 'POST', body: { content, message_type: 'incoming', private: false } },
     );
+
+    const assignment = await assignConversation({
+      config, conversationId: conversation.id, assigneeEmail, fetchImpl,
+    });
 
     return {
       configured: true,
@@ -167,6 +197,8 @@ export async function sendAdLeadToChatwoot({
       contactId: contact?.id || null,
       conversationId: conversation.id,
       messageId: message?.id || null,
+      assigneeId: assignment.assigneeId,
+      ...(assignment.error ? { assignmentError: assignment.error } : {}),
     };
   } catch (error) {
     return { configured: true, sent: false, error: clean(error?.message) || 'Chatwoot delivery failed' };

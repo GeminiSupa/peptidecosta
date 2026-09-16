@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
-import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail, Bell, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Shield, Check, ChevronDown, ChevronUp, Camera, Upload, Mail, Bell, MessageCircle, Users } from 'lucide-react';
 import AgentDashboard from './AgentDashboard';
 import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
@@ -73,6 +73,7 @@ function displayDestination(recipient) {
 function NotificationSettings({
   recipients, tableReady, hint, loading, error, savingId, canEdit,
   chatwootEnabled, chatwootConfigured, chatwootSaving, onChatwootChange,
+  leadRotation, leadRotationSaving, onLeadRotationChange,
   newLabel, setNewLabel, newChannel, setNewChannel, newDestination, setNewDestination,
   adding, onAdd, onUpdate, onRemove,
 }) {
@@ -168,6 +169,52 @@ function NotificationSettings({
         />
       </div>
 
+      {leadRotation && (
+        <div style={panel}>
+          <NotificationToggle
+            icon={<Users size={15} />}
+            title="Share Google Ads leads between agents"
+            hint="Each new /lp or /glp-1 lead goes to the next ticked agent, in turn, even if they are offline. The Chatwoot chat is assigned to the same agent, and their sale counts for their commission."
+            checked={leadRotation.enabled}
+            disabled={!canEdit || leadRotationSaving}
+            onChange={(enabled) => onLeadRotationChange({ enabled })}
+            activeColor="#22c55e"
+          />
+          {leadRotation.enabled && (
+            <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
+                {leadRotation.agents.map((agent) => {
+                  const ticked = leadRotation.agentEmails.includes(agent.email);
+                  return (
+                    <label key={agent.email} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 10px', borderRadius: '8px', color: ticked ? '#e2e8f0' : '#94a3b8', background: ticked ? 'rgba(34, 197, 94, 0.12)' : 'rgba(0,0,0,0.25)', border: `1px solid ${ticked ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255,255,255,0.06)'}`, cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                      <input
+                        type="checkbox"
+                        checked={ticked}
+                        disabled={!canEdit || leadRotationSaving}
+                        onChange={(e) => onLeadRotationChange({
+                          agentEmails: e.target.checked
+                            ? [...leadRotation.agentEmails, agent.email]
+                            : leadRotation.agentEmails.filter((email) => email !== agent.email),
+                        })}
+                      />
+                      {agent.name}
+                    </label>
+                  );
+                })}
+              </div>
+              {leadRotation.agentEmails.length === 0 && (
+                <p style={{ fontSize: '0.74rem', color: '#fbbf24', margin: '10px 0 0 0' }}>
+                  No agents ticked — new leads arrive unassigned until you tick at least one.
+                </p>
+              )}
+              <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '10px 0 0 0' }}>
+                Only agents with the Leads permission are listed. A returning customer still goes to the agent who already has them.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {!tableReady && (
         <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fde68a' }}>
           <strong>Not set up yet.</strong> {hint} Until then, order alerts keep following the old per-member settings.
@@ -245,6 +292,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
   const [chatwootEnabled, setChatwootEnabled] = useState(true);
   const [chatwootConfigured, setChatwootConfigured] = useState(false);
   const [chatwootSaving, setChatwootSaving] = useState(false);
+  const [leadRotation, setLeadRotation] = useState(null);
+  const [leadRotationSaving, setLeadRotationSaving] = useState(false);
   const [recipientSavingId, setRecipientSavingId] = useState(null);
   const [newRecipientLabel, setNewRecipientLabel] = useState('');
   const [newRecipientChannel, setNewRecipientChannel] = useState('whatsapp');
@@ -330,6 +379,7 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       setRecipientsHint(data.hint || '');
       setChatwootEnabled(data.chatwoot?.enabled !== false);
       setChatwootConfigured(data.chatwoot?.configured === true);
+      setLeadRotation(data.leadRotation || null);
     } catch (err) {
       setRecipientsError(err.message);
     }
@@ -353,6 +403,28 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       await fetchRecipients();
     }
     setChatwootSaving(false);
+  };
+
+  const updateLeadRotation = async (change) => {
+    if (!leadRotation) return;
+    const next = { enabled: leadRotation.enabled, agentEmails: leadRotation.agentEmails, ...change };
+    setLeadRotationSaving(true);
+    setRecipientsError('');
+    setLeadRotation({ ...leadRotation, ...next });
+    try {
+      const res = await adminFetch('/api/admin/notification-recipients', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadRotation: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save the lead rotation');
+      setLeadRotation(data.leadRotation);
+    } catch (err) {
+      setRecipientsError(err.message);
+      await fetchRecipients();
+    }
+    setLeadRotationSaving(false);
   };
 
   const addRecipient = async (e) => {
@@ -1157,6 +1229,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
           chatwootConfigured={chatwootConfigured}
           chatwootSaving={chatwootSaving}
           onChatwootChange={updateChatwootEnabled}
+          leadRotation={leadRotation}
+          leadRotationSaving={leadRotationSaving}
+          onLeadRotationChange={updateLeadRotation}
           newLabel={newRecipientLabel}
           setNewLabel={setNewRecipientLabel}
           newChannel={newRecipientChannel}

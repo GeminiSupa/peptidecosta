@@ -28,6 +28,7 @@ test('Google Ads lead message identifies both landing-page variant and CRM recor
   assert.match(content, /Ana/);
   assert.match(content, /Interest: GLP-1/);
   assert.match(content, /CRM lead ID: lead-7/);
+  assert.doesNotMatch(content, /CRM owner/);
 });
 
 test('missing Chatwoot environment skips delivery without making a network call', async () => {
@@ -91,6 +92,45 @@ test('creates a contact, conversation and incoming message in the configured inb
   assert.equal(JSON.parse(calls[1].options.body).identifier, 'google-ads-lead-lead-2');
   assert.equal(JSON.parse(calls[3].options.body).message_type, 'incoming');
   assert.match(JSON.parse(calls[3].options.body).content, /Omer test/);
+});
+
+test('assigns the chat to the Chatwoot agent with the CRM owner email', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 50, source_id: 'contact-source' }),
+    response({ id: 60 }),
+    response({ id: 70 }),
+    response([{ id: 1, email: 'other@example.com' }, { id: 9, email: 'Pollita@Example.com' }]),
+    response({ id: 9 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-4', name: 'Ana', source: 'adwords_lp', assigneeEmail: 'pollita@example.com', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.assigneeId, 9);
+  assert.match(calls[4].url, /\/api\/v1\/accounts\/12\/agents$/);
+  assert.match(calls[5].url, /\/api\/v1\/accounts\/12\/conversations\/60\/assignments$/);
+  assert.deepEqual(JSON.parse(calls[5].options.body), { assignee_id: 9 });
+  assert.equal(calls[5].options.headers.api_access_token, 'server-secret');
+});
+
+test('an unknown assignee leaves the delivered chat unassigned and says why', async () => {
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 50, source_id: 'contact-source' }),
+    response({ id: 60 }),
+    response({ id: 70 }),
+    response([{ id: 1, email: 'other@example.com' }]),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-5', assigneeEmail: 'missing@example.com', env: ENV,
+    fetchImpl: async () => replies.shift(),
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.assigneeId, null);
+  assert.match(result.assignmentError, /missing@example\.com/);
 });
 
 test('returns a safe failure when Chatwoot rejects a request', async () => {

@@ -196,10 +196,11 @@ test('CRM route stores qualification notes and sends the alert only after save',
   assert.ok(alertIndex > saveIndex);
   assert.match(route, /landingQualificationNotes\(qualification\)/);
   assert.match(route, /getTransactionalSmtpConfig\(\)/);
-  // The round-robin rotation was retired — it never assigned a lead in
-  // production. A new lead goes to the configured campaign agent, or to nobody.
+  // The old database-function rotation never assigned a lead in production.
+  // A new lead goes to the campaign agent, the next rotation agent, or nobody.
   assert.doesNotMatch(route, /assign_next_landing_lead_agent/);
   assert.match(route, /resolveCampaignAgent\(supabase, landingSettings\)/);
+  assert.match(route, /resolveRotationAgent\(supabase, landingSettings\)/);
   assert.match(route, /qualification_data/);
   assert.match(route, /response_due_at/);
   assert.match(route, /isDuplicateLandingLeadSubmission/);

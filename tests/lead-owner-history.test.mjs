@@ -247,7 +247,7 @@ test('the campaign agent is only assigned to a lead nobody already owns', () => 
   assert.match(route, /resolveLeadOwnerDetailed\(/, 'ownership must be resolved before assignment');
 });
 
-test('the retired round-robin is gone from the route', () => {
+test('the retired database round-robin is gone from the route', () => {
   const route = fs.readFileSync('src/app/api/leads/contact/route.js', 'utf8');
   assert.doesNotMatch(route, /assign_next_landing_lead_agent/);
   assert.doesNotMatch(route, /fallbackRoundRobinAgent/);
