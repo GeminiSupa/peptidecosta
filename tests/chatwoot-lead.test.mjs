@@ -141,3 +141,53 @@ test('returns a safe failure when Chatwoot rejects a request', async () => {
   assert.deepEqual(result, { configured: true, sent: false, error: 'Inbox unavailable' });
   assert.doesNotMatch(JSON.stringify(result), /server-secret/);
 });
+
+test('only real international numbers are sent to Chatwoot as the contact phone', async () => {
+  const { chatwootPhone } = await import('../src/lib/chatwootLead.mjs');
+  assert.equal(chatwootPhone('50684046973'), '+50684046973');
+  assert.equal(chatwootPhone('+1 (305) 555-0100'), '+13055550100');
+  // Local formats Chatwoot rejects as "not e164" — the 2026-09-17 lost chat.
+  assert.equal(chatwootPhone('03001234567'), '');
+  assert.equal(chatwootPhone('1234567890123456'), '');
+  assert.equal(chatwootPhone(''), '');
+});
+
+test('a phone Chatwoot refuses still opens the chat, without the phone on the contact', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ message: 'Phone number should be in e164 format' }, 422),
+    response({ payload: [] }),
+    response({ id: 51, source_id: 'contact-source' }),
+    response({ id: 61 }),
+    response({ id: 71 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-8', name: 'Ana', email: 'ana@example.com', phone: '50684046973', source: 'glp1_lp', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.conversationId, 61);
+  const retry = JSON.parse(calls[3].options.body);
+  assert.deepEqual(retry, { identifier: 'google-ads-lead-lead-8', name: 'Ana' });
+  // The agent still gets the phone and email, in the message.
+  assert.match(JSON.parse(calls[5].options.body).content, /50684046973/);
+  assert.match(JSON.parse(calls[5].options.body).content, /ana@example\.com/);
+});
+
+test('a local-format phone is left off the contact instead of failing it', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 52, source_id: 'contact-source' }),
+    response({ id: 62 }),
+    response({ id: 72 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-9', name: 'Ali', phone: '03001234567', source: 'adwords_lp', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(JSON.parse(calls[1].options.body).phone_number, undefined);
+  assert.match(JSON.parse(calls[3].options.body).content, /03001234567/);
+});

@@ -15,7 +15,7 @@ import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
-import { loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
+import { chatwootLeadColumns, loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
 import {
   hasLandingQualification,
   isDuplicateLandingLeadSubmission,
@@ -483,6 +483,23 @@ export async function POST(request) {
       }
       if (!chatwootResult.sent) {
         console.error('[leads/contact] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
+      }
+    }
+
+    // Kept on the lead so the Leads tab shows which chats failed; the logs alone
+    // made a lost chat invisible. Optional columns: add-chatwoot-status-to-leads.sql.
+    if (leadId && isAdLandingSource(source)) {
+      try {
+        const { error: statusError } = await writeDroppingMissingColumns(
+          chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
+          ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
+          (row) => (Object.keys(row).length
+            ? supabase.from('catalog_leads').update(row).eq('id', leadId)
+            : Promise.resolve({ error: null })),
+        );
+        if (statusError) console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
+      } catch (statusError) {
+        console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
       }
     }
 

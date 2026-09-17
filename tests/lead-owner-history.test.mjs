@@ -281,7 +281,8 @@ test('the outbox resolves the audience from the saved owner, not from the job', 
   // both. Asserting the helper keeps the rule in one place: a new landing page is
   // opted in by joining AD_LANDING_SOURCES, never by editing this line.
   assert.match(delivery, /isAdLandingSource\(details\.source\) \? audience\.whatsapp : \[\]/);
-  const recipients = fs.readFileSync('src/lib/leadNotificationRecipients.js', 'utf8');
+  const recipients = fs.readFileSync('src/lib/adLandingLeads.mjs', 'utf8');
+  assert.match(fs.readFileSync('src/lib/leadNotificationRecipients.js', 'utf8'), /AD_LANDING_SOURCES\.has\(source\)/);
   assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'adwords_lp'[^\]]*\]\)/);
   assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'glp1_lp'[^\]]*\]\)/);
 });

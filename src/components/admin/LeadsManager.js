@@ -18,10 +18,14 @@ import {
   summarizeLeadNotificationJob,
 } from '@/lib/leadNotificationStatus.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import { isAdLandingLead } from '@/lib/adLandingLeads.mjs';
+import ChatwootLeadsPanel from '@/components/admin/ChatwootLeadsPanel';
 
+// isAdLandingLead covers /glp-1 (glp1_lp) too; matching on "adwords" alone
+// left every /glp-1 lead out of the Google Ads filter and its alert status.
 const isGoogleAdsLead = (lead) => {
   const source = String(lead?.lead_source || lead?.utm_source || '').toLowerCase();
-  return source.includes('adwords') || source.includes('google');
+  return isAdLandingLead(lead) || source.includes('adwords') || source.includes('google');
 };
 
 const FacebookIcon = ({ size = 14, color = "currentColor", style, ...props }) => (
@@ -439,7 +443,7 @@ export default function LeadsManager({
         // their origin only in the notes text, so fall back to that rather than
         // hiding them from their own filter.
         if (leadsSourceFilter === 'adwords' && !(
-          String(l.lead_source || '').toLowerCase().includes('adwords')
+          isGoogleAdsLead(l)
           || String(l.notes || '').toLowerCase().includes('(adwords')
         )) return false;
         if (leadsSourceFilter === 'facebook' && !(
@@ -907,6 +911,12 @@ export default function LeadsManager({
           {notificationAuditAvailable && <span>{notificationJobList.length} tracked enquiries</span>}
         </div>
       )}
+
+      <ChatwootLeadsPanel
+        leads={enrichedLeads}
+        getLeadOwner={getLeadOwner}
+        onOpenLead={setSelectedLeadDetails}
+      />
 
       <div style={{ marginBottom: '20px' }}>
         {generatingLeadsAi ? (
