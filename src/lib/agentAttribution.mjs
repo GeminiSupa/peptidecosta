@@ -323,7 +323,7 @@ export function historicalAttributionFor(order, history) {
  * rather than reading the order book. The Supabase client is a parameter so the
  * tests can drive it with a stub.
  */
-export async function lookupHistoricalAgent(supabase, { phone, email, resolveAgent } = {}) {
+export async function lookupHistoricalAgent(supabase, { phone, email, resolveAgent, strict = false } = {}) {
   const phoneMatch = phoneKey(phone);
   const emailMatch = emailKey(email);
   if (!supabase || (!phoneMatch && !emailMatch)) return null;
@@ -350,6 +350,11 @@ export async function lookupHistoricalAgent(supabase, { phone, email, resolveAge
   }
 
   const results = await Promise.all(queries);
+  // Supabase reports a failed query in `error` instead of throwing, so by
+  // default a failure reads as "no history". A caller that would hand the
+  // customer to someone else on that answer passes strict to hear about it.
+  const failed = results.find((result) => result?.error);
+  if (strict && failed) throw new Error(`Order history lookup failed: ${failed.error.message}`);
   const orders = results.flatMap((result) => result?.data || []);
   const history = buildAgentHistory(orders, resolveAgent ? { resolveAgent } : undefined);
   return findHistoricalAgent(history, { phone, email });

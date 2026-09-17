@@ -478,3 +478,24 @@ test('a lead tagged whatsapp but holding an email still finds its agent', () => 
   const keys = contactKeysFor('whatsapp', 'ana@correo.com');
   assert.equal(findHistoricalAgent(history, keys)?.agent, 'Mar\u00eda');
 });
+
+test('strict history lookup reports a database failure instead of "no history"', async () => {
+  // A failed query must not read as a brand-new customer when the caller would
+  // then rotate them to a different agent.
+  const failing = {
+    from: () => {
+      const query = {
+        select: () => query,
+        in: () => query,
+        ilike: () => Promise.resolve({ data: null, error: { message: 'timeout' } }),
+      };
+      return query;
+    },
+  };
+  const lenient = await lookupHistoricalAgent(failing, { email: 'joe@example.com' });
+  assert.equal(lenient, null, 'default callers keep the old quiet behaviour');
+  await assert.rejects(
+    lookupHistoricalAgent(failing, { email: 'joe@example.com', strict: true }),
+    /Order history lookup failed: timeout/,
+  );
+});

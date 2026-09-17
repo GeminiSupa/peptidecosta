@@ -244,6 +244,9 @@ test('the campaign agent is only assigned to a lead nobody already owns', () => 
     /if \(!owner && hasLandingQualification\(qualification\)\) \{/,
     'dropping the !owner guard sends every returning customer to the campaign agent again',
   );
+  // A failed history read is retried before falling back, and the fallback is logged.
+  assert.match(route, /HISTORY_RETRY_WINDOW_MS = 30_000/);
+  assert.match(route, /ROUND ROBIN FALLBACK: Supabase did not answer/);
   assert.match(route, /resolveLeadOwnerDetailed\(/, 'ownership must be resolved before assignment');
 });
 

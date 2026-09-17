@@ -33,6 +33,14 @@ import {
 // agent is meant to claim and work, not support tickets.
 
 export const runtime = 'nodejs';
+// Room for the customer-history retries below (up to 30s) plus the save,
+// Chatwoot and alerts that follow.
+export const maxDuration = 60;
+
+// If the database does not answer the "has this person bought before?" check,
+// keep asking for this long before giving the lead to the round robin.
+const HISTORY_RETRY_WINDOW_MS = 30_000;
+const HISTORY_RETRY_GAP_MS = 3_000;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -290,12 +298,21 @@ export async function POST(request) {
     // existing owner is never overwritten — an agent who already claimed this
     // lead outranks anything history says.
     const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
-    const resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
-      phone,
-      email,
-      existingOwner,
-      label: 'leads/contact',
-    });
+    const historyStartedAt = Date.now();
+    let historyAttempts = 0;
+    let resolvedOwner;
+    for (;;) {
+      historyAttempts += 1;
+      resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
+        phone,
+        email,
+        existingOwner,
+        label: 'leads/contact',
+      });
+      const elapsed = Date.now() - historyStartedAt;
+      if (!resolvedOwner.lookupFailed || elapsed + HISTORY_RETRY_GAP_MS > HISTORY_RETRY_WINDOW_MS) break;
+      await new Promise((resolve) => setTimeout(resolve, HISTORY_RETRY_GAP_MS));
+    }
     let owner = resolvedOwner.agent;
     let ownerEmail = '';
     let assignmentSource = resolvedOwner.source === 'existing' ? 'existing_owner' : resolvedOwner.source;
@@ -308,6 +325,17 @@ export async function POST(request) {
     // the rotation ('rotation'). If neither yields an active agent it stays
     // unowned and claimable in the Leads tab, rather than being handed to a
     // deactivated agent where it looks handled and goes cold.
+    // The history was retried for 30 seconds above. If Supabase still did not
+    // answer, the lead is not left waiting: it goes to the round robin, and the
+    // log says so, so a returning customer given to the wrong agent can be
+    // found and moved back by hand.
+    if (resolvedOwner.lookupFailed) {
+      console.error(
+        `[leads/contact] ROUND ROBIN FALLBACK: Supabase did not answer the customer-history check after ${historyAttempts} tries `
+          + `(${Math.round((Date.now() - historyStartedAt) / 1000)}s), so this lead goes to the next person in the round robin. `
+          + `It may be a returning customer — check who sold to them before. email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`,
+      );
+    }
     if (!owner && hasLandingQualification(qualification)) {
       try {
         const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);

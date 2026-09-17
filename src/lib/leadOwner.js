@@ -60,7 +60,12 @@ function activeAgentName(profiles, agent) {
   const wanted = String(agent || '').trim().toLowerCase();
   if (!wanted) return '';
   const profile = (profiles || []).find((row) => agentMatchKeys(row).has(wanted));
-  if (!isEligibleSalesAgentProfile(profile)) return '';
+  // A superadmin who sold to this customer (Webster) keeps them too. The sales
+  // agent check excludes superadmins for commission reasons, not ownership.
+  const activeSuperadmin = profile?.is_superadmin === true
+    && String(profile.status || 'active').trim().toLowerCase() === 'active'
+    && String(profile.name || profile.email || '').trim();
+  if (!activeSuperadmin && !isEligibleSalesAgentProfile(profile)) return '';
   return String(profile.name || profile.email).trim();
 }
 
@@ -93,6 +98,14 @@ async function fetchOwnedLeadsFor(supabase, { phone, email }) {
   if (!queries.length) return [];
 
   const results = await Promise.allSettled(queries);
+  // contact_value exists on every deployment, so its queries failing means the
+  // database is unreachable, not that an optional column is missing. The
+  // email/phone columns are optional and may still fail quietly.
+  // Queries were pushed in (contact_value, column) pairs, so even indexes are
+  // the contact_value ones.
+  const contactValueFailed = results.some((result, index) => index % 2 === 0
+    && (result.status === 'rejected' || result.value?.error));
+  if (contactValueFailed) throw new Error('CRM lead lookup failed');
   return results.flatMap((result) => (
     result.status === 'fulfilled' ? result.value?.data || [] : []
   ));
@@ -104,7 +117,10 @@ async function fetchOwnedLeadsFor(supabase, { phone, email }) {
  * @param email           the lead's email, if known
  * @param existingOwner   an agent who already claimed this lead; always wins
  * @param label           log prefix, e.g. 'leads/capture'
- * @returns {Promise<{agent: string, source: string}>} source is '' when nobody owns them
+ * @returns {Promise<{agent: string, source: string, lookupFailed?: boolean}>}
+ *   source is '' when nobody owns them. lookupFailed means the history could not
+ *   be read, so "nobody owns them" is unknown rather than true — a caller must
+ *   not hand such a lead to the campaign agent or the round robin.
  */
 export async function resolveLeadOwnerDetailed(
   supabase,
@@ -115,12 +131,13 @@ export async function resolveLeadOwnerDetailed(
   if (!supabase || (!phone && !email)) return { agent: '', source: '' };
 
   try {
-    const { data: profiles } = await supabase
+    const { data: profiles, error: profilesError } = await supabase
       .from('admin_profiles')
       .select('name, email, tier, status, is_superadmin');
+    if (profilesError) throw profilesError;
     const resolveAgent = buildAgentNameResolver(profiles);
 
-    const closed = await lookupHistoricalAgent(supabase, { phone, email, resolveAgent });
+    const closed = await lookupHistoricalAgent(supabase, { phone, email, resolveAgent, strict: true });
     const fromOrders = activeAgentName(profiles, closed?.agent);
     if (fromOrders) return { agent: fromOrders, source: 'order_history' };
 
@@ -134,7 +151,7 @@ export async function resolveLeadOwnerDetailed(
     // A lead is worth more than its attribution: an agent can still claim it by
     // hand, and the CRM derives the owner live from order history regardless.
     console.warn(`[${label}] History attribution skipped:`, err.message);
-    return { agent: '', source: '' };
+    return { agent: '', source: '', lookupFailed: true };
   }
 }
 
