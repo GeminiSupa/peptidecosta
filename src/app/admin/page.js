@@ -7416,8 +7416,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         const qualificationAnswers = Array.isArray(currentLead.qualification_data?.answers)
           ? currentLead.qualification_data.answers
           : [];
-        const responseDue = currentLead.response_due_at ? new Date(currentLead.response_due_at) : null;
-        const responseOverdue = responseDue && !currentLead.last_contacted_at && responseDue.getTime() < Date.now();
         return (
         <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -7510,12 +7508,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </div>
               </div>
 
-              {(qualificationAnswers.length > 0 || currentLead.lead_source || responseDue) && (
+              {(qualificationAnswers.length > 0 || currentLead.lead_source) && (
                 <div style={{ background: 'rgba(245, 158, 11, 0.06)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
                   <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Landing Qualification</h3>
                   <div className="admin-form-grid-2" style={{ marginBottom: qualificationAnswers.length ? 14 : 0 }}>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Lead source</label><span style={{ color: '#f8fafc', fontSize: '.85rem' }}>{currentLead.lead_source || 'Landing page'}</span></div>
-                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Response deadline</label><span style={{ color: responseOverdue ? '#f87171' : '#86efac', fontSize: '.85rem', fontWeight: 800 }}>{responseDue ? `${responseDue.toLocaleString()}${responseOverdue ? ' — OVERDUE' : ''}` : 'Not set'}</span></div>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Assigned at</label><span style={{ color: '#cbd5e1', fontSize: '.82rem' }}>{currentLead.assigned_at ? new Date(currentLead.assigned_at).toLocaleString() : 'Not recorded'}</span></div>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Consent</label><span style={{ color: currentLead.marketing_consent ? '#86efac' : '#fca5a5', fontSize: '.82rem', fontWeight: 700 }}>{currentLead.marketing_consent ? `Accepted (${currentLead.consent_version || 'version not recorded'})` : 'Not accepted'}</span></div>
                   </div>

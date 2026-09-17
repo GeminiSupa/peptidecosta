@@ -2,12 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import {
-  adLandingPageLabel,
-  chatwootNeedsAttention,
-  chatwootStatusView,
-  isAdLandingLead,
-} from '../src/lib/adLandingLeads.mjs';
+import { adLandingPageLabel, isAdLandingLead } from '../src/lib/adLandingLeads.mjs';
 import { chatwootLeadColumns } from '../src/lib/chatwootLead.mjs';
 import { leadPhone } from '../src/lib/leadContact.mjs';
 
@@ -28,7 +23,8 @@ test('both Google Ads pages count as ad leads, /glp-1 included', () => {
 test('the Leads tab Google Ads filter uses the shared check', () => {
   const screen = fs.readFileSync('src/components/admin/LeadsManager.js', 'utf8');
   assert.match(screen, /leadsSourceFilter === 'adwords' && !\(\s*isGoogleAdsLead\(l\)/);
-  assert.match(screen, /<ChatwootLeadsPanel/);
+  // The Google Ads dropdown is the section; nothing extra sits above the list.
+  assert.doesNotMatch(screen, /ChatwootLeadsPanel/);
 });
 
 test('the phone is read from the landing-page note label', () => {
@@ -46,17 +42,6 @@ test('each delivery outcome is saved as a status the Leads tab can show', () => 
   assert.equal(chatwootLeadColumns({ configured: true, sent: true, assignmentError: 'No Chatwoot agent uses x' }).chatwoot_status, 'unassigned');
   assert.equal(chatwootLeadColumns({ configured: false, sent: false }).chatwoot_status, 'not_configured');
   assert.equal(chatwootLeadColumns(null, { enabled: false }).chatwoot_status, 'off');
-});
-
-test('failed and unassigned chats are flagged; the rest are not', () => {
-  assert.equal(chatwootStatusView({ chatwoot_status: 'failed', chatwoot_error: 'x' }).text, 'Chat NOT created');
-  assert.equal(chatwootNeedsAttention({ chatwoot_status: 'failed' }), true);
-  assert.equal(chatwootNeedsAttention({ chatwoot_status: 'unassigned' }), true);
-  assert.equal(chatwootNeedsAttention({ chatwoot_status: 'not_configured' }), true);
-  assert.equal(chatwootNeedsAttention({ chatwoot_status: 'sent' }), false);
-  assert.equal(chatwootNeedsAttention({ chatwoot_status: 'off' }), false);
-  // Leads from before tracking are not a false alarm.
-  assert.equal(chatwootNeedsAttention({}), false);
 });
 
 test('the lead route saves the Chatwoot result on the lead', () => {

@@ -19,7 +19,6 @@ import {
 } from '@/lib/leadNotificationStatus.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
 import { isAdLandingLead } from '@/lib/adLandingLeads.mjs';
-import ChatwootLeadsPanel from '@/components/admin/ChatwootLeadsPanel';
 
 // isAdLandingLead covers /glp-1 (glp1_lp) too; matching on "adwords" alone
 // left every /glp-1 lead out of the Google Ads filter and its alert status.
@@ -912,12 +911,6 @@ export default function LeadsManager({
         </div>
       )}
 
-      <ChatwootLeadsPanel
-        leads={enrichedLeads}
-        getLeadOwner={getLeadOwner}
-        onOpenLead={setSelectedLeadDetails}
-      />
-
       <div style={{ marginBottom: '20px' }}>
         {generatingLeadsAi ? (
           <div style={{ background: 'rgba(14, 22, 38, 0.9)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '12px', padding: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1461,11 +1454,8 @@ export default function LeadsManager({
                     </td>
                     <td data-label="Agent" className="lead-agent-table-cell" style={{ padding: '10px 12px' }}>
                       {renderLeadAgentControl(lead)}
-                      {lead.response_due_at && !lead.last_contacted_at && (() => {
-                        const due = new Date(lead.response_due_at);
-                        const overdue = due.getTime() < Date.now();
-                        return <span title={`Response due ${due.toLocaleString()}`} style={{ display: 'inline-block', marginTop: 6, fontSize: '.67rem', fontWeight: 800, color: overdue ? '#f87171' : '#fbbf24' }}>{overdue ? '⚠ Response overdue' : `Due ${due.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>;
-                      })()}
+                      {/* No response deadline here: once a lead is in Chatwoot the CRM
+                          cannot see whether the agent replied, so "overdue" was a guess. */}
                     </td>
                     <td data-label="Staff Alerts" style={{ padding: '10px 12px' }}>
                       {renderLeadNotificationStatus(lead)}
