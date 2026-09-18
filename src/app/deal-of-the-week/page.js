@@ -30,6 +30,28 @@ const priceNumber = (value) => {
 // so names are compared with every kind of space collapsed.
 const nameKey = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+// Time left until the deal ends, ticking every second. Version B only.
+function useTimeLeft(endsAt) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!endsAt) return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [endsAt]);
+  const end = endsAt ? Date.parse(endsAt) : NaN;
+  if (!Number.isFinite(end)) return null;
+  const total = Math.max(0, Math.floor((end - now) / 1000));
+  return {
+    done: total === 0,
+    days: Math.floor(total / 86400),
+    hours: Math.floor((total % 86400) / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+  };
+}
+
+const pad2 = (value) => String(value).padStart(2, '0');
+
 const isSoldOut = (product) => String(product?.status || '').toLowerCase().includes('out of stock')
   || product?.inventory_count === 0;
 
@@ -39,9 +61,15 @@ export default function DealOfTheWeekPage() {
   const { variant, track } = useDealPageExperiment();
   const [deal, setDeal] = useState(undefined);
   const [products, setProducts] = useState([]);
+  // Version A's headline is built from the product prices, so the page waits
+  // for them rather than showing one headline and swapping it a moment later.
+  const [productsReady, setProductsReady] = useState(false);
   const [rate, setRate] = useState(0);
+  // Spanish prices are in colones, so the page also waits for the rate.
+  const [rateReady, setRateReady] = useState(false);
   const viewRecorded = useRef(false);
   const en = lang === 'en';
+  const timeLeft = useTimeLeft(variant === 'b' ? deal?.ends_at : null);
 
   useEffect(() => {
     fetch('/api/deals/current', { cache: 'no-store' })
@@ -51,19 +79,24 @@ export default function DealOfTheWeekPage() {
     fetch('/api/exchange-rate', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => { if (Number(data?.rate) > 0) setRate(Number(data.rate)); })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setRateReady(true));
   }, []);
 
   useEffect(() => {
     const names = deal?.product_names || [];
-    if (!names.length || !isSupabaseConfigured || !supabase) return;
+    if (!names.length || !isSupabaseConfigured || !supabase) {
+      if (deal !== undefined) setProductsReady(true);
+      return;
+    }
     supabase
       .from('products')
       .select('product, price_usd, original_price_usd, image_url, status, inventory_count')
       .then(({ data }) => {
         const byName = new Map((data || []).map((row) => [nameKey(row.product), row]));
         setProducts(names.map((name) => byName.get(nameKey(name)) || { product: name }));
-      });
+        setProductsReady(true);
+      }, () => setProductsReady(true));
   }, [deal]);
 
   useEffect(() => {
@@ -72,7 +105,7 @@ export default function DealOfTheWeekPage() {
     track('view', { dealId: deal.id, lang });
   }, [variant, deal, track, lang]);
 
-  const ready = Boolean(variant) && deal !== undefined;
+  const ready = Boolean(variant) && deal !== undefined && (!deal || productsReady) && (en || rateReady);
   const pct = deal ? Math.round(Number(deal.discount_pct || 0) * 100) : 0;
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
   const minUnits = dealMinUnits(deal);
@@ -96,6 +129,17 @@ export default function DealOfTheWeekPage() {
     return { now: shelf, was: was > shelf ? was : null };
   };
 
+  // The one wording difference on every product card: A shows the saving in
+  // money, B as a percentage. Same discount, two ways of saying it.
+  const savingLabel = (price) => {
+    if (!price?.was || !(price.was > price.now)) return '';
+    if (variant === 'b') {
+      const off = Math.round((1 - price.now / price.was) * 100);
+      return en ? `${off}% off` : `${off}% de descuento`;
+    }
+    return en ? `Save ${money(price.was - price.now)}` : `Ahorras ${money(price.was - price.now)}`;
+  };
+
   const catalogHref = (product = '') => `/catalog?lang=${en ? 'en' : 'es'}&gate=skip${product ? `&product=${encodeURIComponent(product)}` : ''}`;
   const onShop = (target) => track('cta_click', { dealId: deal?.id, lang, target });
 
@@ -115,8 +159,18 @@ export default function DealOfTheWeekPage() {
     rules.push(en ? 'Stock is limited. Quantities may be limited per customer.' : 'El inventario es limitado. Las cantidades pueden limitarse por cliente.');
   }
 
+  // Version A talks in money throughout: the biggest per-vial saving on the
+  // page. Falls back to the percentage only if no product has a price.
+  const maxSaving = products.reduce((best, product) => {
+    const price = priceFor(product);
+    return price?.was ? Math.max(best, price.was - price.now) : best;
+  }, 0);
   const headline = !deal ? '' : variant === 'b'
     ? (bulk ? (en ? 'Build your wholesale order' : 'Arma tu pedido mayorista') : (en ? 'This week\'s deal picks' : 'Las ofertas de esta semana'))
+    : maxSaving > 0
+      ? (bulk
+        ? (en ? `Save up to ${money(maxSaving)} per vial when you buy ${minUnits}+` : `Ahorra hasta ${money(maxSaving)} por vial al comprar ${minUnits}+`)
+        : (en ? `Save up to ${money(maxSaving)} on this week's picks` : `Ahorra hasta ${money(maxSaving)} en las ofertas de esta semana`))
     : (bulk
       ? (en ? `${pct}% off ${minUnits}+ vials` : `${pct}% de descuento en ${minUnits}+ viales`)
       : (en ? `${pct}% off this week's picks` : `${pct}% de descuento en las selecciones de esta semana`));
@@ -146,6 +200,7 @@ export default function DealOfTheWeekPage() {
                     {price.was && <s aria-label={en ? `was ${money(price.was)}` : `antes ${money(price.was)}`}>{money(price.was)}</s>}
                   </p>
                 )}
+                {savingLabel(price) && <span className={styles.saving}>{savingLabel(price)}</span>}
                 {bulk && price && <span className={styles.priceNote}>{en ? `each, at ${minUnits}+ vials` : `c/u, con ${minUnits}+ viales`}</span>}
                 {soldOut
                   ? <span className={styles.soldOut}>{en ? 'Sold out' : 'Agotado'}</span>
@@ -179,7 +234,7 @@ export default function DealOfTheWeekPage() {
   return (
     <div className="clone-home">
       <StorefrontHeader lang={lang} onLanguage={setLang} settings={landingSettings} />
-      <main className={`${styles.main} ${variant === 'b' ? styles.variantB : styles.variantA}`}>
+      <main className={styles.main} data-variant={variant || undefined}>
         {!ready && (
           <section className={styles.hero}><p className={styles.loading}>{en ? 'Loading this week\'s deal…' : 'Cargando la oferta de la semana…'}</p></section>
         )}
@@ -204,7 +259,9 @@ export default function DealOfTheWeekPage() {
                   : (en ? 'The prices below are already marked down. No code needed.' : 'Los precios de abajo ya tienen el descuento. Sin código.')}
               </p>
               <div className={styles.facts}>
-                <span><strong>{pct}%</strong>{en ? 'off' : 'de descuento'}</span>
+                {maxSaving > 0
+                  ? <span><strong>{money(maxSaving)}</strong>{en ? 'max. saved per vial' : 'máx. de ahorro por vial'}</span>
+                  : <span><strong>{pct}%</strong>{en ? 'off' : 'de descuento'}</span>}
                 {bulk && <span><strong>{minUnits}+</strong>{en ? 'vials, mix & match' : 'viales combinables'}</span>}
                 <span><strong>{productCount}</strong>{en ? 'products' : 'productos'}</span>
                 {endsLabel && <span><strong><CalendarClock size={26} aria-hidden="true" /></strong>{en ? `Ends ${endsLabel}` : `Termina el ${endsLabel}`}</span>}
@@ -224,9 +281,24 @@ export default function DealOfTheWeekPage() {
               <h1>{headline}</h1>
               <p className={styles.summaryLine}>
                 <span><Tag aria-hidden="true" />{bulk ? (en ? `${pct}% off ${minUnits}+ vials` : `${pct}% desc. en ${minUnits}+ viales`) : (en ? `${pct}% off` : `${pct}% de descuento`)}</span>
-                {endsLabel && <span><CalendarClock aria-hidden="true" />{en ? `Ends ${endsLabel}` : `Termina el ${endsLabel}`}</span>}
                 <span><PackageCheck aria-hidden="true" />{en ? 'Limited stock' : 'Inventario limitado'}</span>
               </p>
+              {timeLeft && !timeLeft.done && (
+                <div className={styles.countdown} role="timer" aria-label={en ? 'Time left in this deal' : 'Tiempo restante de la oferta'}>
+                  <span className={styles.countdownLabel}><CalendarClock aria-hidden="true" />{en ? 'Deal ends in' : 'La oferta termina en'}</span>
+                  <span className={styles.countdownDigits}>
+                    {[
+                      [timeLeft.days, en ? 'days' : 'días'],
+                      [pad2(timeLeft.hours), en ? 'hrs' : 'hrs'],
+                      [pad2(timeLeft.minutes), en ? 'min' : 'min'],
+                      [pad2(timeLeft.seconds), en ? 'sec' : 'seg'],
+                    ].map(([value, unit]) => (
+                      <span key={unit} className={styles.countdownUnit}><strong>{value}</strong>{unit}</span>
+                    ))}
+                  </span>
+                </div>
+              )}
+              {timeLeft?.done && <p className={styles.countdownLabel}>{en ? 'This deal is ending now.' : 'Esta oferta está terminando.'}</p>}
               <Link className={styles.cta} href={catalogHref()} onClick={() => onShop('hero')}>{en ? 'Start my order' : 'Empezar mi pedido'}</Link>
             </section>
             {productGrid}

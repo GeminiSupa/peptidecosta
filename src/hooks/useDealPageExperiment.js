@@ -6,6 +6,7 @@ import {
   DEAL_PAGE_SEEN_KEY,
   DEAL_PAGE_VARIANT_KEY,
   experimentOrderTag,
+  normalizeVariant,
   pickVariant,
 } from '@/lib/dealPageExperiment.mjs';
 
@@ -61,19 +62,25 @@ export function readDealPageOrderTag() {
 
 export function useDealPageExperiment() {
   const [variant, setVariant] = useState('');
+  // A ?variant= link is someone checking a version by hand. It shows that
+  // version but is not counted, and does not move the visitor's real version,
+  // so the team previewing both pages cannot skew the result.
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const requested = normalizeVariant(params.get('variant'));
     const chosen = pickVariant({
-      requested: params.get('variant'),
+      requested,
       stored: localStorage.getItem(DEAL_PAGE_VARIANT_KEY),
     });
-    localStorage.setItem(DEAL_PAGE_VARIANT_KEY, chosen);
+    if (!requested) localStorage.setItem(DEAL_PAGE_VARIANT_KEY, chosen);
+    setPreview(Boolean(requested));
     setVariant(chosen);
   }, []);
 
   const track = useCallback((event, extra = {}) => {
-    if (!variant) return;
+    if (!variant || preview) return;
     localStorage.setItem(DEAL_PAGE_SEEN_KEY, String(Date.now()));
     fetch('/api/deal-page/ab-event', {
       method: 'POST',
@@ -81,7 +88,7 @@ export function useDealPageExperiment() {
       keepalive: true,
       body: JSON.stringify({ variant, event, visitorId: readVisitorId(), sessionId: readSessionId(), ...extra }),
     }).catch(() => {});
-  }, [variant]);
+  }, [variant, preview]);
 
-  return { variant, track };
+  return { variant, track, preview };
 }

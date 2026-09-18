@@ -1,12 +1,15 @@
 /**
  * The Deal of the Week page A/B test.
  *
- * Two versions of /deal-of-the-week compete, differing in colour, layout and
- * wording together:
- *   A — orange buttons, the offer first (big discount headline and key facts)
- *   B — green buttons, the products first ("build your order" and the grid)
+ * Two versions of /deal-of-the-week compete. Both use the same colours
+ * (green to buy, orange for the offer); they differ in three things at once:
+ *   A — the offer first, savings in money ("Save $55"), no countdown
+ *   B — the products first, savings in percent ("42% off"), a live countdown
  * Because more than one thing changes, a result says which PAGE sells more,
- * not which single change did it.
+ * not which single change did it (Omer's choice, 2026-09-18).
+ *
+ * v1 (2026-09-18, orange vs green) was replaced the same day; its events stay
+ * under 'deal_of_week_page' and are not counted in this test.
  *
  * Each visitor is put in one version and kept there. Page views and button
  * clicks are recorded from the page; an order is credited to the version only
@@ -17,18 +20,19 @@
 
 import { COMMISSION_ELIGIBLE_ORDER_STATUSES } from './agentAttribution.mjs';
 
-export const DEAL_PAGE_EXPERIMENT = 'deal_of_week_page';
+export const DEAL_PAGE_EXPERIMENT = 'deal_of_week_page_v2';
 export const DEAL_PAGE_VARIANTS = Object.freeze(['a', 'b']);
 export const DEAL_PAGE_VARIANT_KEY = 'dow_page_variant';
-export const DEAL_PAGE_SEEN_KEY = 'dow_page_seen_at';
+// v2: a visit to the v1 page must not credit an order to this test.
+export const DEAL_PAGE_SEEN_KEY = 'dow_page_seen_at_v2';
 export const DEAL_PAGE_ATTRIBUTION_MS = 14 * 24 * 60 * 60 * 1000;
 // Below this, one lucky order swings the result; the dashboard says "too early".
 export const MIN_VISITORS_TO_CALL = 100;
 export const WINNER_CONFIDENCE = 0.95;
 
 export const DEAL_PAGE_VARIANT_LABELS = Object.freeze({
-  a: 'A — orange, offer first',
-  b: 'B — green, products first',
+  a: 'A — offer first, $ saved, no timer',
+  b: 'B — products first, % off, countdown',
 });
 
 const PAID_STATUSES = new Set(COMMISSION_ELIGIBLE_ORDER_STATUSES.map((status) => status.toLowerCase()));

@@ -121,3 +121,20 @@ test('the rate comparison is symmetric and handles empty input', () => {
   assert.ok(Math.abs(forward.confidence - backward.confidence) < 1e-9);
   assert.ok(forward.z > 0 && backward.z < 0);
 });
+
+test('v2: both versions share colours; they differ by order, savings wording and countdown', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const [page, css, hook] = await Promise.all([
+    readFile(new URL('../src/app/deal-of-the-week/page.js', import.meta.url), 'utf8'),
+    readFile(new URL('../src/app/deal-of-the-week/deal-of-the-week.module.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/hooks/useDealPageExperiment.js', import.meta.url), 'utf8'),
+  ]);
+  assert.equal(DEAL_PAGE_EXPERIMENT, 'deal_of_week_page_v2');
+  assert.doesNotMatch(css, /\.variantA|\.variantB/);
+  assert.doesNotMatch(page, /styles\.variant[AB]/);
+  assert.match(page, /useTimeLeft\(variant === 'b'/);
+  assert.match(page, /variant === 'b'\)\s*\{\s*const off/);
+  assert.match(css, /\.cardImage \{[^}]*padding: 18px/);
+  // Preview links (?variant=) must not be counted.
+  assert.match(hook, /if \(!variant \|\| preview\) return;/);
+});
