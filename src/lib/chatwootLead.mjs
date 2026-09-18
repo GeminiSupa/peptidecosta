@@ -91,8 +91,11 @@ export function buildChatwootLeadMessage({
 }) {
   // No owner line: the chat itself is assigned to the agent, and a name typed
   // into the message goes stale the moment someone reassigns it.
+  const title = source === 'tiktok_form'
+    ? 'New TikTok form lead'
+    : (source === 'glp1_lp' ? 'New Google Ads lead — /glp-1' : (source === 'adwords_lp' ? 'New Google Ads lead — /lp' : 'New lead'));
   return [
-    source === 'glp1_lp' ? 'New Google Ads lead — /glp-1' : 'New Google Ads lead — /lp',
+    title,
     `Name: ${clean(name) || 'Not provided'}`,
     `Email: ${clean(email) || 'Not provided'}`,
     `Phone: ${clean(phone) || 'Not provided'}`,

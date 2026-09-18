@@ -17,6 +17,8 @@ import {
 } from '@/lib/tiktokLeadPosting.mjs';
 import { resolveNextTikTokAgent } from '@/lib/tiktokRoundRobin.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
+import { chatwootLeadColumns, loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -230,6 +232,48 @@ export async function POST(request) {
       await recordAssignment(supabase, { leadId: saved.id, newAgent: owner });
     }
 
+    let chatwootResult = null;
+    const chatwootEnabled = await loadChatwootLeadEnabled(supabase);
+    if (chatwootEnabled) {
+      let ownerEmail = rotatedAgent?.email || '';
+      if (owner && !ownerEmail) {
+        try {
+          const { data: profile } = await supabase.from('admin_profiles').select('email').ilike('name', owner).maybeSingle();
+          ownerEmail = profile?.email || '';
+        } catch (e) {
+          // ignore profile lookup failure
+        }
+      }
+      chatwootResult = await sendAdLeadToChatwoot({
+        leadId: saved.id,
+        name: displayName,
+        email: lead.email,
+        phone,
+        source: TIKTOK_LEAD_SOURCE,
+        qualificationLines: lead.answers.map((ans) => `${ans.question}: ${ans.answer}`),
+        campaign: lead.campaign,
+        assigneeEmail: ownerEmail,
+        dueAt,
+      });
+      if (chatwootResult.assignmentError) {
+        console.warn('[leads/tiktok] Chatwoot chat left unassigned:', chatwootResult.assignmentError);
+      }
+      if (!chatwootResult.sent) {
+        console.error('[leads/tiktok] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
+      }
+      try {
+        await writeDroppingMissingColumns(
+          chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
+          ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
+          (row) => (Object.keys(row).length
+            ? supabase.from('catalog_leads').update(row).eq('id', saved.id)
+            : Promise.resolve({ error: null })),
+        );
+      } catch (statusError) {
+        console.warn('[leads/tiktok] Chatwoot status not saved:', statusError.message);
+      }
+    }
+
     let notification = { tracked: true, status: 'pending' };
     try {
       const queued = await enqueueAndProcessLeadNotification(supabase, {
@@ -300,6 +344,11 @@ export async function POST(request) {
       leadId: saved.id,
       assignedAgent: owner,
       source: TIKTOK_LEAD_SOURCE,
+      chatwoot: {
+        enabled: chatwootEnabled,
+        configured: chatwootEnabled ? chatwootResult?.configured === true : null,
+        sent: chatwootEnabled ? chatwootResult?.sent === true : false,
+      },
       notification,
     }, existing ? 200 : 201);
   } catch (error) {
