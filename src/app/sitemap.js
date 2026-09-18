@@ -28,6 +28,7 @@ export default async function sitemap() {
     '/info-center',
     '/affiliate-program',
     '/bulk-discounts',
+    '/deal-of-the-week',
     '/contact',
     '/faq',
     '/blog',

@@ -3,6 +3,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { analyticsWindow, previousRangeWindow } from '@/lib/analyticsDashboard.mjs';
 import { emailKey, phoneKey } from '@/lib/agentAttribution.mjs';
+import { DEAL_PAGE_EXPERIMENT, summarizeDealPageExperiment } from '@/lib/dealPageExperiment.mjs';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,46 @@ const SOURCES = [
     select: 'id, event_type, hostname, path, page_title, session_id, visitor_id, utm_source, utm_medium, utm_campaign, gclid, fbclid, known_customer, referrer, created_at',
   },
 ];
+
+/**
+ * The Deal of the Week page A/B test, already summarised. Order events carry
+ * only an order id, so the orders are read here to learn which were paid.
+ */
+async function fetchDealPageExperiment(supabase, window) {
+  const empty = summarizeDealPageExperiment([], []);
+  let query = supabase
+    .from('ab_test_events')
+    .select('variant, event, visitor_id, order_id, order_number, created_at')
+    .eq('experiment', DEAL_PAGE_EXPERIMENT)
+    .order('created_at', { ascending: false })
+    .range(0, COMPLETE_LIMIT - 1);
+  if (window?.start) query = query.gte('created_at', window.start);
+  if (window?.end) query = query.lt('created_at', window.end);
+
+  const { data: events, error } = await query;
+  if (error) {
+    const missing = error.code === '42P01' || error.code === 'PGRST205' || String(error.message || '').includes('ab_test_events');
+    return { migrationMissing: missing, error: missing ? null : error.message, summary: empty, sampled: false };
+  }
+
+  const orderIds = [...new Set((events || []).filter((row) => row.event === 'order' && row.order_id).map((row) => row.order_id))];
+  const orders = [];
+  for (let index = 0; index < orderIds.length; index += 200) {
+    const ids = orderIds.slice(index, index + 200);
+    let result = await supabase.from('orders').select('id, status, total_usd, refunded_amount_usd').in('id', ids);
+    // Refund columns arrive by their own migration; without them, count gross.
+    if (result.error) result = await supabase.from('orders').select('id, status, total_usd').in('id', ids);
+    if (result.error) return { migrationMissing: false, error: result.error.message, summary: empty, sampled: false };
+    orders.push(...(result.data || []));
+  }
+
+  return {
+    migrationMissing: false,
+    error: null,
+    summary: summarizeDealPageExperiment(events || [], orders),
+    sampled: (events || []).length >= COMPLETE_LIMIT,
+  };
+}
 
 async function fetchSource(supabase, source, window) {
   const rows = [];
@@ -358,12 +399,13 @@ export async function GET(request) {
   const supabase = getSupabaseAdmin();
 
   try {
-    const [listHealth, overviewResult, previousOverview, previousOrders, teamDirectory, ...results] = await Promise.all([
+    const [listHealth, overviewResult, previousOverview, previousOrders, teamDirectory, dealPageExperiment, ...results] = await Promise.all([
       fetchListHealth(supabase, window),
       fetchOverview(supabase, window),
       previousWindow ? fetchOverview(supabase, previousWindow) : Promise.resolve({ overview: null }),
       fetchPreviousOrders(supabase, previousWindow),
       fetchTeamDirectory(supabase),
+      fetchDealPageExperiment(supabase, window),
       ...SOURCES.map((source) => fetchSource(supabase, source, window)),
       fetchCampaigns(supabase),
     ]);
@@ -404,6 +446,7 @@ export async function GET(request) {
       previous: previousWindow
         ? { window: previousWindow, overview: previousOverview.overview, orders: previousOrders.rows }
         : null,
+      dealPageExperiment,
       errors,
     });
   } catch (error) {

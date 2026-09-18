@@ -24,6 +24,7 @@ import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/li
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { DEAL_PAGE_EXPERIMENT, normalizeVariant } from '@/lib/dealPageExperiment.mjs';
 import {
   consumeDurableRateLimit,
   getRequestIp,
@@ -732,6 +733,30 @@ export async function POST(request) {
       await recordNewOrderNotification(supabase, order, data.order_number);
     } catch (notifyErr) {
       console.error('[orders/create] New order notification insert failed:', notifyErr.message);
+    }
+
+    // Deal of the Week page A/B test: credit the order to the page version the
+    // shopper saw in the last 14 days. Best-effort — a lost tag never costs a sale.
+    const experimentTag = body?.dealPageExperiment;
+    const experimentVariant = normalizeVariant(experimentTag?.variant);
+    if (experimentTag?.experiment === DEAL_PAGE_EXPERIMENT && experimentVariant) {
+      try {
+        const { error: experimentError } = await supabase.from('ab_test_events').insert({
+          experiment: DEAL_PAGE_EXPERIMENT,
+          variant: experimentVariant,
+          event: 'order',
+          visitor_id: String(experimentTag.visitorId || '').slice(0, 100) || null,
+          session_id: body.sessionId ? String(body.sessionId).slice(0, 100) : null,
+          order_id: data.id,
+          order_number: data.order_number,
+          value_usd: Number(orderRow.total_usd) || null,
+        });
+        if (experimentError && experimentError.code !== '23505') {
+          console.warn('[orders/create] Deal page A/B order not recorded:', experimentError.message);
+        }
+      } catch (experimentErr) {
+        console.warn('[orders/create] Deal page A/B order not recorded:', experimentErr.message);
+      }
     }
 
     const updatePromises = [];

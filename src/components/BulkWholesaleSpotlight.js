@@ -9,7 +9,7 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
   if (!campaign.active) return null;
 
   const en = lang === 'en';
-  const href = `/bulk-discounts?lang=${en ? 'en' : 'es'}`;
+  const href = `/deal-of-the-week?lang=${en ? 'en' : 'es'}`;
 
   // One slim line for the catalog, where the full card pushed the products
   // below the fold.
@@ -33,7 +33,7 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
             : `Combina entre ${campaign.products.length} productos seleccionados. Un solo precio mayorista, sin acumular descuentos.`}
         </p>
       </div>
-      <Link className={styles.action} href={`/bulk-discounts?lang=${en ? 'en' : 'es'}`}>
+      <Link className={styles.action} href={`/deal-of-the-week?lang=${en ? 'en' : 'es'}`}>
         {en ? 'See this week\'s deal' : 'Ver la oferta de la semana'}
       </Link>
     </section>

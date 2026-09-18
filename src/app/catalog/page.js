@@ -75,6 +75,7 @@ import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
+import { readDealPageOrderTag } from '@/hooks/useDealPageExperiment';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
@@ -2602,7 +2603,13 @@ export default function CatalogPage() {
           'Content-Type': 'application/json',
           ...(customerAccessToken ? { Authorization: `Bearer ${customerAccessToken}` } : {}),
         },
-        body: JSON.stringify({ order: orderPayload, sessionId: sessionId || null }),
+        body: JSON.stringify({
+          order: orderPayload,
+          sessionId: sessionId || null,
+          // Credits the order to the Deal of the Week page version this shopper
+          // saw, if any. Null for everyone who has not seen it recently.
+          dealPageExperiment: readDealPageOrderTag(),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {

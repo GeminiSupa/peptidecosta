@@ -65,6 +65,11 @@ export default function BulkDiscountsPage() {
             </div>
           </>}
           <Link className={styles.cta} href={catalogHref}>{campaign.active ? (en ? `Build my ${campaign.minUnits}-vial order` : `Armar mi pedido de ${campaign.minUnits} viales`) : localized(pageSettings, 'ctaButton', lang)}</Link>
+          <p style={{ margin: '16px 0 0' }}>
+            <Link href={`/deal-of-the-week?lang=${en ? 'en' : 'es'}`} style={{ color: '#b64b08', fontWeight: 800 }}>
+              {en ? 'See this week\'s Deal of the Week' : 'Ver la Oferta de la Semana'}
+            </Link>
+          </p>
         </section>
 
         {campaign.active && <section className={styles.details}>

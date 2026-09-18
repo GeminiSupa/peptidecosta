@@ -1,0 +1,73 @@
+/* The two page versions share one layout vocabulary and swap the accent. */
+.variantA { --accent: #c2410c; --accent-hover: #9a3412; --accent-soft: #fff7ed; --accent-line: #fed7aa; --accent-ink: #9a3412; }
+.variantB { --accent: #15803d; --accent-hover: #166534; --accent-soft: #f0fdf4; --accent-line: #bbf7d0; --accent-ink: #166534; }
+
+.main { padding: 40px 20px 84px; background: linear-gradient(180deg, var(--accent-soft) 0, #fff 480px); color: #1f2937; }
+.shell { max-width: 1100px; margin: 0 auto; }
+
+.hero { max-width: 980px; margin: 0 auto; text-align: center; padding: 52px 28px; border: 1px solid var(--accent-line); border-radius: 28px; background: #fff; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.07); }
+.heroCompact { padding: 36px 28px; }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; text-transform: uppercase; letter-spacing: 0.14em; font-size: 0.78rem; font-weight: 800; color: var(--accent-ink); margin: 0 0 14px; }
+.hero h1 { font-size: clamp(2.1rem, 6vw, 4.2rem); line-height: 1.04; max-width: 860px; margin: 0 auto 18px; color: #111827; text-wrap: balance; }
+.heroCompact h1 { font-size: clamp(1.9rem, 5vw, 3.2rem); }
+.lead { max-width: 680px; margin: 0 auto 22px; font-size: 1.15rem; line-height: 1.6; color: #4b5563; }
+.summaryLine { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 22px; color: #374151; font-weight: 700; }
+.summaryLine span { display: inline-flex; align-items: center; gap: 6px; }
+.summaryLine svg { width: 16px; height: 16px; color: var(--accent); }
+
+.facts { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin: 26px 0; }
+.facts span { min-width: 150px; flex: 0 1 auto; padding: 16px; border-radius: 16px; background: var(--accent-soft); border: 1px solid var(--accent-line); color: #4b5563; }
+.facts strong { display: block; font-size: 1.8rem; line-height: 1.1; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.badge { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 20px; padding: 7px 14px; border-radius: 999px; background: #fef3c7; color: #92400e; font-weight: 800; font-size: 0.88rem; }
+.badge svg { width: 15px; height: 15px; }
+
+.cta { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 14px 28px; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 800; font-size: 1.05rem; text-decoration: none; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18); transition: background-color 150ms ease; }
+.cta:hover { background: var(--accent-hover); }
+.cta:focus-visible, .productLink:focus-visible, .secondaryLink:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
+
+.section { max-width: 1100px; margin: 40px auto 0; }
+.sectionHead { margin: 0 0 18px; }
+.sectionHead h2 { margin: 0 0 6px; font-size: 1.6rem; color: #111827; }
+.sectionHead p { margin: 0; color: #6b7280; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.card { display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; overflow: hidden; }
+.cardImage { aspect-ratio: 1 / 1; max-width: 100%; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; }
+.cardImage img { width: 100%; height: 100%; object-fit: contain; }
+.cardImage span { font-size: 2.4rem; color: var(--accent); }
+.cardBody { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; flex: 1; }
+.cardBody h3 { margin: 0; font-size: 1rem; color: #111827; }
+.price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-variant-numeric: tabular-nums; }
+.price strong { font-size: 1.3rem; color: var(--accent-ink); }
+.price s { color: #9ca3af; }
+.priceNote { font-size: 0.8rem; color: #6b7280; }
+.soldOut { font-size: 0.82rem; font-weight: 800; color: #b91c1c; }
+.productLink { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 12px; background: var(--accent); color: #fff; font-weight: 800; text-decoration: none; }
+.productLink:hover { background: var(--accent-hover); }
+
+.rules { list-style: none; padding: 26px; margin: 0; display: grid; gap: 14px; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; color: #374151; }
+.rules li { display: flex; gap: 10px; line-height: 1.5; }
+.rules svg { width: 20px; min-width: 20px; height: 20px; color: var(--accent); margin-top: 2px; }
+
+.checkBack { max-width: 1100px; margin: 40px auto 0; padding: 28px; border-radius: 22px; background: #111827; color: #f9fafb; display: grid; gap: 12px; }
+.checkBack h2 { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 1.45rem; }
+.checkBack h2 svg { color: #fbbf24; }
+.checkBack p { margin: 0; color: #d1d5db; line-height: 1.6; max-width: 720px; }
+.checkBackLinks { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+.secondaryLink { color: #fde68a; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+
+.disclaimer { max-width: 1100px; margin: 24px auto 0; font-size: 0.85rem; color: #6b7280; text-align: center; }
+.loading { color: #6b7280; margin: 0; }
+
+@media (max-width: 760px) {
+  .main { padding: 22px 14px 72px; }
+  .hero { padding: 34px 18px; border-radius: 22px; }
+  .facts span { min-width: 130px; flex: 1 1 40%; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .checkBack { padding: 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cta, .productLink { transition: none; }
+}

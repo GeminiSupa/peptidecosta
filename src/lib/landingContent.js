@@ -149,6 +149,7 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   footerQuickLinks: [
     { labelEn: 'Home', labelEs: 'Inicio', href: '/' },
     { labelEn: 'About us', labelEs: 'Nosotros', href: '/about' },
+    { labelEn: 'Deal of the Week', labelEs: 'Oferta de la Semana', href: '/deal-of-the-week' },
     { labelEn: 'Bulk Discounts', labelEs: 'Descuentos por volumen', href: '/bulk-discounts' },
     { labelEn: 'FAQ', labelEs: 'Preguntas frecuentes', href: '/faq' },
     { labelEn: 'Blog', labelEs: 'Blog', href: '/blog' },
