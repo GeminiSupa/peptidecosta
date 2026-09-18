@@ -1018,6 +1018,7 @@ export default function CatalogPage() {
     if (deepLink.search) setSearchQuery(deepLink.search);
     if (deepLink.category) setPendingCategory(deepLink.category);
     if (deepLink.dealOnly) setDealOnly(true);
+    if (deepLink.openCart) setIsCartOpen(true);
 
     const hasUserSelectedLang = localStorage.getItem(USER_SELECTED_LANG_KEY) === 'true';
     let initialLang = hasUserSelectedLang ? localStorage.getItem('lang') || 'es' : 'es';

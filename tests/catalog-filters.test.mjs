@@ -55,8 +55,8 @@ test('both params survive alongside the params the catalog already read', () => 
 });
 
 test('absent or blank params come back null rather than empty string', () => {
-  assert.deepEqual(readCatalogParams(''), { search: null, category: null, dealOnly: false });
-  assert.deepEqual(readCatalogParams('?search=&category=%20'), { search: null, category: null, dealOnly: false });
+  assert.deepEqual(readCatalogParams(''), { search: null, category: null, dealOnly: false, openCart: false });
+  assert.deepEqual(readCatalogParams('?search=&category=%20'), { search: null, category: null, dealOnly: false, openCart: false });
 });
 
 test('resolves a category to the exact spelling the product filter compares against', () => {
@@ -201,4 +201,10 @@ test('banding survives a price tie-break, matching the price-sort branch', () =>
   });
   // Low-to-high price would put Cheap first; the sale band wins.
   assert.deepEqual(sorted.map((p) => p.product), ['Pricy', 'Cheap']);
+});
+
+test('?cart=open asks the catalog to open the cart drawer (Deal of the Week checkout)', () => {
+  assert.equal(readCatalogParams('?deal=week&cart=open').openCart, true);
+  assert.equal(readCatalogParams('?deal=week&cart=OPEN').openCart, true);
+  assert.equal(readCatalogParams('?deal=week').openCart, false);
 });

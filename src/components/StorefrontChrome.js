@@ -132,17 +132,19 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
   const [query, setQuery] = useState('');
   const [cartCount, setCartCount] = useState(0);
 
-  // The cart only changes on the catalog page, so re-reading on mount, on focus
-  // and on cross-tab writes is enough to keep this honest. Reading in an effect
+  // Re-read on mount, on focus, on cross-tab writes, and on CART_CHANGED_EVENT —
+  // the Deal of the Week page adds to this same cart without leaving the page. Reading in an effect
   // rather than in initial state keeps the server and client markup identical.
   useEffect(() => {
     const sync = () => setCartCount(readCartCount());
     sync();
     window.addEventListener('storage', sync);
     window.addEventListener('focus', sync);
+    window.addEventListener('pcr-cart-changed', sync);
     return () => {
       window.removeEventListener('storage', sync);
       window.removeEventListener('focus', sync);
+      window.removeEventListener('pcr-cart-changed', sync);
     };
   }, []);
 
@@ -283,7 +285,7 @@ export function StorefrontHeader({ lang, onLanguage, settings, active = '' }) {
                 {lang === 'en' ? 'ES' : 'EN'}
               </button>
               <Link
-                href={`/catalog?lang=${lang}`}
+                href={`/catalog?lang=${lang}&cart=open`}
                 aria-label={lang === 'en' ? `Cart, ${cartCount} items` : `Carrito, ${cartCount} artículos`}
               >
                 <ShoppingBag size={18} /><span>{cartCount}</span>

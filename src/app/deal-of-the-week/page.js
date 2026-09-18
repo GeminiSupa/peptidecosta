@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
-import { CalendarClock, Check, PackageCheck, RefreshCw, ShieldCheck, Tag } from 'lucide-react';
+import { CalendarClock, Check, Minus, PackageCheck, Plus, RefreshCw, ShieldCheck, ShoppingCart, Tag, X } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { usePublicPageContent } from '@/hooks/usePublicPageContent';
 import { useDealPageExperiment } from '@/hooks/useDealPageExperiment';
+import { useSharedCart } from '@/hooks/useSharedCart';
+import { PRODUCT_SELECT } from '@/lib/catalogProducts';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
@@ -70,6 +72,9 @@ export default function DealOfTheWeekPage() {
   const viewRecorded = useRef(false);
   const en = lang === 'en';
   const timeLeft = useTimeLeft(variant === 'b' ? deal?.ends_at : null);
+  const { cart, qtyOf, setQty, removeItem } = useSharedCart();
+  const [cartOpen, setCartOpen] = useState(false);
+  const [stockNotice, setStockNotice] = useState('');
 
   useEffect(() => {
     fetch('/api/deals/current', { cache: 'no-store' })
@@ -91,7 +96,8 @@ export default function DealOfTheWeekPage() {
     }
     supabase
       .from('products')
-      .select('product, price_usd, original_price_usd, image_url, status, inventory_count')
+      // The full catalog row: "Add to my order" builds the cart item from it.
+      .select(PRODUCT_SELECT)
       .then(({ data }) => {
         const byName = new Map((data || []).map((row) => [nameKey(row.product), row]));
         setProducts(names.map((name) => byName.get(nameKey(name)) || { product: name }));
@@ -142,6 +148,43 @@ export default function DealOfTheWeekPage() {
 
   const catalogHref = (product = '') => `/catalog?lang=${en ? 'en' : 'es'}&gate=skip${product ? `&product=${encodeURIComponent(product)}` : ''}`;
   const onShop = (target) => track('cta_click', { dealId: deal?.id, lang, target });
+
+  // The cart is the catalog's own (see useSharedCart), so what is added here
+  // is in the cart at checkout. Only deal products count toward the minimum.
+  const dealKeys = new Set((deal?.product_names || []).map(nameKey));
+  const dealUnits = cart.reduce((sum, item) => sum + (dealKeys.has(nameKey(item.product)) ? Number(item.qty) || 0 : 0), 0);
+  const cartUnits = cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+  const unitsToGo = bulk ? Math.max(0, minUnits - dealUnits) : 0;
+  const overMax = bulk && maxUnits > 0 && dealUnits > maxUnits;
+  const progressPct = bulk && minUnits > 0 ? Math.min(100, Math.round((dealUnits / minUnits) * 100)) : 100;
+  const checkoutHref = `/catalog?lang=${en ? 'en' : 'es'}&gate=skip&deal=week&cart=open`;
+
+  const changeQty = (row, qty) => {
+    const ok = setQty(row, qty);
+    if (!ok) {
+      setStockNotice(en
+        ? `Only ${row.inventory_count} of ${row.product} in stock.`
+        : `Solo hay ${row.inventory_count} de ${row.product} en inventario.`);
+      return;
+    }
+    setStockNotice('');
+  };
+  const addFirst = (row) => {
+    changeQty(row, 1);
+    onShop(`add:${row.product}`);
+  };
+  const scrollToProducts = (target) => {
+    onShop(target);
+    document.getElementById('dow-products')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const progressText = !bulk
+    ? (en ? 'Deal prices apply at checkout.' : 'Los precios de oferta se aplican al pagar.')
+    : overMax
+      ? (en ? `The deal price is for up to ${maxUnits} vials. Remove ${dealUnits - maxUnits} to keep it.` : `El precio de oferta es para hasta ${maxUnits} viales. Quita ${dealUnits - maxUnits} para mantenerlo.`)
+      : unitsToGo > 0
+        ? (en ? `Add ${unitsToGo} more deal ${unitsToGo === 1 ? 'vial' : 'vials'} to unlock ${pct}% off` : `Agrega ${unitsToGo} ${unitsToGo === 1 ? 'vial' : 'viales'} más de la oferta para el ${pct}% de descuento`)
+        : (en ? `${pct}% off unlocked — applied at checkout` : `${pct}% de descuento activado — se aplica al pagar`);
 
   const rules = !deal ? [] : bulk
     ? [
@@ -204,11 +247,19 @@ export default function DealOfTheWeekPage() {
                 {bulk && price && <span className={styles.priceNote}>{en ? `each, at ${minUnits}+ vials` : `c/u, con ${minUnits}+ viales`}</span>}
                 {soldOut
                   ? <span className={styles.soldOut}>{en ? 'Sold out' : 'Agotado'}</span>
-                  : (
-                    <Link className={styles.productLink} href={catalogHref(product.product)} onClick={() => onShop(`product:${product.product}`)}>
-                      {en ? 'Add to my order' : 'Agregar a mi pedido'}
-                    </Link>
-                  )}
+                  : qtyOf(product.product) > 0
+                    ? (
+                      <div className={styles.stepper} role="group" aria-label={en ? `Quantity of ${product.product}` : `Cantidad de ${product.product}`}>
+                        <button type="button" onClick={() => changeQty(product, qtyOf(product.product) - 1)} aria-label={en ? 'One less' : 'Uno menos'}><Minus aria-hidden="true" /></button>
+                        <span aria-live="polite">{qtyOf(product.product)} {en ? 'in cart' : 'en carrito'}</span>
+                        <button type="button" onClick={() => changeQty(product, qtyOf(product.product) + 1)} aria-label={en ? 'One more' : 'Uno más'}><Plus aria-hidden="true" /></button>
+                      </div>
+                    )
+                    : (
+                      <button type="button" className={styles.productLink} onClick={() => addFirst(product)}>
+                        {en ? 'Add to my order' : 'Agregar a mi pedido'}
+                      </button>
+                    )}
               </div>
             </article>
           );
@@ -267,7 +318,7 @@ export default function DealOfTheWeekPage() {
                 {endsLabel && <span><strong><CalendarClock size={26} aria-hidden="true" /></strong>{en ? `Ends ${endsLabel}` : `Termina el ${endsLabel}`}</span>}
               </div>
               {limitedBadge}
-              <div><Link className={styles.cta} href={catalogHref()} onClick={() => onShop('hero')}>{en ? 'Shop the deal' : 'Comprar la oferta'}</Link></div>
+              <div><button type="button" className={styles.cta} onClick={() => scrollToProducts('hero')}>{en ? 'Shop the deal' : 'Comprar la oferta'}</button></div>
             </section>
             {rulesList}
             {productGrid}
@@ -299,7 +350,7 @@ export default function DealOfTheWeekPage() {
                 </div>
               )}
               {timeLeft?.done && <p className={styles.countdownLabel}>{en ? 'This deal is ending now.' : 'Esta oferta está terminando.'}</p>}
-              <Link className={styles.cta} href={catalogHref()} onClick={() => onShop('hero')}>{en ? 'Start my order' : 'Empezar mi pedido'}</Link>
+              <button type="button" className={styles.cta} onClick={() => scrollToProducts('hero')}>{en ? 'Start my order' : 'Empezar mi pedido'}</button>
             </section>
             {productGrid}
             {rulesList}
@@ -318,7 +369,69 @@ export default function DealOfTheWeekPage() {
         <p className={styles.disclaimer}><ShieldCheck size={14} aria-hidden="true" /> {en ? 'All products are for research use only. Not for human or animal consumption.' : 'Todos los productos son solo para uso en investigación. No aptos para consumo humano ni animal.'}</p>
       </main>
       <StorefrontFooter lang={lang} settings={landingSettings} />
-      <MobileActionBar lang={lang} whatsappHref={`https://wa.me/${links.whatsappNumber}`} />
+      {/* Once something is in the cart, the cart bar takes the bottom of the
+          screen instead of the site's Catalog / Contact bar: one bar, one next
+          step. Checkout opens the catalog's cart drawer, which is checkout. */}
+      {cartUnits > 0 ? (
+        <aside className={styles.cartBar} aria-label={en ? 'Your cart' : 'Tu carrito'}>
+          {cartOpen && (
+            <div className={styles.cartPanel} id="dow-cart-panel">
+              <div className={styles.cartPanelHead}>
+                <strong>{en ? 'Your cart' : 'Tu carrito'}</strong>
+                <button type="button" onClick={() => setCartOpen(false)} aria-label={en ? 'Close cart' : 'Cerrar carrito'}><X aria-hidden="true" /></button>
+              </div>
+              <ul>
+                {cart.map((item) => {
+                  const row = products.find((product) => nameKey(product.product) === nameKey(item.product));
+                  return (
+                    <li key={item.product}>
+                      <span className={styles.cartItemName}>
+                        {item.product}
+                        {!dealKeys.has(nameKey(item.product)) && <small>{en ? 'Not in this deal' : 'No incluido en la oferta'}</small>}
+                      </span>
+                      {row ? (
+                        <span className={styles.stepper}>
+                          <button type="button" onClick={() => changeQty(row, item.qty - 1)} aria-label={en ? 'One less' : 'Uno menos'}><Minus aria-hidden="true" /></button>
+                          <span>{item.qty}</span>
+                          <button type="button" onClick={() => changeQty(row, item.qty + 1)} aria-label={en ? 'One more' : 'Uno más'}><Plus aria-hidden="true" /></button>
+                        </span>
+                      ) : <span className={styles.cartQty}>× {item.qty}</span>}
+                      <button type="button" className={styles.cartRemove} onClick={() => removeItem(item.product)} aria-label={en ? `Remove ${item.product}` : `Quitar ${item.product}`}><X aria-hidden="true" /></button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className={styles.cartNote}>{en ? 'Your final price, with every discount, is shown at checkout.' : 'El precio final, con todos los descuentos, se muestra al pagar.'}</p>
+            </div>
+          )}
+          <div className={styles.cartBarMain}>
+            <button
+              type="button"
+              className={styles.cartToggle}
+              onClick={() => setCartOpen((open) => !open)}
+              aria-expanded={cartOpen}
+              aria-controls="dow-cart-panel"
+            >
+              <ShoppingCart aria-hidden="true" />
+              <span>
+                <strong>{en ? `${cartUnits} ${cartUnits === 1 ? 'vial' : 'vials'} in cart` : `${cartUnits} ${cartUnits === 1 ? 'vial' : 'viales'} en el carrito`}</strong>
+                <span className={overMax ? styles.progressWarn : unitsToGo > 0 ? styles.progressTodo : styles.progressDone}>{progressText}</span>
+              </span>
+            </button>
+            {bulk && (
+              <span className={styles.progressTrack} aria-hidden="true">
+                <span style={{ width: `${progressPct}%` }} />
+              </span>
+            )}
+            <Link className={styles.checkoutBtn} href={checkoutHref} onClick={() => onShop('checkout')}>
+              {en ? 'Checkout' : 'Pagar'}
+            </Link>
+          </div>
+          {stockNotice && <p className={styles.stockNotice} role="alert">{stockNotice}</p>}
+        </aside>
+      ) : (
+        <MobileActionBar lang={lang} whatsappHref={`https://wa.me/${links.whatsappNumber}`} />
+      )}
     </div>
   );
 }
