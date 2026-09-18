@@ -8,6 +8,13 @@
     padding-bottom: 70px;
 }
 
+/* Room for the phone action bar only where it exists (it is hidden from 769px). */
+@media (min-width: 769px) {
+    .clone-home {
+        padding-bottom: 0;
+    }
+}
+
 .clone-shell {
     width: min(1120px, calc(100% - 32px));
     margin: 0 auto;
@@ -869,8 +876,9 @@
 
 .clone-review-row {
     grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     gap: 12px;
     margin-top: 4px;
     padding-top: 18px;
@@ -879,13 +887,15 @@
 
 .clone-review-row > .clone-review-card {
     min-height: 54px;
+    min-width: 200px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    border: 1px solid #d7e0ee;
-    border-radius: 4px;
-    padding: 10px 12px;
+    gap: 12px;
+    border: 1px solid #e3e9f3;
+    border-radius: 999px;
+    padding: 8px 20px 8px 10px;
+    background: #f8fafd;
     color: #082d74;
     font-size: .76rem;
     font-weight: 900;
@@ -928,14 +938,33 @@
 }
 
 .clone-review-logo {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
     display: inline-grid;
     place-items: center;
     border-radius: 50%;
-    font-size: 1.15rem;
-    font-weight: 900;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(12, 34, 78, .12);
+}
+
+.clone-review-logo svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.clone-review-copy .clone-review-score {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: visible;
+}
+
+.clone-review-copy .clone-review-stars {
+    color: #f5a623;
+    font-size: .8rem;
+    letter-spacing: 1px;
     line-height: 1;
 }
 
@@ -962,6 +991,11 @@
     color: #fff;
     text-align: center;
     font-size: .76rem;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 6px 14px;
 }
 
 .clone-copyright .clone-legal-links {
@@ -969,7 +1003,6 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: 4px 14px;
-    margin-left: 14px;
 }
 
 .clone-copyright .clone-legal-links a {
@@ -984,7 +1017,7 @@
 }
 
 .clone-copyright .clone-admin-link {
-    margin-left: 10px;
+    margin-left: 0;
     color: #fff;
     opacity: .45;
     text-decoration: none;

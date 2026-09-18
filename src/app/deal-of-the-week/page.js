@@ -12,6 +12,7 @@ import { PRODUCT_SELECT } from '@/lib/catalogProducts';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
+import EvenProductImage from '@/components/EvenProductImage';
 import styles from './deal-of-the-week.module.css';
 import '../landing.css';
 
@@ -232,7 +233,7 @@ export default function DealOfTheWeekPage() {
             <article key={product.product} className={styles.card}>
               <div className={styles.cardImage}>
                 {product.image_url
-                  ? <img src={product.image_url} alt={product.product} loading="lazy" width="320" height="320" />
+                  ? <EvenProductImage src={product.image_url} alt={product.product} />
                   : <span aria-hidden="true"><Tag /></span>}
               </div>
               <div className={styles.cardBody}>
@@ -320,8 +321,8 @@ export default function DealOfTheWeekPage() {
               {limitedBadge}
               <div><button type="button" className={styles.cta} onClick={() => scrollToProducts('hero')}>{en ? 'Shop the deal' : 'Comprar la oferta'}</button></div>
             </section>
-            {rulesList}
             {productGrid}
+            {rulesList}
           </>
         )}
 

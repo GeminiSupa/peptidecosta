@@ -319,6 +319,36 @@ export function StorefrontBulkBand({ lang, settings }) {
   );
 }
 
+// Review-platform marks for the footer badges. Inline so they need no request.
+const REVIEW_MARKS = {
+  trustpilot: (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="4" fill="#00b67a" /><path fill="#fff" d="M12 4.6l2.1 6.2h6.5l-5.3 3.8 2 6.2L12 17l-5.3 3.8 2-6.2-5.3-3.8h6.5z" /></svg>
+  ),
+  google: (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M22.6 12.3c0-.8-.1-1.5-.2-2.2H12v4.2h6c-.3 1.4-1 2.5-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8z" /><path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.3 1.1-3.8 1.1-2.9 0-5.4-2-6.3-4.6H2.1v2.8C3.9 20.5 7.7 23 12 23z" /><path fill="#FBBC05" d="M5.7 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1V7.1H2.1C1.4 8.6 1 10.2 1 12s.4 3.4 1.1 4.9l3.6-2.8z" /><path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.1-3.1C17.5 2.1 15 1 12 1 7.7 1 3.9 3.5 2.1 7.1l3.6 2.8C6.6 7.3 9.1 5.4 12 5.4z" /></svg>
+  ),
+  facebook: (
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="#1877F2" /><path fill="#fff" d="M13.4 19.5v-6.1h2.1l.3-2.4h-2.4V9.4c0-.7.2-1.2 1.2-1.2h1.3V6.1c-.2 0-1-.1-1.9-.1-1.9 0-3.1 1.1-3.1 3.2V11H8.8v2.4h2.1v6.1h2.5z" /></svg>
+  ),
+};
+
+function ReviewBadgeContent({ review }) {
+  const score = Number.parseFloat(review.score);
+  const full = Number.isFinite(score) ? Math.round(score) : 5;
+  return (
+    <>
+      <span className="clone-review-logo" aria-hidden="true">{REVIEW_MARKS[review.id]}</span>
+      <span className="clone-review-copy">
+        <strong>{review.label}</strong>
+        <span className="clone-review-score">
+          <span>{review.score}</span>
+          <span className="clone-review-stars" aria-hidden="true">{'★'.repeat(full)}{'☆'.repeat(Math.max(0, 5 - full))}</span>
+        </span>
+      </span>
+    </>
+  );
+}
+
 export function StorefrontFooter({ lang, settings, categories = [] }) {
   const { links } = useBusinessLinks();
   const { rating: liveTrustpilotRating } = useTrustpilotRating();
@@ -390,19 +420,11 @@ export function StorefrontFooter({ lang, settings, categories = [] }) {
               className="clone-review-card"
               aria-label={`${review.label} reviews rated ${review.score}`}
             >
-              <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
-              <span className="clone-review-copy">
-                <strong>{review.label}</strong>
-                <span>{review.score}</span>
-              </span>
+              <ReviewBadgeContent review={review} />
             </a>
           ) : (
             <span key={review.label} className="clone-review-card">
-              <span className={`clone-review-logo clone-review-logo--${review.id}`} aria-hidden="true">{review.logo}</span>
-              <span className="clone-review-copy">
-                <strong>{review.label}</strong>
-                <span>{review.score}</span>
-              </span>
+              <ReviewBadgeContent review={review} />
             </span>
           ))}
         </div>
