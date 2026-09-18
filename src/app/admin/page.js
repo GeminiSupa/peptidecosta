@@ -2,6 +2,7 @@
 import { isoToCrWall, formatCrDate } from '@/lib/crTime.mjs';
 import { cmsFieldMatches, cmsSearchStyle, cmsSearchText } from '@/lib/cmsSearch.mjs';
 import { safeLocalStorage } from '@/lib/storage';
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -150,7 +151,6 @@ const FacebookIcon = ({ size = 14, style, ...props }) => (
   </svg>
 );
 
-const FALLBACK_EXCHANGE_RATE = 454.48;
 // How often an open WhatsApp inbox silently re-fetches conversations.
 const WHATSAPP_REFRESH_MS = 15 * 1000;
 
@@ -2235,6 +2235,10 @@ Core Rules:
     const fetchRate = async () => {
       try {
         const res = await fetch('/api/exchange-rate');
+        // A failed lookup still answers { rate: 454.48 } with a 500. That is the
+        // emergency number, not today's rate, so it must not replace the last
+        // good rate the browser saved — fall through to that instead.
+        if (!res.ok) throw new Error(`Exchange rate lookup failed (${res.status})`);
         const data = await res.json();
         if (data.rate) {
           const rate = data.rate;
@@ -5508,6 +5512,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onOverrideStats={handleStatsOverride}
               exchangeRate={exchangeRate}
               manualExchangeRate={manualExchangeRate}
+              onExchangeRateChanged={handleExchangeRateChanged}
             />
           )
         )}
@@ -5537,8 +5542,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
             handleToggleHidden={handleToggleHidden}
             changedProductIds={changedProductIds}
-            isSuperadmin={Boolean(adminProfile?.is_superadmin)}
-            onExchangeRateChanged={handleExchangeRateChanged}
           />
           </ErrorBoundary>
         )}
@@ -7006,7 +7009,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <ErrorBoundary>
-              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} onNavigate={navigateToTab} />
+              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} onNavigate={navigateToTab} exchangeRate={exchangeRate} />
               </ErrorBoundary>
             )}
 

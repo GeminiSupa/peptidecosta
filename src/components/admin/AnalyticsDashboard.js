@@ -137,7 +137,13 @@ function renderAiSummary(text) {
   });
 }
 
-export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
+export default function AnalyticsDashboard({
+  orders: parentOrders = [],
+  abandonedCarts: parentCarts = [],
+  products: parentProducts = [],
+  onNavigate,
+  exchangeRate = FALLBACK_EXCHANGE_RATE,
+}) {
   const [explainerTopic, setExplainerTopic] = useState(null);
 
   const EXPLAINER_DATA = {
@@ -744,7 +750,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   };
 
   const potentialAbandonedRevenueUsd = activeAbandonedCarts.reduce((sum, c) => sum + calculateCartValue(c.cart_data), 0);
-  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * FALLBACK_EXCHANGE_RATE);
+  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * exchangeRate);
 
   const abandonedProductsStats = useMemo(() => {
     const stats = {};

@@ -10,8 +10,8 @@ import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
 import { formatCrDate, formatCrInstant } from '@/lib/crTime.mjs';
 import { isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
-
-const FALLBACK_RATE = 454.48;
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import ExchangeRateSettings from './ExchangeRateSettings';
 
 // Trustpilot's FREE plan sends 50 verified review invitations per month.
 // If the account is upgraded, change this (Starter = 100, Plus = 300).
@@ -110,8 +110,9 @@ export default function DashboardHome({
   onCreateOrder,
   isSuperadmin = false,
   onOverrideStats,
-  exchangeRate = FALLBACK_RATE,
+  exchangeRate = FALLBACK_EXCHANGE_RATE,
   manualExchangeRate = null,
+  onExchangeRateChanged,
 }) {
   // Which tile's breakdown is open: 'revenue' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
@@ -331,10 +332,14 @@ export default function DashboardHome({
             <strong>Manual exchange rate in use:</strong> $1 = ₡{Number(manualExchangeRate.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}
             {manualExchangeRate.setBy ? `, set by ${manualExchangeRate.setBy}` : ''}
             {manualExchangeRate.setAt ? ` on ${formatCrInstant(manualExchangeRate.setAt)}` : ''}.
-            {' '}The API rate is being ignored.
+            {' '}The automatic market rate is being ignored.
           </span>
-          {isSuperadmin && onNavigate && (
-            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => onNavigate('spreadsheet')}>
+          {isSuperadmin && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => document.getElementById('exchange-rate-settings')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            >
               Change
             </button>
           )}
@@ -453,6 +458,13 @@ export default function DashboardHome({
           </div>
         </div>
       </section>
+
+      {/* One authority for every USD -> CRC conversion. The editor belongs on
+          Home where the owner sees shop health, not inside product editing.
+          It is mounted only for superadmins; the route repeats that check. */}
+      {isSuperadmin && (
+        <ExchangeRateSettings onChanged={onExchangeRateChanged} />
+      )}
 
       <div className="dashboard-two-col">
         <section className="dashboard-section">

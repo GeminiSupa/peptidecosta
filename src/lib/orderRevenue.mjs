@@ -1,3 +1,4 @@
+import { FALLBACK_USD_CRC_RATE } from './fallbackExchangeRate.mjs';
 /**
  * What an order is actually worth, once money given back is taken off.
  *
@@ -31,7 +32,7 @@ const lower = (value) => String(value ?? '').trim().toLowerCase();
  * the same order priced anywhere else. Callers holding the live rate should
  * pass it; this is the floor, not the intended value.
  */
-export const FALLBACK_USD_CRC_RATE = 454.48;
+export { FALLBACK_USD_CRC_RATE };
 
 /** The caller's rate when it is usable, the shared fallback when it is not. */
 function safeRate(rate) {

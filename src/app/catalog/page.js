@@ -91,11 +91,10 @@ import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
 // Band-checked before this page will price anything in it: a rate handed back
 // by the API is still a number from off this machine.
-import { isPlausibleRate } from '@/lib/pricing';
+import { FALLBACK_EXCHANGE_RATE, isPlausibleRate } from '@/lib/pricing';
 import { tooManyAttemptsMessage, tooManyAttemptsTitle } from '@/lib/checkoutRateLimits.mjs';
 
 // const WHATSAPP_NUMBER = '50684046973'; // Replaced with useBusinessLinks()
-const FALLBACK_EXCHANGE_RATE = 454.48;
 const FREE_SHIPPING_USD_THRESHOLD = 200;
 const FLAT_SHIPPING_CRC = 2500;
 // The maintenance pause, read at module scope. Kept separate from

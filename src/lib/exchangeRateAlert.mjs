@@ -55,6 +55,9 @@ export function exchangeRateAlertBody({ rate, updatedAt, ageMs, source }) {
     '     (CURRENCYFREAKS_API_KEY)',
     '  2. Is the keyless backup provider reachable?',
     '',
+    'Meanwhile a superadmin can set the rate by hand: admin Dashboard home >',
+    'Exchange rate > Manual. Switch back to Automatic once the feed returns.',
+    '',
     'This email repeats once a day while the feed stays down.',
   ].join('\n');
 }

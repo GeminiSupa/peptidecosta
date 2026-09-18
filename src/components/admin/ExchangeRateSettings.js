@@ -61,7 +61,7 @@ export default function ExchangeRateSettings({ onChanged }) {
       setNotice(
         (data.mode === 'manual'
           ? `Saved. The whole shop now uses ${money(data.effectiveRate)} per $1.`
-          : `Saved. The shop follows the API again (${money(data.effectiveRate)} per $1).`)
+          : `Saved. Back on Automatic: the shop uses today's market rate (${money(data.effectiveRate)} per $1).`)
         + (data.syncWarning ? ` ${data.syncWarning}` : ''),
       );
     } catch (err) {
@@ -71,68 +71,103 @@ export default function ExchangeRateSettings({ onChanged }) {
     }
   };
 
-  const radioStyle = { display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '0.85rem', color: '#e2e8f0', cursor: 'pointer' };
+  const current = Number(info?.effectiveRate) > 0 ? Number(info.effectiveRate) : null;
+  const isManual = info?.mode === 'manual';
+  const unchanged = info
+    && mode === info.mode
+    && (mode === 'api' || Number(manualRate) === Number(info.manualRate));
+  const optionStyle = (selected) => ({
+    display: 'flex', gap: '10px', alignItems: 'flex-start', padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
+    border: `1px solid ${selected ? 'rgba(96, 165, 250, 0.45)' : 'rgba(255, 255, 255, 0.06)'}`,
+    background: selected ? 'rgba(59, 130, 246, 0.08)' : 'rgba(0, 0, 0, 0.2)',
+  });
+  const optionTitle = { display: 'block', fontSize: '0.84rem', fontWeight: 700, color: '#e2e8f0' };
+  const optionHint = { display: 'block', fontSize: '0.74rem', color: '#64748b', lineHeight: 1.45, marginTop: '2px' };
 
   return (
     <section
+      id="exchange-rate-settings"
+      className="dashboard-section"
       aria-labelledby="exchange-rate-settings-title"
-      style={{
-        border: '1px solid rgba(148, 163, 184, 0.25)', borderRadius: '10px', padding: '14px 16px',
-        marginBottom: '16px', background: 'rgba(15, 23, 42, 0.5)', display: 'grid', gap: '10px',
-      }}
     >
-      <div>
-        <h4 id="exchange-rate-settings-title" style={{ margin: 0, fontSize: '0.95rem' }}>Exchange rate (USD → CRC)</h4>
-        <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
-          {info
-            ? <>
-                Shop is using <strong style={{ color: '#e2e8f0' }}>{money(info.effectiveRate)}</strong> per $1
-                {info.mode === 'manual'
-                  ? ` — set by hand${info.manualSetBy ? ` by ${info.manualSetBy}` : ''}${info.manualSetAt ? ` on ${formatCrInstant(info.manualSetAt)}` : ''}.`
-                  : ' from the API (updates once a day).'}
-                {' '}Today&apos;s API rate: {money(info.apiRate)}{info.apiRateIsLive ? '' : ' (last saved)'}.
-              </>
-            : 'Loading…'}
-        </p>
+      <div className="dashboard-section-heading-row">
+        <h3 id="exchange-rate-settings-title" className="dashboard-section-title">Exchange rate (USD → CRC)</h3>
+        {info && (
+          <span
+            className="dashboard-section-count"
+            style={isManual ? { color: '#fbbf24', borderColor: 'rgba(251, 191, 36, 0.35)' } : undefined}
+          >
+            {isManual ? 'Manual' : 'Automatic'}
+          </span>
+        )}
       </div>
 
-      <div style={{ display: 'grid', gap: '6px' }} role="radiogroup" aria-label="Exchange rate source">
-        <label style={radioStyle}>
-          <input type="radio" name="exchange-rate-mode" checked={mode === 'api'} onChange={() => setMode('api')} disabled={saving} />
-          <span>Follow the API</span>
-        </label>
-        <label style={radioStyle}>
-          <input type="radio" name="exchange-rate-mode" checked={mode === 'manual'} onChange={() => setMode('manual')} disabled={saving} />
-          <span>Set it myself — the API is ignored until I switch back</span>
-        </label>
-      </div>
+      <div
+        className="dashboard-health-card"
+        style={{ display: 'grid', gap: '12px', alignItems: 'stretch' }}
+      >
+        <div>
+          <div className="dashboard-health-title" style={{ fontSize: '1.05rem' }}>
+            {info ? <>$1 = {money(current)}</> : 'Loading…'}
+          </div>
+          {info && (
+            <div className="dashboard-health-copy">
+              {isManual
+                ? `Set by hand${info.manualSetBy ? ` by ${info.manualSetBy}` : ''}${info.manualSetAt ? ` on ${formatCrInstant(info.manualSetAt)}` : ''}. The automatic rate is being ignored.`
+                : 'Automatic: the market rate, refreshed once a day.'}
+              {' '}Today&apos;s market rate: {money(info.apiRate)}{info.apiRateIsLive ? '' : ' (last one received)'}.
+              {' '}This one rate is used everywhere the shop turns dollars into colones: catalog prices, checkout, order edits and reports.
+            </div>
+          )}
+        </div>
 
-      {mode === 'manual' && (
-        <label style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.85rem', color: '#cbd5e1' }}>
-          $1 = ₡
-          <input
-            className="admin-input"
-            type="number"
-            inputMode="decimal"
-            min="300"
-            max="800"
-            step="0.01"
-            value={manualRate}
-            onChange={(event) => setManualRate(event.target.value)}
-            disabled={saving}
-            style={{ width: '120px' }}
-            aria-label="Manual colones per US dollar"
-          />
-        </label>
-      )}
+        <div style={{ display: 'grid', gap: '8px' }} role="radiogroup" aria-label="Exchange rate source">
+          <label style={optionStyle(mode === 'api')}>
+            <input type="radio" name="exchange-rate-mode" checked={mode === 'api'} onChange={() => setMode('api')} disabled={saving} style={{ marginTop: '3px' }} />
+            <span>
+              <span style={optionTitle}>Automatic</span>
+              <span style={optionHint}>Follow the daily market rate. Recommended.</span>
+            </span>
+          </label>
+          <label style={optionStyle(mode === 'manual')}>
+            <input type="radio" name="exchange-rate-mode" checked={mode === 'manual'} onChange={() => setMode('manual')} disabled={saving} style={{ marginTop: '3px' }} />
+            <span>
+              <span style={optionTitle}>Manual</span>
+              <span style={optionHint}>Use a fixed rate I enter. It stays until someone switches back to Automatic.</span>
+            </span>
+          </label>
+        </div>
 
-      {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: '0.82rem' }}>{error}</p>}
-      {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: '0.82rem' }}>{notice}</p>}
+        {mode === 'manual' && (
+          <label style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.85rem', color: '#cbd5e1' }}>
+            $1 = ₡
+            <input
+              className="admin-input"
+              type="number"
+              inputMode="decimal"
+              min="300"
+              max="800"
+              step="0.01"
+              value={manualRate}
+              onChange={(event) => setManualRate(event.target.value)}
+              disabled={saving}
+              style={{ width: '130px' }}
+              aria-label="Manual colones per US dollar"
+            />
+            <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+              More than 5% away from today&apos;s market rate asks you to confirm.
+            </span>
+          </label>
+        )}
 
-      <div>
-        <button type="button" className="admin-btn admin-btn-primary" onClick={() => save(false)} disabled={saving || !info}>
-          {saving ? 'Saving…' : 'Save exchange rate'}
-        </button>
+        {error && <p role="alert" style={{ margin: 0, color: '#fca5a5', fontSize: '0.82rem' }}>{error}</p>}
+        {notice && <p role="status" style={{ margin: 0, color: '#86efac', fontSize: '0.82rem' }}>{notice}</p>}
+
+        <div>
+          <button type="button" className="admin-btn admin-btn-primary" onClick={() => save(false)} disabled={saving || !info || unchanged}>
+            {saving ? 'Saving…' : 'Save exchange rate'}
+          </button>
+        </div>
       </div>
     </section>
   );

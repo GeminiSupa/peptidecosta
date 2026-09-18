@@ -111,7 +111,7 @@ const getCardPaymentBadge = (order) => {
   return { label: 'Card Pending', color: '#fbbf24', bg: 'rgba(251, 191, 36, 0.14)' };
 };
 
-const inferShippingCosts = (order) => {
+const inferShippingCosts = (order, exchangeRate = ADMIN_FALLBACK_EXCHANGE_RATE) => {
   const currency = normalizeAdminOrderCurrency(order.currency);
   const explicitCrc = Number(order.shipping_cost_crc) || 0;
   const explicitUsd = Number(order.shipping_cost_usd) || 0;
@@ -133,12 +133,12 @@ const inferShippingCosts = (order) => {
 
   return currency === 'USD'
     ? {
-        crc: Math.round(inferred * ADMIN_FALLBACK_EXCHANGE_RATE),
+        crc: Math.round(inferred * exchangeRate),
         usd: Number(inferred.toFixed(2)),
       }
     : {
         crc: Math.round(inferred),
-        usd: Number((inferred / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2)),
+        usd: Number((inferred / exchangeRate).toFixed(2)),
       };
 };
 
@@ -160,7 +160,7 @@ export default function OrderDetailPanel({
   currentAgentName = '',
   onOwnerAction,
 }) {
-  const initialShipping = order ? inferShippingCosts(order) : { crc: 0, usd: 0 };
+  const initialShipping = order ? inferShippingCosts(order, exchangeRate) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
   const [notes, setNotes] = useState(order.internal_notes || '');
   const [savingNotes, setSavingNotes] = useState(false);
@@ -587,8 +587,8 @@ export default function OrderDetailPanel({
       manualDiscountType,
       manualDiscountValue,
     }).total;
-    const totalUsd = orderCurrency === 'USD' ? Number(total.toFixed(2)) : Number((total / ADMIN_FALLBACK_EXCHANGE_RATE).toFixed(2));
-    const totalCrc = orderCurrency === 'CRC' ? Math.round(total) : Math.round(total * ADMIN_FALLBACK_EXCHANGE_RATE);
+    const totalUsd = orderCurrency === 'USD' ? Number(total.toFixed(2)) : Number((total / exchangeRate).toFixed(2));
+    const totalCrc = orderCurrency === 'CRC' ? Math.round(total) : Math.round(total * exchangeRate);
 
     try {
       await patchOrder(

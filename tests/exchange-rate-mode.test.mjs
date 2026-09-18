@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   RATE_MODE_API,
@@ -61,4 +62,53 @@ test('a rate more than 5% from the API needs a yes', () => {
 
 test('with no API rate to compare, only the range applies', () => {
   assert.deepEqual(checkManualRate({ rate: 600, apiRate: null }), { ok: true, rate: 600 });
+});
+
+test('the superadmin rate control lives on Home after Health and before Recent Orders', () => {
+  const home = readFileSync(new URL('../src/components/admin/DashboardHome.js', import.meta.url), 'utf8');
+  const health = home.indexOf('>Health</h3>');
+  const control = home.indexOf('<ExchangeRateSettings');
+  const recentOrders = home.indexOf('>Recent Orders</h3>');
+
+  assert.ok(health >= 0 && control > health && recentOrders > control);
+  assert.match(home, /\{isSuperadmin && \(\s*<ExchangeRateSettings/);
+});
+
+test('the rate editor is not duplicated in Products', () => {
+  const products = readFileSync(new URL('../src/components/admin/ProductsManager.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(products, /ExchangeRateSettings/);
+});
+
+test('active admin conversions use the selected rate instead of the emergency fallback', () => {
+  const analytics = readFileSync(new URL('../src/components/admin/AnalyticsDashboard.js', import.meta.url), 'utf8');
+  const orderDetail = readFileSync(new URL('../src/components/admin/OrderDetailPanel.js', import.meta.url), 'utf8');
+
+  assert.match(analytics, /potentialAbandonedRevenueUsd \* exchangeRate/);
+  assert.match(orderDetail, /total \/ exchangeRate/);
+  assert.match(orderDetail, /total \* exchangeRate/);
+  assert.doesNotMatch(orderDetail, /total \/ ADMIN_FALLBACK_EXCHANGE_RATE/);
+  assert.doesNotMatch(orderDetail, /total \* ADMIN_FALLBACK_EXCHANGE_RATE/);
+});
+
+test('the emergency rate is defined once and every alias points at it', async () => {
+  const { FALLBACK_USD_CRC_RATE } = await import('../src/lib/fallbackExchangeRate.mjs');
+  const { FALLBACK_EXCHANGE_RATE } = await import('../src/lib/pricing.js');
+  const { ADMIN_FALLBACK_EXCHANGE_RATE } = await import('../src/lib/adminOrderTotals.mjs');
+  const orderRevenue = await import('../src/lib/orderRevenue.mjs');
+  assert.equal(FALLBACK_EXCHANGE_RATE, FALLBACK_USD_CRC_RATE);
+  assert.equal(ADMIN_FALLBACK_EXCHANGE_RATE, FALLBACK_USD_CRC_RATE);
+  assert.equal(orderRevenue.FALLBACK_USD_CRC_RATE, FALLBACK_USD_CRC_RATE);
+
+  for (const file of ['pricing.js', 'adminOrderTotals.mjs', 'orderRevenue.mjs', 'referralStats.mjs']) {
+    const source = readFileSync(new URL(`../src/lib/${file}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /=\s*454\.48/, `${file} must not hardcode the fallback rate`);
+  }
+});
+
+test('the admin never adopts the emergency rate from a failed lookup', () => {
+  const admin = readFileSync(new URL('../src/app/admin/page.js', import.meta.url), 'utf8');
+  const fetchAt = admin.indexOf("fetch('/api/exchange-rate')");
+  const okCheck = admin.indexOf('if (!res.ok) throw', fetchAt);
+  const adopt = admin.indexOf('setExchangeRate(rate)', fetchAt);
+  assert.ok(fetchAt >= 0 && okCheck > fetchAt && okCheck < adopt);
 });

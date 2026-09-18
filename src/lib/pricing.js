@@ -16,8 +16,10 @@
 // unit tests have to be able to import it directly.
 import { isBacWater, summarizeBacWater, applyBacAwareDiscount } from './bacWater.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
+import { FALLBACK_USD_CRC_RATE } from './fallbackExchangeRate.mjs';
 
-export const FALLBACK_EXCHANGE_RATE = 454.48; // USD -> CRC, matches catalog fallback
+// USD -> CRC emergency rate; the number itself lives in fallbackExchangeRate.mjs.
+export const FALLBACK_EXCHANGE_RATE = FALLBACK_USD_CRC_RATE;
 export const FREE_SHIPPING_USD_THRESHOLD = 200;
 export const FLAT_SHIPPING_CRC = 2500;
 
