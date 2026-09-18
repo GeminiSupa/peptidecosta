@@ -6,6 +6,7 @@ import {
   buildWhatsAppSalesReply,
   buildWhatsAppSalesSnapshot,
   formatWhatsAppSalesContext,
+  replyMentionsPromoCode,
 } from '../src/lib/whatsappSales.mjs';
 
 const NOW = new Date('2026-08-25T12:00:00.000Z');
@@ -71,94 +72,56 @@ test('tablet questions use only explicit current catalog format data', () => {
   assert.match(listed, /Research Tablet X/);
 });
 
-test('active public promo codes are included and private or expired codes are not', () => {
-  const snapshot = buildWhatsAppSalesSnapshot({
-    now: NOW,
-    promos: [
-      { code: 'PUBLIC20', discount_pct: 0.2, is_active: true, hidden: false, valid_until: '2026-09-01T00:00:00.000Z' },
-      { code: 'PRIVATE50', discount_pct: 0.5, is_active: true, hidden: true },
-      { code: 'OLD10', discount_pct: 0.1, is_active: true, hidden: false, valid_until: '2026-08-01T00:00:00.000Z' },
-    ],
-  });
-
-  const context = formatWhatsAppSalesContext(snapshot);
-  assert.match(context, /PUBLIC20/);
-  assert.doesNotMatch(context, /PRIVATE50|OLD10/);
-  assert.match(context, /15% off 5\+ vials or 20% off 10\+ vials/);
-});
-
-test('WhatsApp-specific exclusions hide codes without deactivating them', () => {
-  const snapshot = buildWhatsAppSalesSnapshot({
-    now: NOW,
-    excludedPromoCodes: ['jeanpaul', ' RAQUELDELGADO '],
-    promos: [
-      { code: 'JEANPAUL', discount_pct: 0.05, is_active: true, hidden: false },
-      { code: 'RAQUELDELGADO', discount_pct: 0.1, is_active: true, hidden: false },
-      { code: 'MUSCLE10', discount_pct: 0.1, is_active: true, hidden: false },
-    ],
-  });
-
-  const context = formatWhatsAppSalesContext(snapshot);
-  assert.doesNotMatch(context, /JEANPAUL|RAQUELDELGADO/);
-  assert.match(context, /MUSCLE10/);
-});
-
 test('no limited promotion still reports truthful automatic volume savings', () => {
   const snapshot = buildWhatsAppSalesSnapshot({ now: NOW });
   const reply = buildWhatsAppSalesReply(snapshot, 'en');
-  assert.match(reply, /isn't a public weekly deal or promo code active/i);
+  assert.match(reply, /^Current savings:/);
   assert.match(reply, /15% off 5\+ vials/);
   assert.doesNotMatch(reply, /competitively priced/i);
 });
 
-test('the context names the valid codes and forbids every other one', () => {
-  // Filtering the list is not enough on its own. A code the assistant quoted
-  // correctly weeks ago is still in the conversation history, and a customer
-  // holding a dead code will quote it too — both read as evidence the discount
-  // exists unless the model is told the list is the whole list.
+test('promo codes never reach the bot, affiliate or not', () => {
+  // Affiliate codes (JEANPAUL) sit in promo_codes as public codes. The bot
+  // quoted and "applied" them for strangers, so it gets no codes at all.
   const snapshot = buildWhatsAppSalesSnapshot({
     now: NOW,
     promos: [
-      { code: 'LIVE15', discount_pct: 0.15, is_active: true, hidden: false },
-      { code: 'DEAD10', discount_pct: 0.1, is_active: true, hidden: false, valid_until: '2026-08-01T00:00:00.000Z' },
+      { code: 'JEANPAUL', discount_pct: 0.05, is_active: true, hidden: false },
+      { code: 'PUBLIC20', discount_pct: 0.2, is_active: true, hidden: false },
     ],
   });
 
   const context = formatWhatsAppSalesContext(snapshot);
-  assert.match(context, /The only promo codes that are valid right now are: LIVE15\./);
-  assert.doesNotMatch(context, /DEAD10/);
-  assert.match(context, /quoted earlier in this conversation/);
-  assert.match(context, /the customer says they hold/);
-  assert.match(context, /Never confirm, repeat, extend or honour a code that is not in this list/);
+  assert.doesNotMatch(context, /JEANPAUL|PUBLIC20/);
+  assert.equal(snapshot.offers.some((offer) => offer.kind === 'promo_code'), false);
+  assert.match(context, /never name, share, confirm, apply or price with any promo, coupon, affiliate or referral code/);
+  assert.match(context, /one the customer mentions/);
+  assert.match(context, /earlier in this conversation/);
+  assert.match(context, /15% off 5\+ vials or 20% off 10\+ vials/);
 });
 
-test('with nothing live the context says so rather than staying silent', () => {
-  // Saying nothing leaves the model free to fall back on whatever code it can
-  // see in the history. It has to be told there are none.
-  const snapshot = buildWhatsAppSalesSnapshot({
-    now: NOW,
-    promos: [
-      { code: 'EXPIRED', discount_pct: 0.2, is_active: true, hidden: false, valid_until: '2026-08-01T00:00:00.000Z' },
-    ],
-  });
-
+test('the context and the sales reply point to the deal page and support phone', () => {
+  const snapshot = buildWhatsAppSalesSnapshot({ now: NOW });
   const context = formatWhatsAppSalesContext(snapshot);
-  assert.match(context, /There are no promo codes valid right now\./);
-  assert.doesNotMatch(context, /EXPIRED/);
-  // The automatic volume saving is real and unconditional, so it stays.
-  assert.match(context, /15% off 5\+ vials/);
+  assert.match(context, /https:\/\/catalog\.peptidescostarica\.net\/deal-of-the-week/);
+  assert.match(context, /\+506 8404-6973/);
+
+  for (const lang of ['en', 'es']) {
+    const reply = buildWhatsAppSalesReply(snapshot, lang);
+    assert.match(reply, /https:\/\/catalog\.peptidescostarica\.net\/deal-of-the-week/);
+    assert.match(reply, /\+506 8404-6973/);
+  }
 });
 
-test('a code used up to its limit is not named as valid', () => {
-  const snapshot = buildWhatsAppSalesSnapshot({
-    now: NOW,
-    promos: [
-      { code: 'GONE', discount_pct: 0.2, is_active: true, hidden: false, usage_limit: 5, usage_count: 5 },
-      { code: 'LEFT', discount_pct: 0.2, is_active: true, hidden: false, usage_limit: 5, usage_count: 4 },
-    ],
-  });
+test('a model reply that names a code is caught', () => {
+  assert.equal(replyMentionsPromoCode('Claro, Lilly. Aplicaré el código JEANPAUL para obtener un 5% de descuento en tu pedido del GLP-1 de 60 mg'), true);
+  assert.equal(replyMentionsPromoCode('Use code MUSCLE10 at checkout.'), true);
+  assert.equal(replyMentionsPromoCode('El código de descuento "RAQUELDELGADO" te da 10%.'), true);
+  assert.equal(replyMentionsPromoCode('JEANPAUL code gives you 5% off.'), true);
+});
 
-  const context = formatWhatsAppSalesContext(snapshot);
-  assert.match(context, /valid right now are: LEFT\./);
-  assert.doesNotMatch(context, /GONE/);
+test('ordinary replies are not mistaken for a code', () => {
+  assert.equal(replyMentionsPromoCode('El GLP-1 de 60 mg cuesta $270 USD / ₡120,496 CRC.'), false);
+  assert.equal(replyMentionsPromoCode('Si tienes un código, escríbelo en el carrito. BPC-157 cuesta $80 USD.'), false);
+  assert.equal(replyMentionsPromoCode('Para tu código postal, TB-500 está disponible con COA.'), false);
 });

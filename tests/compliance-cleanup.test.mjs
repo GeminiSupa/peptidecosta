@@ -138,13 +138,10 @@ test('the admin assistant is not rendered over the mobile nav bar', async () => 
   assert.match(bot, /@media \(max-width: 1023px\)[\s\S]{0,120}display: none/);
 });
 
-test('a hidden promo is only fetched for the customer it was issued to', async () => {
+test('the WhatsApp bot never loads promo codes and blocks replies that name one', async () => {
   const webhook = await read('../src/app/api/whatsapp/webhook/route.js');
-  // `issued_to.ilike.%${phoneTail}%` with an empty tail is `%%`, which selects
-  // every hidden code in the table.
-  assert.doesNotMatch(webhook, /issued_to\.ilike/);
-  assert.match(webhook, /issued_to\.eq\."\$\{key\}"/);
-  // Codes are filed under the strongest identity, so a customer who gave an
-  // email holds one under email:, which the phone alone could never match.
-  assert.match(webhook, /identityKeys\(\{ email: row\.customer_email \}\)/);
+  // Affiliate codes are public rows in promo_codes; the bot handed them to
+  // strangers. It must not read that table at all.
+  assert.doesNotMatch(webhook, /from\('promo_codes'\)/);
+  assert.match(webhook, /replyMentionsPromoCode\(replyText\)/);
 });

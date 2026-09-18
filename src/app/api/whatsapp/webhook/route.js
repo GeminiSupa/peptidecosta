@@ -9,12 +9,12 @@ import {
   replyMatchesWhatsAppLanguage,
   resolveWhatsAppReplyLanguage,
 } from '@/lib/whatsappRecovery';
-import { identityKeys } from '@/lib/exitIntentOffer.mjs';
 import {
   buildWhatsAppCatalogFormatReply,
   buildWhatsAppSalesReply,
   buildWhatsAppSalesSnapshot,
   formatWhatsAppSalesContext,
+  replyMentionsPromoCode,
 } from '@/lib/whatsappSales.mjs';
 import { buildWhatsAppCustomerContext } from '@/lib/whatsappAiContext';
 import { insertWhatsAppMessage } from '@/lib/whatsappMessageLog';
@@ -312,7 +312,6 @@ export async function POST(request) {
             try {
               let aiAutoReply = !!process.env.GEMINI_API_KEY;
               let aiSystemPrompt = DEFAULT_WHATSAPP_AI_PROMPT;
-              let aiHiddenPromoCodes = [];
               
               // 1. Fetch settings from Supabase
               if (supabase) {
@@ -328,11 +327,6 @@ export async function POST(request) {
                     aiAutoReply = settingsData.value.ai_auto_reply !== false;
                     if (settingsData.value.ai_system_prompt) {
                       aiSystemPrompt = settingsData.value.ai_system_prompt;
-                    }
-                    if (Array.isArray(settingsData.value.ai_hidden_promo_codes)) {
-                      aiHiddenPromoCodes = settingsData.value.ai_hidden_promo_codes
-                        .map((code) => String(code || '').trim().toUpperCase())
-                        .filter(Boolean);
                     }
                   }
                 } catch (err) {
@@ -360,90 +354,27 @@ export async function POST(request) {
               }
 
               // 3. Current offers are separate from the product catalog. Give
-              // the assistant the same weekly deal and public promo truth the
-              // storefront uses, and keep a structured snapshot for exact sale
-              // replies that do not depend on model interpretation.
-              // A hidden code is filed under one identity key, and the strongest
-              // one wins — so a customer who gave an email at the exit-intent
-              // popup has their code under email:, not phone:. WhatsApp only
-              // knows the phone, which left the assistant unable to honour its
-              // own offer for most people who hold one: of 158 live hidden
-              // codes, 38 are filed by phone and 22 by email. Look the emails
-              // up from the orders this number has placed and carry those keys
-              // too. (The remaining 97 are filed by browser session, which has
-              // no path back to a phone number — those stay unreachable here.)
-              let customerKeys = [];
-              if (waId) {
-                customerKeys = identityKeys({ phone: waId });
-                const phoneTail = String(waId).replace(/\D/g, '').slice(-8);
-                if (supabase && customerKeys.length && phoneTail.length === 8) {
-                  try {
-                    // whatsapp_wa_id is the exact match when the order came
-                    // through this channel; the tail match covers the rest,
-                    // where the number was typed at checkout. Both operands are
-                    // digits only, so neither can break out of the filter.
-                    const { data: known } = await supabase
-                      .from('orders')
-                      .select('customer_email')
-                      .or(`whatsapp_wa_id.eq.${String(waId).replace(/\D/g, '')},customer_phone.ilike.%${phoneTail}`)
-                      .not('customer_email', 'is', null)
-                      .limit(20);
-                    for (const row of known || []) {
-                      for (const key of identityKeys({ email: row.customer_email })) {
-                        if (!customerKeys.includes(key)) customerKeys.push(key);
-                      }
-                    }
-                  } catch (err) {
-                    // Worst case the assistant simply does not know about an
-                    // emailed code, which is where it stood before.
-                    console.warn('[WhatsApp Webhook] Could not resolve customer emails for promos:', err.message);
-                  }
-                }
-              }
-              let salesSnapshot = buildWhatsAppSalesSnapshot({ products: catalogProducts, customerKeys });
+              // the assistant the same weekly deal the storefront uses, and keep
+              // a structured snapshot for exact sale replies that do not depend
+              // on model interpretation. Promo codes are never loaded here: most
+              // public ones are affiliate codes, and the bot kept handing them
+              // to strangers. Customers enter codes themselves at checkout.
+              let salesSnapshot = buildWhatsAppSalesSnapshot({ products: catalogProducts });
               let salesContext = formatWhatsAppSalesContext(salesSnapshot);
               if (supabase && aiAutoReply) {
                 try {
                   const nowIso = new Date().toISOString();
-                  // Fetch the public codes plus only the hidden codes filed
-                  // under one of this customer's own keys. Matching on a bare
-                  // phone tail was both too loose and, when waId carried too
-                  // few digits to make a key, an empty `%%` that selected every
-                  // hidden code in the table.
-                  const issuedFilter = customerKeys
-                    .map((key) => `issued_to.eq."${key}"`)
-                    .join(',');
-                  const promoFilter = issuedFilter ? `hidden.eq.false,${issuedFilter}` : 'hidden.eq.false';
-                  const [promoResult, dealResult] = await Promise.all([
-                    // is_active is not the same thing as usable. Exit-intent
-                    // codes are minted active and simply time out, and nothing
-                    // ever flips the flag back: of 158 live hidden codes, 157
-                    // are past their valid_until and only one is still good.
-                    // buildWhatsAppSalesSnapshot already refuses to quote an
-                    // expired code, but there is no reason to carry hundreds of
-                    // dead rows into memory to do it.
-                    supabase
-                      .from('promo_codes')
-                      .select('*')
-                      .eq('is_active', true)
-                      .or(`valid_until.is.null,valid_until.gte.${nowIso}`)
-                      .or(promoFilter),
-                    supabase
-                      .from('deals')
-                      .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status')
-                      .eq('status', 'live')
-                      .lte('starts_at', nowIso)
-                      .gte('ends_at', nowIso)
-                      .maybeSingle(),
-                  ]);
-                  if (promoResult.error) console.warn('[WhatsApp Webhook] Failed to load active promos:', promoResult.error.message);
+                  const dealResult = await supabase
+                    .from('deals')
+                    .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status')
+                    .eq('status', 'live')
+                    .lte('starts_at', nowIso)
+                    .gte('ends_at', nowIso)
+                    .maybeSingle();
                   if (dealResult.error) console.warn('[WhatsApp Webhook] Failed to load weekly deal:', dealResult.error.message);
                   salesSnapshot = buildWhatsAppSalesSnapshot({
                     products: catalogProducts,
-                    promos: promoResult.data || [],
                     liveDeal: dealResult.data || null,
-                    excludedPromoCodes: aiHiddenPromoCodes,
-                    customerKeys,
                   });
                   salesContext = formatWhatsAppSalesContext(salesSnapshot);
                 } catch (err) {
@@ -584,6 +515,14 @@ export async function POST(request) {
                 } catch (aiErr) {
                   console.error('[WhatsApp Webhook] Failed to generate AI reply:', aiErr);
                 }
+              }
+
+              // A model reply that names a promo code never goes out. Swap in
+              // the fixed deals reply (Deal of the Week link + support phone).
+              if (isAiGenerated && replyMentionsPromoCode(replyText)) {
+                console.warn('[WhatsApp Webhook] Blocked AI reply that named a promo code.');
+                replyText = buildWhatsAppSalesReply(salesSnapshot, replyLanguage);
+                isAiGenerated = false;
               }
 
               // Fallback if AI reply failed or was disabled

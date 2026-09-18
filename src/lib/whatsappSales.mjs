@@ -1,6 +1,11 @@
 /** Pure helpers for turning live catalog promotions into safe WhatsApp copy. */
 
 import { dealMinUnits, dealPricingMode } from './dealOfWeek.mjs';
+import { CATALOG_ORIGIN } from './whatsappRecovery.js';
+
+// Where the bot sends anyone asking about deals, promos or discounts.
+export const DEAL_PAGE_URL = `${CATALOG_ORIGIN}/deal-of-the-week`;
+export const SUPPORT_PHONE = '+506 8404-6973';
 
 function percent(value) {
   const numeric = Number(value || 0);
@@ -50,34 +55,18 @@ function readableNames(names, lang) {
   return `${values.slice(0, -1).join(', ')}${conjunction}${values.at(-1)}`;
 }
 
-function activePublicPromo(promo, now, customerKeys = []) {
-  if (!promo?.is_active) return false;
-
-  if (promo.hidden) {
-    if (!promo.issued_to) return false;
-    if (!customerKeys.includes(promo.issued_to)) return false;
-  }
-
-  if (!inWindow(promo, now)) return false;
-  if (
-    promo.usage_limit !== null
-    && promo.usage_limit !== undefined
-    && Number(promo.usage_count || 0) >= Number(promo.usage_limit)
-  ) return false;
-  return percent(promo.discount_pct) > 0;
-}
-
+// Promo codes are deliberately not part of this snapshot. Most public codes in
+// promo_codes belong to affiliates (JEANPAUL, RAQUELDELGADO...), and the old
+// per-code blocklist kept missing new ones, so the bot quoted and "applied"
+// affiliate codes for strangers. The bot now never sees a code at all; the
+// customer types one at checkout, which is where codes are actually checked.
 export function buildWhatsAppSalesSnapshot({
   products = [],
-  promos = [],
   liveDeal = null,
-  excludedPromoCodes = [],
   now = new Date(),
-  customerKeys = [],
 } = {}) {
   const dealIsLive = liveDeal?.status === 'live' && inWindow(liveDeal, now);
   const dealNames = new Set((dealIsLive ? liveDeal.product_names : []).map((name) => String(name).toLowerCase()));
-  const excludedCodes = new Set((excludedPromoCodes || []).map((code) => String(code).trim().toUpperCase()).filter(Boolean));
   const offers = [];
 
   if (dealIsLive) {
@@ -113,20 +102,6 @@ export function buildWhatsAppSalesSnapshot({
     });
   }
 
-  for (const promo of (promos || []).filter((item) => activePublicPromo(item, now, customerKeys))) {
-    const pct = percent(promo.discount_pct);
-    const code = String(promo.code || '').trim().toUpperCase();
-    if (!code || excludedCodes.has(code)) continue;
-    const target = String(promo.target_product || '').trim();
-    const unitTermsEn = promo.min_units ? `; minimum ${promo.min_units} units` : '';
-    const unitTermsEs = promo.min_units ? `; mínimo ${promo.min_units} unidades` : '';
-    offers.push({
-      kind: 'promo_code',
-      en: `Code ${code}: ${pct}% off${target ? ` ${target}` : ''}${unitTermsEn}. Eligibility is confirmed at checkout.`,
-      es: `Código ${code}: ${pct}% de descuento${target ? ` en ${target}` : ''}${unitTermsEs}. La elegibilidad se confirma al pagar.`,
-    });
-  }
-
   const volumeDiscount = {
     kind: 'volume_discount',
     en: 'Automatic volume savings: 15% off 5+ vials or 20% off 10+ vials.',
@@ -142,45 +117,53 @@ export function buildWhatsAppSalesSnapshot({
 
 export function formatWhatsAppSalesContext(snapshot) {
   const lines = [...(snapshot?.offers || []), snapshot?.volumeDiscount].filter(Boolean);
-  const codes = (snapshot?.offers || [])
-    .filter((offer) => offer.kind === 'promo_code')
-    .map((offer) => (offer.en.match(/^Code ([A-Z0-9_-]+)/) || [])[1])
-    .filter(Boolean);
-
-  // The list above is built fresh every message and already excludes anything
-  // expired, used up, or issued to someone else. The model still has to be told
-  // that the list is exhaustive, because the rest of its context is not: a code
-  // it quoted correctly a fortnight ago is still sitting in the conversation
-  // history, and a customer holding a dead code will quote it too. Without this
-  // the assistant reads either one as evidence the discount exists and honours
-  // a promotion the checkout will then refuse.
-  const codeRule = codes.length
-    ? `The only promo codes that are valid right now are: ${codes.join(', ')}.`
-    : 'There are no promo codes valid right now.';
 
   return [
     `Verified current offers (database source of truth):`,
     lines.map((offer) => `- EN: ${offer.en}\n  ES: ${offer.es}`).join('\n'),
     `Never claim there is no sale when an offer is listed above.`,
-    `${codeRule} Any other code is expired or does not exist — including one you quoted earlier in this conversation and one the customer says they hold. Never confirm, repeat, extend or honour a code that is not in this list. If the customer names a code that is not listed, tell them it is no longer valid and point them to the offers above.`,
+    `Promo codes: you never name, share, confirm, apply or price with any promo, coupon, affiliate or referral code — not one the customer mentions, not one from earlier in this conversation, not one from any other context. You cannot see which codes exist. If the customer asks about a code, tell them to type it in the cart at checkout, where it is checked, and quote only regular prices.`,
+    `When the customer asks about deals, promos or discounts, send them to the Deal of the Week page: ${DEAL_PAGE_URL} — and say they can call support at ${SUPPORT_PHONE} for anything else.`,
   ].join('\n');
+}
+
+// Last line of defence on model output: a reply that names a code (e.g.
+// "Aplicaré el código JEANPAUL") never goes out, whatever the prompt said.
+const CODE_WORD = /(^|[^\p{L}])(c[oó]digos?|codes?|cup[oó]n(?:es)?|coupons?|vouchers?)(?![\p{L}])/giu;
+// A code is a capitalised word like JEANPAUL or MUSCLE10. Product names such
+// as BPC-157 carry a hyphen and are not codes.
+const CODE_TOKEN = /(?<![\p{L}\d-])[A-Z][A-Z0-9_]{3,}(?![\p{L}\d-])/gu;
+const NOT_A_CODE = new Set(['USD', 'CRC', 'COA', 'SINPE', 'WHATSAPP', 'DEAL', 'WEEK']);
+
+export function replyMentionsPromoCode(text = '') {
+  const value = String(text);
+  for (const match of value.matchAll(CODE_WORD)) {
+    const at = match.index + match[1].length;
+    const near = value.slice(Math.max(0, at - 30), at + match[2].length + 50);
+    if ((near.match(CODE_TOKEN) || []).some((token) => !NOT_A_CODE.has(token))) return true;
+  }
+  return false;
 }
 
 export function buildWhatsAppSalesReply(snapshot, lang = 'es') {
   const isEn = lang === 'en';
   const limited = snapshot?.offers || [];
   const volume = snapshot?.volumeDiscount;
-
-  if (limited.length > 0) {
-    const lines = [...limited, volume].filter(Boolean).map((offer) => `• ${isEn ? offer.en : offer.es}`);
-    return isEn
-      ? `Yes—these offers are active now:\n${lines.join('\n')}\nWhich offer would you like me to price for you?`
-      : `Sí, estas ofertas están activas ahora:\n${lines.join('\n')}\n¿Cuál oferta deseas que te coticemos?`;
-  }
+  const lines = [...limited, volume].filter(Boolean).map((offer) => `• ${isEn ? offer.en : offer.es}`);
 
   return isEn
-    ? `There isn't a public weekly deal or promo code active right now, but ${volume.en.charAt(0).toLowerCase()}${volume.en.slice(1)} Which product would you like me to price?`
-    : `No hay una oferta semanal ni un código promocional público activo en este momento, pero hay ${volume.es.charAt(0).toLowerCase()}${volume.es.slice(1)} ¿Qué producto deseas que te coticemos?`;
+    ? [
+      `${limited.length ? 'These offers are active now' : 'Current savings'}:`,
+      ...lines,
+      `See this week's deal here: ${DEAL_PAGE_URL}`,
+      `If you have a promo code, type it in the cart at checkout. For anything else, call our support team at ${SUPPORT_PHONE}.`,
+    ].join('\n')
+    : [
+      `${limited.length ? 'Estas ofertas están activas ahora' : 'Ahorros actuales'}:`,
+      ...lines,
+      `Mira la oferta de la semana aquí: ${DEAL_PAGE_URL}`,
+      `Si tienes un código promocional, escríbelo en el carrito al pagar. Para cualquier otra consulta, llama a soporte al ${SUPPORT_PHONE}.`,
+    ].join('\n');
 }
 
 export function buildWhatsAppCatalogFormatReply(products = [], messageText = '', lang = 'es') {
