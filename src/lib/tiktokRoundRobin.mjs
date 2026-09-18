@@ -1,5 +1,9 @@
 /**
- * Who the next TikTok Instant Form lead goes to.
+ * Who the next TikTok Instant Form lead goes to — FALLBACK ONLY.
+ *
+ * Since 2026-09-18 TikTok leads use the same Team > Notification Settings
+ * rotation as /lp and /glp-1 (see /api/leads/tiktok). This fixed list is used
+ * only when that rotation is off or none of its agents can take leads.
  *
  * TikTok leads used to all go to one fixed agent (TIKTOK_ASSIGNEE_EMAIL in
  * tiktokLeadPosting.mjs). This spreads new leads across three agents instead —

@@ -63,7 +63,19 @@ test('the lead route and Team notification API share the admin Chatwoot switch',
   assert.match(leadRoute, /loadChatwootLeadEnabled\(supabase\)/);
   assert.match(adminRoute, /CHATWOOT_LEAD_SETTING_ID/);
   assert.match(adminRoute, /chatwootEnabled/);
-  assert.match(teamScreen, /Send Google Ads leads to Chatwoot/);
+  assert.match(teamScreen, /Send lead alerts to Chatwoot/);
+});
+
+test('TikTok form leads use the same Chatwoot switch, owner lookup and rotation as /lp and /glp-1', async () => {
+  const tiktok = await readFile(new URL('../src/app/api/leads/tiktok/route.js', import.meta.url), 'utf8');
+  assert.match(tiktok, /loadChatwootLeadEnabled\(supabase\)/);
+  assert.match(tiktok, /sendAdLeadToChatwoot\(/);
+  assert.match(tiktok, /resolveLeadOwnerDetailed\(/);
+  assert.match(tiktok, /HISTORY_RETRY_WINDOW_MS = 30_000/);
+  assert.match(tiktok, /resolveCampaignAgent\(supabase, landingSettings\)/);
+  assert.match(tiktok, /resolveRotationAgent\(supabase, landingSettings\)/);
+  // The old TikTok-only rotation is kept only as the fallback.
+  assert.ok(tiktok.indexOf('resolveRotationAgent(supabase') < tiktok.indexOf('resolveNextTikTokAgent(supabase)'));
 });
 
 test('creates a contact, conversation and incoming message in the configured inbox', async () => {

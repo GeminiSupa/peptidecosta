@@ -94,6 +94,6 @@ test('only a superadmin changes the rotation, from Team > Notification Settings'
   assert.match(patch, /verifyAdminSession\(request, \{ requireSuperadmin: true \}\)/);
   assert.ok(patch.indexOf('requireSuperadmin') < patch.indexOf('body.leadRotation'));
   assert.match(api, /leadRotation/);
-  assert.match(team, /Share Google Ads leads between agents/);
+  assert.match(team, /Share ad leads between agents/);
   assert.match(team, /body: JSON\.stringify\(\{ leadRotation: next \}\)/);
 });

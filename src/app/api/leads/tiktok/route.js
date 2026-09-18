@@ -19,14 +19,61 @@ import { resolveNextTikTokAgent } from '@/lib/tiktokRoundRobin.mjs';
 import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { chatwootLeadColumns, loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { resolveLeadOwnerDetailed } from '@/lib/leadOwner';
+import { loadLandingLeadSettings, resolveCampaignAgent } from '@/lib/leadCampaignAgent';
+import { resolveRotationAgent } from '@/lib/leadRotation.mjs';
+import { isUsableDestination, normalizeDestination } from '@/lib/notificationRecipients.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Room for the customer-history retries below (up to 30s) plus the save,
+// Chatwoot and alerts that follow — the same budget /api/leads/contact has.
+export const maxDuration = 60;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const RESPONSE_SLA_MINUTES = 15;
 
+// Same wait as the /lp and /glp-1 forms: if the database does not answer the
+// "has this person bought before?" check, keep asking for this long before
+// handing the lead to the round robin.
+const HISTORY_RETRY_WINDOW_MS = 30_000;
+const HISTORY_RETRY_GAP_MS = 3_000;
+
 const json = (body, status = 200) => NextResponse.json(body, { status });
+
+const lower = (value) => String(value ?? '').trim().toLowerCase();
+
+/**
+ * The owner's email and WhatsApp from their Team Management profile. Chatwoot
+ * matches agents by login email; the WhatsApp number is for the personal ping.
+ * CRM owners are stored by name, so the match is by name.
+ */
+async function loadAgentContact(supabase, { name = '', email = '' }) {
+  try {
+    const { data } = await supabase.from('admin_profiles').select('name, email, whatsapp_number');
+    const match = (data || []).find((profile) => (
+      (email && lower(profile.email) === lower(email))
+      || (!email && name && lower(profile.name) === lower(name))
+    ));
+    return {
+      email: lower(match?.email || email),
+      whatsapp: isUsableDestination('whatsapp', match?.whatsapp_number)
+        ? normalizeDestination('whatsapp', match.whatsapp_number)
+        : '',
+    };
+  } catch (error) {
+    console.warn('[leads/tiktok] Owner contact lookup failed:', error.message);
+    return { email: lower(email), whatsapp: '' };
+  }
+}
+
+const ASSIGNMENT_REASONS = {
+  order_history: 'Returning customer assigned to earliest completed order owner',
+  crm_lead: 'Already this agent\'s lead in the CRM',
+  fixed_agent: 'Landing-page leads are configured to go to a single agent',
+  rotation: 'Next agent in the landing-page lead rotation',
+  tiktok_rotation: 'Lead rotation off or empty; TikTok fallback rotation (Pollita, Dani, Korinne)',
+};
 
 /**
  * Last resort if none of the three rotation agents are active and working
@@ -77,13 +124,13 @@ async function loadExistingLead(supabase, identities) {
 // Only ever called for a lead that had no owner yet: one that already had an
 // agent keeps them (see the caller), so there is no "transferred" case left
 // to record here — a TikTok lead's ownership never changes once someone owns it.
-async function recordAssignment(supabase, { leadId, newAgent }) {
+async function recordAssignment(supabase, { leadId, newAgent, reason }) {
   const { error } = await supabase.from('lead_assignment_events').insert({
     lead_id: leadId,
     action: 'auto_assigned',
     previous_agent: null,
     new_agent: newAgent,
-    reason: 'TikTok form leads rotate between Pollita, Dani and Korinne',
+    reason: reason || ASSIGNMENT_REASONS.tiktok_rotation,
     actor_email: 'tiktok-leads@peptidescostarica.net',
   });
   if (error) console.warn('[leads/tiktok] Assignment audit skipped:', error.message);
@@ -162,13 +209,60 @@ export async function POST(request) {
     }
     const existing = existingResult.lead;
 
-    // A contact who already has a CRM lead keeps whoever owns it. Only a
-    // genuinely new lead is rotated — see tiktokRoundRobin.mjs for why.
+    // Owner, in the same order the /lp and /glp-1 forms use:
+    //   1. whoever already owns this contact's CRM lead
+    //   2. the agent who closed their earliest order, or who owns them as a
+    //      lead under another phone/email (resolveLeadOwnerDetailed)
+    //   3. the Team > Notification Settings rotation (or fixed agent)
+    //   4. only if that yields nobody: the old TikTok rotation, then Yese.
+    // A TikTok lead is never left unowned; the connector needs an agent.
     const previousOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
     let owner = previousOwner;
+    let assignmentSource = '';
     let rotatedAgent = null;
     if (!owner) {
-      rotatedAgent = await resolveNextTikTokAgent(supabase) || await loadFallbackAssignee(supabase);
+      const historyStartedAt = Date.now();
+      let historyAttempts = 0;
+      let resolvedOwner;
+      for (;;) {
+        historyAttempts += 1;
+        resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
+          phone,
+          email: lead.email,
+          label: 'leads/tiktok',
+        });
+        const elapsed = Date.now() - historyStartedAt;
+        if (!resolvedOwner.lookupFailed || elapsed + HISTORY_RETRY_GAP_MS > HISTORY_RETRY_WINDOW_MS) break;
+        await new Promise((resolve) => setTimeout(resolve, HISTORY_RETRY_GAP_MS));
+      }
+      if (resolvedOwner.lookupFailed) {
+        console.error(
+          `[leads/tiktok] ROUND ROBIN FALLBACK: Supabase did not answer the customer-history check after ${historyAttempts} tries `
+            + `(${Math.round((Date.now() - historyStartedAt) / 1000)}s), so this lead goes to the next person in the round robin. `
+            + `It may be a returning customer — check who sold to them before. email=${JSON.stringify(lead.email)} phone=${JSON.stringify(phone)}`,
+        );
+      }
+      if (resolvedOwner.agent) {
+        owner = resolvedOwner.agent;
+        assignmentSource = resolvedOwner.source;
+      }
+    }
+    if (!owner) {
+      try {
+        const landingSettings = await loadLandingLeadSettings(supabase);
+        const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
+        const picked = campaignAgent || await resolveRotationAgent(supabase, landingSettings);
+        if (picked?.name) {
+          rotatedAgent = picked;
+          assignmentSource = campaignAgent ? 'fixed_agent' : 'rotation';
+        }
+      } catch (assignError) {
+        console.warn('[leads/tiktok] Lead rotation lookup failed; using the TikTok fallback:', assignError.message);
+      }
+      if (!rotatedAgent) {
+        rotatedAgent = await resolveNextTikTokAgent(supabase) || await loadFallbackAssignee(supabase);
+        assignmentSource = 'tiktok_rotation';
+      }
       if (!rotatedAgent) return json({ error: 'tiktok_assignee_unavailable' }, 503);
       owner = rotatedAgent.name;
     }
@@ -229,21 +323,23 @@ export async function POST(request) {
     if (saveError) throw saveError;
 
     if (!existing || ownerChanged) {
-      await recordAssignment(supabase, { leadId: saved.id, newAgent: owner });
+      await recordAssignment(supabase, {
+        leadId: saved.id,
+        newAgent: owner,
+        reason: ASSIGNMENT_REASONS[assignmentSource],
+      });
     }
 
+    // Email for the Chatwoot assignment, WhatsApp for the personal ping below.
+    const ownerContact = await loadAgentContact(supabase, { name: owner, email: rotatedAgent?.email });
+
+    // Same as /lp and /glp-1: Chatwoot is the working inbox, the chat is
+    // assigned to the CRM owner, and the Team > Notification Settings switch
+    // turns it off. A Chatwoot outage never fails a lead that is already saved.
     let chatwootResult = null;
     const chatwootEnabled = await loadChatwootLeadEnabled(supabase);
     if (chatwootEnabled) {
-      let ownerEmail = rotatedAgent?.email || '';
-      if (owner && !ownerEmail) {
-        try {
-          const { data: profile } = await supabase.from('admin_profiles').select('email').ilike('name', owner).maybeSingle();
-          ownerEmail = profile?.email || '';
-        } catch (e) {
-          // ignore profile lookup failure
-        }
-      }
+      const ownerEmail = ownerContact.email;
       chatwootResult = await sendAdLeadToChatwoot({
         leadId: saved.id,
         name: displayName,
@@ -261,17 +357,19 @@ export async function POST(request) {
       if (!chatwootResult.sent) {
         console.error('[leads/tiktok] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
       }
-      try {
-        await writeDroppingMissingColumns(
-          chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
-          ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
-          (row) => (Object.keys(row).length
-            ? supabase.from('catalog_leads').update(row).eq('id', saved.id)
-            : Promise.resolve({ error: null })),
-        );
-      } catch (statusError) {
-        console.warn('[leads/tiktok] Chatwoot status not saved:', statusError.message);
-      }
+    }
+    // Recorded even when the switch is off ('off'), like /lp and /glp-1.
+    try {
+      const { error: statusError } = await writeDroppingMissingColumns(
+        chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
+        ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
+        (row) => (Object.keys(row).length
+          ? supabase.from('catalog_leads').update(row).eq('id', saved.id)
+          : Promise.resolve({ error: null })),
+      );
+      if (statusError) console.warn('[leads/tiktok] Chatwoot status not saved:', statusError.message);
+    } catch (statusError) {
+      console.warn('[leads/tiktok] Chatwoot status not saved:', statusError.message);
     }
 
     let notification = { tracked: true, status: 'pending' };
@@ -319,18 +417,19 @@ export async function POST(request) {
       console.error('[leads/tiktok] Immediate notification attempt failed:', notificationError);
     }
 
-    // The personal ping. Only fires on the rotation actually picking someone —
-    // never on a repeat submission to a lead that already has an owner — and
-    // only reaches that one agent's own number, not the shared lead-alert
-    // audience the outbox above already emailed.
-    if (rotatedAgent?.whatsapp) {
+    // The personal ping. Only fires when this submission gave the lead its
+    // owner (rotation or customer history) — never on a repeat submission to a
+    // lead that already had one — and only reaches that one agent's own number,
+    // not the shared lead-alert audience the outbox above already emailed.
+    const newlyAssigned = !previousOwner && Boolean(owner);
+    if (newlyAssigned && ownerContact.whatsapp) {
       try {
         const result = await sendLandingLeadWhatsAppAlerts(supabase, {
           name: displayName,
           phone,
           qualification: { category: lead.campaign || 'TikTok' },
           dueAt,
-          recipients: [{ label: rotatedAgent.name, destination: rotatedAgent.whatsapp }],
+          recipients: [{ label: owner, destination: ownerContact.whatsapp }],
         });
         if (result.error) console.warn('[leads/tiktok] Round-robin WhatsApp ping skipped:', result.error);
       } catch (whatsAppError) {

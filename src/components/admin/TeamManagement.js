@@ -151,16 +151,16 @@ function NotificationSettings({
   return (
     <div>
       <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: '0 0 16px 0', lineHeight: 1.5 }}>
-        Destinations for new-order alerts and optional lead copies. Google Ads leads from /lp and /glp-1 go to Chatwoot;
+        Destinations for new-order alerts and optional lead copies. Ad leads (/lp, /glp-1 and TikTok forms) go to Chatwoot;
         use the Google Ads checkbox here only for email or WhatsApp monitoring copies. Ordinary leads still notify their assigned agent directly.
       </p>
 
       <div style={panel}>
         <NotificationToggle
           icon={<MessageCircle size={15} />}
-          title="Send Google Ads leads to Chatwoot"
+          title="Send lead alerts to Chatwoot"
           hint={chatwootConfigured
-            ? 'Controls automatic Chatwoot conversations for /lp and /glp-1. Email and WhatsApp copies are controlled separately below.'
+            ? 'Controls automatic Chatwoot conversations for /lp, /glp-1 and TikTok form leads. Email and WhatsApp copies are controlled separately below.'
             : 'Chatwoot credentials are missing in Vercel. Add them before enabling this integration.'}
           checked={chatwootEnabled}
           disabled={!canEdit || chatwootSaving}
@@ -173,8 +173,8 @@ function NotificationSettings({
         <div style={panel}>
           <NotificationToggle
             icon={<Users size={15} />}
-            title="Share Google Ads leads between agents"
-            hint="Each new /lp or /glp-1 lead goes to the next ticked agent, in turn, even if they are offline. The Chatwoot chat is assigned to the same agent, and their sale counts for their commission."
+            title="Share ad leads between agents"
+            hint="Each new /lp, /glp-1 or TikTok form lead goes to the next ticked agent, in turn, even if they are offline. The Chatwoot chat is assigned to the same agent, and their sale counts for their commission."
             checked={leadRotation.enabled}
             disabled={!canEdit || leadRotationSaving}
             onChange={(enabled) => onLeadRotationChange({ enabled })}
