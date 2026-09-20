@@ -6021,6 +6021,14 @@ body {
         border-radius: 8px;
     }
 
+    /* The product shots are tall vials on a plain background, so cropping them
+       to a square showed the middle of the vial and cut off the cap and the
+       label. Fit the whole vial instead and let the tile show through. */
+    .suggested-product-img img {
+        object-fit: contain;
+        padding: 3px;
+    }
+
     .suggested-product-info {
         grid-area: info;
     }
