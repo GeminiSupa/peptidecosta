@@ -71,6 +71,13 @@ export function productToDbRow(product, priority) {
     free_bac_vials_per_item: Number.isFinite(Number(product.freeBacVialsPerItem)) && Number(product.freeBacVialsPerItem) > 0
       ? Math.floor(Number(product.freeBacVialsPerItem))
       : 1,
+    cost_usd: product.costUsd === '' || product.costUsd === null ? 0 : (Number(product.costUsd) || 0),
+    supplier_name: String(product.supplierName || '').trim() || null,
+    supplier_lead_time_days: Number.isFinite(Number(product.supplierLeadTimeDays)) && Number(product.supplierLeadTimeDays) > 0
+      ? Math.floor(Number(product.supplierLeadTimeDays))
+      : 14,
+    batch_number: String(product.batchNumber || '').trim() || null,
+    batch_expiry_date: product.batchExpiryDate ? crWallToIso(product.batchExpiryDate) : null,
   };
 
   if (isExistingProductId(product.id)) row.id = product.id;
@@ -102,6 +109,11 @@ const FINGERPRINT_FIELDS = Object.freeze([
   'free_bac_water',
   'free_bac_size_ml',
   'free_bac_vials_per_item',
+  'cost_usd',
+  'supplier_name',
+  'supplier_lead_time_days',
+  'batch_number',
+  'batch_expiry_date',
 ]);
 
 const blank = (value) => value === null || value === undefined || value === '';

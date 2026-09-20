@@ -2571,6 +2571,11 @@ Core Rules:
             descriptionEs: item.description_es || '',
             inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
             lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
+            costUsd: item.cost_usd !== undefined && item.cost_usd !== null ? item.cost_usd : 0,
+            supplierName: item.supplier_name || '',
+            supplierLeadTimeDays: item.supplier_lead_time_days || 14,
+            batchNumber: item.batch_number || '',
+            batchExpiryDate: item.batch_expiry_date || null,
             priority: item.priority || 0,
             hidden: hiddenNames.includes(item.product),
             // A product the admin has never touched shows the old name-based
@@ -5543,6 +5548,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
             handleToggleHidden={handleToggleHidden}
             changedProductIds={changedProductIds}
+            orders={orders}
           />
           </ErrorBoundary>
         )}
