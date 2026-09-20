@@ -5953,6 +5953,112 @@ body {
     outline: none;
 }
 
+/* --- Mobile search panel: full-width sheet, readable rows, real tap targets --- */
+@media (max-width: 640px) {
+    /* While the panel is open the row becomes a dedicated search mode:
+       the filter buttons step aside so the input and the results get the
+       whole width instead of ~60% of it. */
+    .search-row:has(.search-suggestions-dropdown) .filter-btn {
+        display: none;
+    }
+
+    .search-suggestions-dropdown {
+        margin-top: 6px;
+        padding: 12px;
+        gap: 12px;
+        border-radius: 16px;
+        max-height: min(50vh, 380px);
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .search-dropdown-title {
+        font-size: 0.72rem;
+    }
+
+    .search-close-btn {
+        width: 34px;
+        height: 34px;
+    }
+
+    .suggestions-section {
+        gap: 7px;
+    }
+
+    .popular-tags {
+        gap: 7px;
+    }
+
+    .popular-tag {
+        padding: 8px 14px;
+        font-size: 0.78rem;
+        min-height: 34px;
+    }
+
+    .suggested-products {
+        gap: 4px;
+    }
+
+    /* Two-line layout: the name owns the full width and the price sits
+       under it, so nothing is clipped to "G..." any more. */
+    .suggested-product-row {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr) auto;
+        grid-template-areas:
+            "img info btn"
+            "img price btn";
+        align-items: center;
+        column-gap: 11px;
+        row-gap: 1px;
+        padding: 9px 8px;
+        min-height: 62px;
+    }
+
+    .suggested-product-img {
+        grid-area: img;
+        width: 46px;
+        height: 46px;
+        border-radius: 8px;
+    }
+
+    .suggested-product-info {
+        grid-area: info;
+    }
+
+    .suggested-product-name {
+        font-size: 0.86rem;
+        line-height: 1.25;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .suggested-product-cat {
+        font-size: 0.68rem;
+        line-height: 1.3;
+    }
+
+    .suggested-product-price {
+        grid-area: price;
+        font-size: 0.86rem;
+        margin-right: 0;
+        text-align: left;
+    }
+
+    .suggested-quick-add-btn {
+        grid-area: btn;
+        width: 36px;
+        height: 36px;
+    }
+
+    .search-view-results {
+        min-height: 44px;
+        font-size: 0.8rem;
+    }
+}
+
 .catalog-results-anchor {
     scroll-margin-top: 18px;
 }
