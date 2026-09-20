@@ -356,8 +356,14 @@ const formatRelativeTime = (dateString) => {
 };
 
 
-/** Which CMS section cards the operator has folded away. */
-const CMS_COLLAPSED_KEY = 'cms_collapsed_sections';
+const CMS_WORKSPACE_KEY = 'cms_active_workspace';
+const CMS_WORKSPACES = [
+  { id: 'landing', label: 'Homepage', description: 'Hero, offers, trust and footer' },
+  { id: 'lead-form', label: 'Lead form', description: 'Questions, routing and consent' },
+  { id: 'pages', label: 'Site pages', description: 'About, FAQ, contact and more' },
+  { id: 'links', label: 'Business info', description: 'Phone, social and review links' },
+  { id: 'blog', label: 'Blog', description: 'Write and publish articles' },
+];
 
 export default function AdminPage() {
   const router = useRouter();
@@ -467,54 +473,37 @@ export default function AdminPage() {
   const [siteSettings, setSiteSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [cmsSearch, setCmsSearch] = useState('');
-  // Which section cards are folded away. Remembered across visits: an operator
-  // who only ever edits contact details should not have to re-collapse the
-  // other four hundred fields every time they open the tab.
-  const [collapsedCmsSections, setCollapsedCmsSections] = useState([]);
+  const [cmsWorkspace, setCmsWorkspace] = useState('landing');
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(safeLocalStorage.getItem(CMS_COLLAPSED_KEY) || '[]');
-      if (Array.isArray(stored)) setCollapsedCmsSections(stored.filter((id) => typeof id === 'string'));
+      const stored = safeLocalStorage.getItem(CMS_WORKSPACE_KEY);
+      if (CMS_WORKSPACES.some((workspace) => workspace.id === stored)) setCmsWorkspace(stored);
     } catch {
-      // A corrupt preference is not worth a broken tab; everything opens.
+      // A blocked or corrupt preference is not worth a broken editor.
     }
   }, []);
 
-  const toggleCmsSection = (id) => {
-    setCollapsedCmsSections((current) => {
-      const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
-      try {
-        safeLocalStorage.setItem(CMS_COLLAPSED_KEY, JSON.stringify(next));
-      } catch {
-        // Storage full or blocked; the fold still works for this visit.
-      }
-      return next;
-    });
+  const selectCmsWorkspace = (id) => {
+    setCmsWorkspace(id);
+    setCmsSearch('');
+    try {
+      safeLocalStorage.setItem(CMS_WORKSPACE_KEY, id);
+    } catch {
+      // The workspace still changes for this visit when storage is unavailable.
+    }
   };
 
-  /**
-   * A section card is only collapsed while nothing is being searched.
-   *
-   * A search that leaves its match inside a folded section finds nothing as far
-   * as the operator can see, which is worse than no search at all.
-   */
   const cmsSectionProps = (id) => {
-    const collapsed = !cmsSearch.trim() && collapsedCmsSections.includes(id);
-    return { 'data-cms-section': id, className: `cms-section${collapsed ? ' is-collapsed' : ''}` };
+    const active = cmsSearch.trim() || cmsWorkspace === id;
+    return { 'data-cms-section': id, className: `cms-section${active ? ' is-active' : ' is-inactive'}` };
   };
 
-  const cmsSectionHeading = (id, icon, title) => (
-    <button
-      type="button"
-      className="cms-section-toggle"
-      onClick={() => toggleCmsSection(id)}
-      aria-expanded={!collapsedCmsSections.includes(id)}
-    >
+  const cmsSectionHeading = (icon, title) => (
+    <div className="cms-section-title">
       {icon}
       <span>{title}</span>
-      <ChevronDown size={16} className="cms-section-chevron" />
-    </button>
+    </div>
   );
   const [cmsMatchCount, setCmsMatchCount] = useState(0);
 
@@ -6436,13 +6425,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: CMS */}
         {activeTab === 'cms' && (
-          <div className={`admin-orders-tab${cmsSearch.trim() ? ' cms-filtering' : ''}`}>
+          <div className={`admin-orders-tab cms-studio${cmsSearch.trim() ? ' cms-filtering' : ''}`}>
             {/* Generated rather than static: the rule has to carry the term the
                 operator typed. Empty while nothing is being searched. */}
             <style>{cmsSearchStyle(cmsSearch)}</style>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}><FileText size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom', color: '#38bdf8' }} /> Content Management System</h2>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <header className="cms-studio-header">
+              <div className="cms-studio-heading">
+                <div className="cms-studio-kicker"><FileText size={14} /> Website content</div>
+                <h2>Content studio</h2>
+                <p>Choose one area to edit, or search every setting at once.</p>
+              </div>
+              <button className="admin-btn cms-refresh-btn" onClick={loadAdminData}>
+                Refresh content
+              </button>
+              <div className="cms-command-bar">
                 <div className="cms-search-box">
                   <Search size={15} />
                   <input
@@ -6458,11 +6454,34 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </button>
                   )}
                 </div>
-                <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
-                  Refresh
-                </button>
               </div>
-            </div>
+              <nav className="cms-workspace-nav" aria-label="CMS workspaces">
+                {CMS_WORKSPACES.map((workspace) => {
+                  const WorkspaceIcon = workspace.id === 'landing' ? Zap
+                    : workspace.id === 'lead-form' ? Target
+                    : workspace.id === 'pages' ? FileText
+                    : workspace.id === 'links' ? Link2
+                    : LayoutDashboard;
+                  const active = !cmsSearch.trim() && cmsWorkspace === workspace.id;
+                  return (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      className={`cms-workspace-button${active ? ' is-active' : ''}`}
+                      onClick={() => selectCmsWorkspace(workspace.id)}
+                      aria-pressed={active}
+                    >
+                      <span className="cms-workspace-icon"><WorkspaceIcon size={17} /></span>
+                      <span>
+                        <strong>{workspace.label}</strong>
+                        <small>{workspace.description}</small>
+                      </span>
+                      <ChevronRight size={15} className="cms-workspace-arrow" />
+                    </button>
+                  );
+                })}
+              </nav>
+            </header>
 
             {cmsSearch.trim() && (
               <div className="cms-search-status" role="status">
@@ -6484,39 +6503,37 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             )}
 
-            <div className="cms-safety-panel">
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Draft preview</div>
-                <h3>{siteSettings?.heroTitleEn || 'Landing page title'}</h3>
-                <p>{siteSettings?.heroSubEn || 'Landing page subtitle preview'}</p>
-                <small>{siteSettings?.heroTextEn || 'Hero description will preview here as you edit.'}</small>
+            {!cmsSearch.trim() && (
+              <div className="cms-status-strip">
+                <div className="cms-status-item cms-status-preview">
+                  <span>Homepage preview</span>
+                  <strong>{siteSettings?.heroTitleEn || 'Landing page title'}</strong>
+                </div>
+                <div className="cms-status-item">
+                  <span>Publishing</span>
+                  <strong>Save each workspace separately</strong>
+                </div>
+                <div className="cms-status-item">
+                  <span>This session</span>
+                  <strong>
+                    {cmsChangeHistory.length === 0
+                      ? 'No saved changes yet'
+                      : `${cmsChangeHistory[0].area} saved at ${new Date(cmsChangeHistory[0].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                  </strong>
+                </div>
               </div>
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Publish safety</div>
-                <ul>
-                  <li>Use full https:// links for external URLs; internal links can start with /.</li>
-                  <li>Changes stay in draft fields until you press Save.</li>
-                  <li>Blog posts still use their own published toggle.</li>
-                </ul>
-              </div>
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Recent changes</div>
-                {cmsChangeHistory.length === 0 ? (
-                  <p>No changes saved in this session.</p>
-                ) : cmsChangeHistory.map(entry => (
-                  <p key={`${entry.area}-${entry.at}`}><strong>{entry.area}</strong> saved {new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                ))}
-              </div>
+            )}
+
+            <div className={`cms-lead-workspace${!cmsSearch.trim() && cmsWorkspace === 'lead-form' ? ' is-active' : ''}`}>
+              <LandingLeadSettingsManager />
             </div>
 
-            <LandingLeadSettingsManager />
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            <div className="cms-workspace-content">
               
               {/* Landing Page Settings */}
               <div {...cmsSectionProps('landing')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('landing', <Zap size={18} color="#f59e0b" />, 'Landing Page Controls')}
+                  {cmsSectionHeading(<Zap size={18} color="#f59e0b" />, 'Homepage content')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6659,7 +6676,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* Public Page Settings */}
               <div {...cmsSectionProps('pages')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('pages', <FileText size={18} color="#38bdf8" />, 'Phase 3 Public Pages')}
+                  {cmsSectionHeading(<FileText size={18} color="#38bdf8" />, 'Public pages')}
                 </h3>
 
                 {loadingSettings ? (
@@ -6891,7 +6908,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* Business Links Settings */}
               <div {...cmsSectionProps('links')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('links', <Link2 size={18} color="#3b82f6" />, 'Global Business Links')}
+                  {cmsSectionHeading(<Link2 size={18} color="#3b82f6" />, 'Business details')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6966,7 +6983,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div {...cmsSectionProps('blog')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <div className="cms-section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0 }}>
-                    {cmsSectionHeading('blog', <LayoutDashboard size={18} color="#10b981" />, 'Blog Post Manager')}
+                    {cmsSectionHeading(<LayoutDashboard size={18} color="#10b981" />, 'Blog posts')}
                   </h3>
                   <button className="admin-btn admin-btn-accent" onClick={() => setEditingBlog({ slug: '', title_en: '', title_es: '', excerpt_en: '', excerpt_es: '', content_en: '', content_es: '', image_url: '', published: false })}>
                     <Plus size={16} /> New Post

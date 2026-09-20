@@ -10719,28 +10719,81 @@
 }
 
 /* --------------------------------------------------------------------------
-   CMS search
-   --------------------------------------------------------------------------
-   The CMS renders every setting the site has, expanded, on one page. Changing
-   the support email meant scrolling past the promo ticker, the press band, the
-   offer cards and the blog editor. The filtering itself is a generated
-   stylesheet (see cmsSearch.mjs); these are the controls around it.
+   CMS content studio
    -------------------------------------------------------------------------- */
+.cms-studio {
+  --cms-line: rgba(148, 163, 184, .14);
+}
+
+.cms-studio-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 24px;
+  padding: 24px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(56, 189, 248, .16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, .14), transparent 38%),
+    linear-gradient(145deg, rgba(15, 31, 51, .98), rgba(10, 18, 32, .98));
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .18);
+}
+
+.cms-studio-heading h2 {
+  margin: 6px 0 5px;
+  color: #f8fafc;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  letter-spacing: -.025em;
+}
+
+.cms-studio-heading p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: .84rem;
+}
+
+.cms-studio-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #7dd3fc;
+  font-size: .7rem;
+  font-weight: 850;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.cms-refresh-btn {
+  align-self: start;
+  min-height: 38px;
+  padding: 8px 13px !important;
+  border-color: rgba(125, 211, 252, .2) !important;
+  background: rgba(56, 189, 248, .08) !important;
+  color: #bae6fd !important;
+}
+
+.cms-command-bar {
+  grid-column: 1 / -1;
+}
+
 .cms-search-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  min-width: 260px;
-  border-radius: 8px;
-  border: 1px solid rgba(56, 189, 248, .2);
-  background: rgba(56, 189, 248, .07);
+  min-height: 44px;
+  padding: 8px 12px;
+  width: 100%;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(2, 6, 23, .38);
   color: #38bdf8;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 
 .cms-search-box:focus-within {
   border-color: rgba(56, 189, 248, .55);
-  background: rgba(56, 189, 248, .12);
+  background: rgba(2, 6, 23, .58);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .08);
 }
 
 .cms-search-box input {
@@ -10777,9 +10830,9 @@
 .cms-search-box button:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
 
 .cms-search-status {
-  padding: 9px 13px;
+  padding: 11px 14px;
   margin-bottom: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(56, 189, 248, .2);
   background: rgba(56, 189, 248, .07);
   color: #bae6fd;
@@ -10787,53 +10840,176 @@
   font-weight: 600;
 }
 
-@media (max-width: 640px) {
-  .cms-search-box { min-width: 0; width: 100%; }
+.cms-workspace-nav {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
 }
 
-/* --------------------------------------------------------------------------
-   CMS collapsible sections
-   --------------------------------------------------------------------------
-   Search answers "where is that field". This answers the other half: the tab
-   is a 500-line scroll when you are just looking around. Folding a card hides
-   everything except its header row — which for the blog card carries the New
-   Post button, so the whole row is what stays rather than the heading alone.
-   -------------------------------------------------------------------------- */
-.cms-section.is-collapsed > *:not(.cms-section-head) { display: none; }
-.cms-section.is-collapsed .cms-section-head { margin-bottom: 0; }
-
-.cms-section-toggle {
-  display: flex;
+.cms-workspace-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+  gap: 10px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 10px 11px;
+  border: 1px solid var(--cms-line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .025);
+  color: #94a3b8;
   text-align: left;
   cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
 }
 
-.cms-section-toggle:hover { color: #38bdf8; }
-.cms-section-toggle:focus-visible { outline: 2px solid #38bdf8; outline-offset: 4px; border-radius: 4px; }
+.cms-workspace-button:hover {
+  border-color: rgba(125, 211, 252, .3);
+  background: rgba(56, 189, 248, .07);
+  color: #e0f2fe;
+  transform: translateY(-1px);
+}
 
-.cms-section-chevron {
-  margin-left: auto;
+.cms-workspace-button.is-active {
+  border-color: rgba(56, 189, 248, .46);
+  background: linear-gradient(145deg, rgba(14, 165, 233, .17), rgba(56, 189, 248, .07));
+  color: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .05);
+}
+
+.cms-workspace-button:focus-visible,
+.cms-refresh-btn:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+}
+
+.cms-workspace-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, .09);
+  color: #7dd3fc;
+}
+
+.cms-workspace-button.is-active .cms-workspace-icon {
+  background: rgba(56, 189, 248, .16);
+  color: #bae6fd;
+}
+
+.cms-workspace-button strong,
+.cms-workspace-button small {
+  display: block;
+}
+
+.cms-workspace-button strong {
+  color: inherit;
+  font-size: .78rem;
+  line-height: 1.25;
+}
+
+.cms-workspace-button small {
+  margin-top: 3px;
+  overflow: hidden;
   color: #64748b;
-  flex: 0 0 auto;
-  transition: transform .18s ease;
+  font-size: .65rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
 }
 
-.cms-section-toggle[aria-expanded="false"] .cms-section-chevron { transform: rotate(-90deg); }
+.cms-workspace-button.is-active small { color: #94a3b8; }
+.cms-workspace-arrow { color: #475569; }
+.cms-workspace-button.is-active .cms-workspace-arrow { color: #38bdf8; }
+
+.cms-status-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid var(--cms-line);
+  border-radius: 12px;
+  background: rgba(14, 22, 38, .72);
+}
+
+.cms-status-item {
+  min-width: 0;
+  padding: 11px 14px;
+  border-left: 1px solid var(--cms-line);
+}
+
+.cms-status-item:first-child { border-left: 0; }
+.cms-status-item span,
+.cms-status-item strong { display: block; }
+.cms-status-item span {
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.cms-status-item strong {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: .74rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cms-status-preview strong { color: #f8fafc; }
+
+.cms-workspace-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.cms-section.is-inactive,
+.cms-lead-workspace { display: none; }
+.cms-lead-workspace.is-active { display: block; }
+.cms-filtering .cms-section { display: block; }
+
+.cms-section {
+  box-shadow: 0 12px 34px rgba(2, 6, 23, .12);
+}
+
+.cms-section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #f8fafc;
+}
+
+.cms-section .cms-group {
+  border: 1px solid rgba(148, 163, 184, .09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+}
+
+@media (max-width: 1100px) {
+  .cms-workspace-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cms-workspace-button:last-child { grid-column: span 2; }
+}
+
+@media (max-width: 640px) {
+  .cms-studio-header { grid-template-columns: minmax(0, 1fr); padding: 18px; }
+  .cms-refresh-btn { grid-row: 2; justify-self: start; }
+  .cms-command-bar { grid-column: 1; }
+  .cms-workspace-nav { grid-template-columns: minmax(0, 1fr); }
+  .cms-workspace-button:last-child { grid-column: auto; }
+  .cms-status-strip { grid-template-columns: minmax(0, 1fr); }
+  .cms-status-item,
+  .cms-status-item:first-child { border-top: 1px solid var(--cms-line); border-left: 0; }
+  .cms-status-item:first-child { border-top: 0; }
+  .cms-workspace-content { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .cms-section-chevron { transition: none; }
+  .cms-search-box,
+  .cms-workspace-button { transition: none; }
+  .cms-workspace-button:hover { transform: none; }
 }
-
-/* A folded card is still a search target: filtering forces every section open
-   (see cmsSectionProps), so a match can never hide inside one. */
 
 /* Short windows: the Workspace box repeats the page's own heading, and on a
    window this short its height is better spent on the menu. Last in the file,
