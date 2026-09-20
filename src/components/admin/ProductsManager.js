@@ -98,6 +98,8 @@ export default function ProductsManager({
     String(p.discount || '') !== String(mobileEditProduct.discount || '') ||
     String(p.imageUrl || '') !== String(mobileEditProduct.imageUrl || '') ||
     String(p.coa || '') !== String(mobileEditProduct.coa || '') ||
+    String(p.coaExpiryDate || p.coa_expiry_date || '') !== String(mobileEditProduct.coaExpiryDate || mobileEditProduct.coa_expiry_date || '') ||
+    String(p.coaLotNumber || p.coa_lot_number || '') !== String(mobileEditProduct.coaLotNumber || mobileEditProduct.coa_lot_number || '') ||
     Boolean(p.freeBacWater) !== Boolean(mobileEditProduct.freeBacWater) ||
     String(p.freeBacSizeMl ?? 3) !== String(mobileEditProduct.freeBacSizeMl ?? 3) ||
     String(p.freeBacVialsPerItem ?? 1) !== String(mobileEditProduct.freeBacVialsPerItem ?? 1)
@@ -375,6 +377,8 @@ export default function ProductsManager({
                 <th style={{ minWidth: '180px' }}>Volume/Bulk Discount Info</th>
                 <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
                 <th style={{ minWidth: '220px' }}>COA URL Link</th>
+                <th style={{ minWidth: '130px' }}>COA Expiry Date</th>
+                <th style={{ minWidth: '130px' }}>COA Lot #</th>
                 <th style={{ width: '120px', textAlign: 'center' }}>Info/Blog</th>
                 <th style={{ minWidth: '200px' }}>Free BAC Water Gift</th>
                 <th style={{ width: '110px', textAlign: 'center' }}>Catalog Visibility</th>
@@ -799,6 +803,31 @@ export default function ProductsManager({
                     </div>
                   </td>
 
+                  {/* COA Expiry Date */}
+                  <td data-label="COA Expiry Date">
+                    <input 
+                      type="date" 
+                      className="cell-input"
+                      value={p.coaExpiryDate || p.coa_expiry_date || ''}
+                      onChange={(e) => handleCellChange(p.id, 'coaExpiryDate', e.target.value)}
+                      style={{ background: 'transparent', color: '#fff', border: 'none', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                    />
+                  </td>
+
+                  {/* COA Lot Number */}
+                  <td data-label="COA Lot #">
+                    <div 
+                      contentEditable 
+                      suppressContentEditableWarning
+                      className="cell-editable"
+                      placeholder="LOT-..."
+                      onBlur={(e) => handleCellChange(p.id, 'coaLotNumber', e.target.innerText)}
+                      style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}
+                    >
+                      {p.coaLotNumber || p.coa_lot_number || ''}
+                    </div>
+                  </td>
+
                   {/* Info/Blog description edit button */}
                   <td data-label="Info/Blog" style={{ textAlign: 'center' }}>
                     <button
@@ -1066,6 +1095,16 @@ export default function ProductsManager({
                 <span>COA URL</span>
                 <input value={mobileEditProduct.coa || ''} onChange={(e) => updateMobileDraft('coa', e.target.value)} />
               </label>
+              <div className="product-mobile-field-grid">
+                <label>
+                  <span>COA Expiry Date</span>
+                  <input type="date" value={mobileEditProduct.coaExpiryDate || mobileEditProduct.coa_expiry_date || ''} onChange={(e) => updateMobileDraft('coaExpiryDate', e.target.value)} />
+                </label>
+                <label>
+                  <span>COA Lot #</span>
+                  <input value={mobileEditProduct.coaLotNumber || mobileEditProduct.coa_lot_number || ''} onChange={(e) => updateMobileDraft('coaLotNumber', e.target.value)} />
+                </label>
+              </div>
               <div className="product-mobile-secondary-actions">
                 <button type="button" className="admin-btn" onClick={openMobileDescriptionEditor}>
                   <FileText size={14} />

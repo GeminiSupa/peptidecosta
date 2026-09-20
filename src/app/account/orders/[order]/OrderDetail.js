@@ -59,6 +59,27 @@ export default function OrderDetail({ orderNumber }) {
     return () => { active = false; };
   }, [user, orderNumber]);
 
+  const [productCoas, setProductCoas] = useState({});
+
+  useEffect(() => {
+    const supabase = getCustomerSupabase();
+    if (!supabase) return;
+    supabase
+      .from('products')
+      .select('product, coa')
+      .not('coa', 'is', null)
+      .then(({ data }) => {
+        if (!data) return;
+        const map = {};
+        data.forEach((p) => {
+          if (p.product && p.coa && p.coa.trim() !== '') {
+            map[p.product.toLowerCase().trim()] = p.coa.trim();
+          }
+        });
+        setProductCoas(map);
+      });
+  }, []);
+
   const items = orderItems(order, lang);
   const itemCount = billableItemCount(items);
 
@@ -117,15 +138,37 @@ export default function OrderDetail({ orderNumber }) {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => (
-                  <tr key={`${item?.product}-${index}`}>
-                    <td>{item?.product}</td>
-                    <td>{item?.qty}</td>
-                    {/* A gift reads as free, not as the em dash an unpriced
-                        line would otherwise get. */}
-                    <td>{isGiftLine(item) ? (isEn ? 'Free' : 'Gratis') : formatItemPrice(item?.price, order.currency)}</td>
-                  </tr>
-                ))}
+                {items.map((item, index) => {
+                  const coaUrl = item?.coa || productCoas[String(item?.product || '').toLowerCase().trim()];
+                  const validCoaUrl = coaUrl && coaUrl !== '—' && coaUrl.trim() !== ''
+                    ? (coaUrl.startsWith('http') ? coaUrl : `https://${coaUrl}`)
+                    : null;
+
+                  return (
+                    <tr key={`${item?.product}-${index}`}>
+                      <td>
+                        <div style={{ fontWeight: 600 }}>{item?.product}</div>
+                        {validCoaUrl && (
+                          <div style={{ marginTop: 4 }}>
+                            <a
+                              href={validCoaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="account-btn-link"
+                              style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#38bdf8' }}
+                            >
+                              📄 {isEn ? 'Download COA' : 'Descargar COA'}
+                            </a>
+                          </div>
+                        )}
+                      </td>
+                      <td>{item?.qty}</td>
+                      {/* A gift reads as free, not as the em dash an unpriced
+                          line would otherwise get. */}
+                      <td>{isGiftLine(item) ? (isEn ? 'Free' : 'Gratis') : formatItemPrice(item?.price, order.currency)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 

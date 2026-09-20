@@ -21,6 +21,7 @@ import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import { CUSTOMER_SEGMENTS, getCustomerSegments } from '@/lib/customerSegmentation.mjs';
 
 const takeCustomerHandoffSearch = () => {
   if (typeof window === 'undefined') return '';
@@ -176,6 +177,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
   const [exportLoading, setExportLoading] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
+  const [segmentFilter, setSegmentFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
   
   // Sorting State
@@ -457,6 +459,12 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
       if (filterTab === 'customers' && c.isLead) return false;
       if (filterTab === 'leads' && (!c.isLead || c.isCrmLead)) return false;
       if (filterTab === 'crm_leads' && !c.isCrmLead) return false;
+
+      // Segment filter
+      if (segmentFilter !== 'all') {
+        const segs = getCustomerSegments(c);
+        if (!segs.includes(segmentFilter)) return false;
+      }
       
       // Agent filter
       if (agentFilter !== 'all') {
@@ -485,7 +493,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
     });
 
     return result;
-  }, [customers, searchTerm, filterTab, agentFilter, sortField, sortDir]);
+  }, [customers, searchTerm, filterTab, segmentFilter, agentFilter, sortField, sortDir]);
 
 
 
@@ -1512,6 +1520,36 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
           </select>
           </div>
         </div>
+      </div>
+
+      {/* Customer Segment Targeting Row */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '8px 20px', background: 'rgba(15, 23, 42, 0.4)', borderBottom: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '4px', whiteSpace: 'nowrap' }}>
+          Target Segments:
+        </span>
+        <button
+          className={`crm-tab ${segmentFilter === 'all' ? 'active' : ''}`}
+          onClick={() => { setSegmentFilter('all'); setCurrentPage(1); }}
+          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+        >
+          All Segments
+        </button>
+        {CUSTOMER_SEGMENTS.map(seg => {
+          const count = customers.filter(c => getCustomerSegments(c).includes(seg.key)).length;
+          return (
+            <button
+              key={seg.key}
+              className={`crm-tab ${segmentFilter === seg.key ? 'active' : ''}`}
+              onClick={() => { setSegmentFilter(seg.key); setCurrentPage(1); }}
+              style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+              title={seg.description}
+            >
+              <span>{seg.icon}</span>
+              <span>{seg.label}</span>
+              <span className="crm-tab-badge">{count}</span>
+            </button>
+          );
+        })}
       </div>
 
 
