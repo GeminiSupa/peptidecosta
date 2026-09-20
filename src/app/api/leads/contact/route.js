@@ -492,7 +492,16 @@ export async function POST(request) {
       try {
         const { error: statusError } = await writeDroppingMissingColumns(
           chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
-          ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
+          [
+            'chatwoot_status',
+            'chatwoot_error',
+            'chatwoot_conversation_id',
+            'chatwoot_contact_id',
+            'chatwoot_conversation_status',
+            'chatwoot_assignee_email',
+            'chatwoot_conversation_url',
+            'chatwoot_synced_at',
+          ],
           (row) => (Object.keys(row).length
             ? supabase.from('catalog_leads').update(row).eq('id', leadId)
             : Promise.resolve({ error: null })),

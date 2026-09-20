@@ -34,8 +34,24 @@ test('the phone is read from the landing-page note label', () => {
 test('each delivery outcome is saved as a status the Leads tab can show', () => {
   const at = '2026-09-17T08:00:00.000Z';
   assert.deepEqual(
-    chatwootLeadColumns({ configured: true, sent: true, conversationUrl: 'https://c/x/1' }, { at }),
-    { chatwoot_status: 'sent', chatwoot_error: null, chatwoot_conversation_url: 'https://c/x/1', chatwoot_synced_at: at },
+    chatwootLeadColumns({
+      configured: true,
+      sent: true,
+      conversationId: 60,
+      contactId: 50,
+      assigneeEmail: 'agent@example.com',
+      conversationUrl: 'https://c/x/1',
+    }, { at }),
+    {
+      chatwoot_status: 'sent',
+      chatwoot_error: null,
+      chatwoot_conversation_id: 60,
+      chatwoot_contact_id: 50,
+      chatwoot_conversation_status: 'open',
+      chatwoot_assignee_email: 'agent@example.com',
+      chatwoot_conversation_url: 'https://c/x/1',
+      chatwoot_synced_at: at,
+    },
   );
   assert.equal(chatwootLeadColumns({ configured: true, sent: false, error: 'Phone number should be in e164 format' }).chatwoot_status, 'failed');
   assert.equal(chatwootLeadColumns({ configured: true, sent: false, error: 'boom' }).chatwoot_error, 'boom');

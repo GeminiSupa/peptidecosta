@@ -146,6 +146,10 @@ export function chatwootLeadColumns(result, { enabled = true, at = new Date().to
   return {
     chatwoot_status: status,
     chatwoot_error: clean(result?.error || result?.assignmentError).slice(0, 500) || null,
+    chatwoot_conversation_id: result?.conversationId || null,
+    chatwoot_contact_id: result?.contactId || null,
+    chatwoot_conversation_status: result?.sent ? 'open' : null,
+    chatwoot_assignee_email: clean(result?.assigneeEmail) || null,
     chatwoot_conversation_url: result?.conversationUrl || null,
     chatwoot_synced_at: at,
   };
@@ -232,6 +236,7 @@ export async function sendAdLeadToChatwoot({
       conversationUrl: `${config.baseUrl}/app/accounts/${config.accountId}/conversations/${conversation.id}`,
       messageId: message?.id || null,
       assigneeId: assignment.assigneeId,
+      assigneeEmail: assignment.assigneeId ? clean(assigneeEmail).toLowerCase() : null,
       ...(assignment.error ? { assignmentError: assignment.error } : {}),
     };
   } catch (error) {

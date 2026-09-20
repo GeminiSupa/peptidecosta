@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   Users, Trash2, Upload, Brain, Sparkles, 
   Mail, MessageCircle, Globe, Target, Flame, Snowflake, ArrowDownUp, Columns3, List, Clock, User, ChevronDown, UserPlus, Lock,
-  BellRing, CircleCheck, TriangleAlert, RotateCw,
+  BellRing, CircleCheck, TriangleAlert, RotateCw, ExternalLink,
 } from 'lucide-react';
 import {
   buildAgentHistory,
@@ -212,6 +212,21 @@ export default function LeadsManager({
     return source.includes('facebook') || source.includes('google') || source.includes('ads') || medium.includes('ad') || medium.includes('cpc');
   }).length;
   const organicLeads = Math.max(0, totalLeads - adsLeads - chatLeads);
+  const chatwootLeads = safeLeads.filter(l => l.chatwoot_conversation_id || l.chatwoot_conversation_url);
+  const chatwootOpen = chatwootLeads.filter(l => ['open', 'pending', 'snoozed'].includes(String(l.chatwoot_conversation_status || '').toLowerCase())).length;
+  const chatwootResolved = chatwootLeads.filter(l => String(l.chatwoot_conversation_status || '').toLowerCase() === 'resolved').length;
+  const chatwootResponseSamples = chatwootLeads
+    .map(l => Number(l.chatwoot_first_response_seconds))
+    .filter(value => Number.isFinite(value) && value >= 0);
+  const chatwootAverageResponse = chatwootResponseSamples.length
+    ? Math.round(chatwootResponseSamples.reduce((sum, value) => sum + value, 0) / chatwootResponseSamples.length)
+    : null;
+  const formatResponseTime = (seconds) => {
+    if (!Number.isFinite(seconds)) return '—';
+    if (seconds < 60) return `${seconds}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+    return `${(seconds / 3600).toFixed(seconds < 7200 ? 1 : 0)}h`;
+  };
 
   // WhatsApp marketing opt-in (only these may receive promo WhatsApp messages).
   const optInLeads = safeLeads.filter(l => l.whatsapp_consent === true).length;
@@ -401,6 +416,38 @@ export default function LeadsManager({
           >
             <RotateCw size={12} /> {retryingNotificationId === job.id ? 'Retrying…' : 'Retry'}
           </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderChatwootActivity = (lead) => {
+    if (!lead.chatwoot_conversation_id && !lead.chatwoot_conversation_url) {
+      return <span className="lead-alert-muted">—</span>;
+    }
+    const status = String(lead.chatwoot_conversation_status || 'sent').toLowerCase();
+    const tone = status === 'resolved' ? 'success' : status === 'open' ? 'pending' : 'warning';
+    const response = Number(lead.chatwoot_first_response_seconds);
+    const detail = [
+      lead.chatwoot_assignee_name ? `Assigned to ${lead.chatwoot_assignee_name}` : null,
+      Number.isFinite(response) ? `First response ${formatResponseTime(response)}` : 'Awaiting first response',
+      Number(lead.chatwoot_message_count) ? `${lead.chatwoot_message_count} messages` : null,
+    ].filter(Boolean).join(' · ');
+    return (
+      <div className="lead-alert-control">
+        <span className={`lead-alert-status ${tone}`} title={detail}>
+          <MessageCircle size={12} /> {status.replace(/_/g, ' ')}
+        </span>
+        <span style={{ color: '#94a3b8', fontSize: '.67rem' }}>{detail}</span>
+        {lead.chatwoot_conversation_url && (
+          <a
+            href={lead.chatwoot_conversation_url}
+            target="_blank"
+            rel="noreferrer"
+            style={{ color: '#7dd3fc', fontSize: '.68rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+          >
+            Open in Chatwoot <ExternalLink size={10} />
+          </a>
         )}
       </div>
     );
@@ -886,6 +933,14 @@ export default function LeadsManager({
           <div style={{ fontSize: '0.7rem', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Converted</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#10b981' }}>{convertedLeads}</div>
         </div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(56, 189, 248, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(56, 189, 248, 0.15)' }} title={`${chatwootResolved} resolved Chatwoot conversations`}>
+          <div style={{ fontSize: '0.7rem', color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Chatwoot Open</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#7dd3fc' }}>{chatwootOpen}</div>
+        </div>
+        <div style={{ flex: '1 1 120px', background: 'rgba(167, 139, 250, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(167, 139, 250, 0.15)' }} title={`${chatwootResponseSamples.length} conversations with a measured first response`}>
+          <div style={{ fontSize: '0.7rem', color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avg First Reply</div>
+          <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#c4b5fd' }}>{formatResponseTime(chatwootAverageResponse)}</div>
+        </div>
         <div style={{ flex: '1 1 120px', background: 'rgba(34, 197, 94, 0.08)', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(34, 197, 94, 0.15)' }} title="Only opted-in contacts may receive WhatsApp promotions">
           <div style={{ fontSize: '0.7rem', color: '#22c55e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WA Opt-in</div>
           <div style={{ fontSize: '1.3rem', fontWeight: 'bold', color: '#22c55e' }}>
@@ -1199,6 +1254,7 @@ export default function LeadsManager({
                 <th style={{ padding: '10px 12px' }}>Attribution</th>
                 <th style={{ padding: '10px 12px' }}>Agent</th>
                 <th style={{ padding: '10px 12px' }}>Staff Alerts</th>
+                <th style={{ padding: '10px 12px', minWidth: '170px' }}>Chatwoot</th>
                 <th style={{ padding: '10px 12px' }}>Last Contacted</th>
                 <th style={{ padding: '10px 12px' }}>Browsing History</th>
                 <th style={{ padding: '10px 12px', textAlign: 'right' }}>Actions</th>
@@ -1459,6 +1515,9 @@ export default function LeadsManager({
                     </td>
                     <td data-label="Staff Alerts" style={{ padding: '10px 12px' }}>
                       {renderLeadNotificationStatus(lead)}
+                    </td>
+                    <td data-label="Chatwoot" style={{ padding: '10px 12px' }}>
+                      {renderChatwootActivity(lead)}
                     </td>
                     <td data-label="Last Contacted" style={{ padding: '10px 12px' }}>
                       {(() => {

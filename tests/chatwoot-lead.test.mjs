@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   buildChatwootLeadMessage,
+  chatwootLeadColumns,
   loadChatwootLeadEnabled,
   sendAdLeadToChatwoot,
 } from '../src/lib/chatwootLead.mjs';
@@ -162,6 +163,21 @@ test('only real international numbers are sent to Chatwoot as the contact phone'
   assert.equal(chatwootPhone('03001234567'), '');
   assert.equal(chatwootPhone('1234567890123456'), '');
   assert.equal(chatwootPhone(''), '');
+});
+
+test('outbound delivery records identifiers needed by the reverse webhook sync', () => {
+  const columns = chatwootLeadColumns({
+    configured: true,
+    sent: true,
+    conversationId: 60,
+    contactId: 50,
+    conversationUrl: 'https://chat.example.com/app/accounts/12/conversations/60',
+    assigneeEmail: 'pollita@example.com',
+  }, { at: '2026-09-20T12:00:00.000Z' });
+  assert.equal(columns.chatwoot_conversation_id, 60);
+  assert.equal(columns.chatwoot_contact_id, 50);
+  assert.equal(columns.chatwoot_conversation_status, 'open');
+  assert.equal(columns.chatwoot_assignee_email, 'pollita@example.com');
 });
 
 test('a phone Chatwoot refuses still opens the chat, without the phone on the contact', async () => {
