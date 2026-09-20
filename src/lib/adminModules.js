@@ -21,6 +21,7 @@ export const ADMIN_MODULES = [
   { id: 'carts', label: 'Carts', title: 'Carts', group: 'Sales & Marketing' },
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
+  { id: 'reorder_tracking', label: 'Reorder Tracking', title: 'Reorder Tracking', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },

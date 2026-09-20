@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
+import ReorderTrackingPanel from '@/components/admin/ReorderTrackingPanel';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
 import TestPaymentPanel from '@/components/admin/TestPaymentPanel';
@@ -7039,6 +7040,25 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             />
               </ErrorBoundary>
             )}
+          </div>
+        )}
+
+        {activeTab === 'reorder_tracking' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <ReorderTrackingPanel
+                orders={orders}
+                onOpenCustomerProfile={(customer) => {
+                  setActiveTab('customers');
+                  try {
+                    const searchVal = customer.customer_email || customer.customer_phone || customer.customer_name || '';
+                    if (searchVal) window.localStorage.setItem('admin_customer_search', searchVal);
+                  } catch (e) {}
+                }}
+                onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)}
+                onCreateOrder={openManualOrder}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
