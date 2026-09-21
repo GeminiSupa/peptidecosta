@@ -8,8 +8,34 @@ import {
   normalizeDestination,
 } from '@/lib/notificationRecipients.mjs';
 import { CHATWOOT_LEAD_SETTING_ID } from '@/lib/chatwootLead.mjs';
+import { LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
+import { eligibleRotationAgents } from '@/lib/leadRotation.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
+
+/**
+ * The Google Ads lead round robin, as the Team screen shows it: on/off, who is
+ * ticked, and everyone who could be. It lives inside the landing lead settings
+ * so the lead route reads one row.
+ */
+async function loadLeadRotation(supabase) {
+  const [{ data: settingRow }, { data: profiles }] = await Promise.all([
+    supabase.from('site_settings').select('value').eq('id', LANDING_LEAD_SETTINGS_ID).maybeSingle(),
+    supabase.from('admin_profiles').select('name, email, status, permissions'),
+  ]);
+  const settings = normalizeLandingLeadSettings(settingRow?.value);
+  const agents = eligibleRotationAgents(profiles, (profiles || []).map((profile) => profile.email))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    settings,
+    rotation: {
+      enabled: settings.assignmentMode === 'rotation',
+      agentEmails: settings.rotationAgentEmails,
+      agents,
+    },
+  };
+}
 
 const MIGRATION_HINT = 'Run add-notification-recipients.sql to create the notification_recipients table.';
 
@@ -85,10 +111,18 @@ export async function GET(request) {
       && process.env.CHATWOOT_API_ACCESS_TOKEN
   );
 
+  let leadRotation = null;
+  try {
+    ({ rotation: leadRotation } = await loadLeadRotation(supabase));
+  } catch (rotationError) {
+    console.warn('[notification-recipients] Lead rotation read failed:', rotationError.message);
+  }
+
   return NextResponse.json({
     recipients: data || [],
     tableReady: true,
     chatwoot: { enabled: chatwootEnabled, configured: chatwootConfigured },
+    leadRotation,
   });
 }
 
@@ -187,6 +221,30 @@ export async function PATCH(request) {
       }
       return NextResponse.json({ chatwoot: { enabled } });
     }
+    if (body?.leadRotation && typeof body.leadRotation === 'object') {
+      const supabase = getSupabaseAdmin();
+      const { settings, rotation } = await loadLeadRotation(supabase);
+      const allowed = new Set(rotation.agents.map((agent) => agent.email));
+      const agentEmails = (Array.isArray(body.leadRotation.agentEmails) ? body.leadRotation.agentEmails : rotation.agentEmails)
+        .map((email) => String(email || '').trim().toLowerCase())
+        .filter((email) => allowed.has(email));
+      const enabled = body.leadRotation.enabled === true;
+      // Switching off leaves new leads unassigned for anyone to claim, not
+      // quietly back on whichever single agent was chosen months ago.
+      const value = normalizeLandingLeadSettings({
+        ...settings,
+        assignmentMode: enabled ? 'rotation' : (settings.assignmentMode === 'rotation' ? 'unassigned' : settings.assignmentMode),
+        rotationAgentEmails: agentEmails,
+      });
+      const { error } = await supabase.from('site_settings').upsert({ id: LANDING_LEAD_SETTINGS_ID, value });
+      if (error) {
+        console.error('[notification-recipients] Lead rotation save failed:', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({
+        leadRotation: { ...rotation, enabled: value.assignmentMode === 'rotation', agentEmails: value.rotationAgentEmails },
+      });
+    }
     if (!body?.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
     const patch = {};
@@ -254,14 +312,17 @@ export async function DELETE(request) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from('notification_recipients').delete().eq('id', id);
+  const binned = await moveToBin(
+    { table: 'notification_recipients', ids: [id], actor: actorFrom(auth.profile) },
+    supabase,
+  );
 
-  if (error) {
-    if (isMissingRecipientsTable(error)) {
+  if (!binned.ok) {
+    if (isMissingRecipientsTable({ message: binned.error })) {
       return NextResponse.json({ error: MIGRATION_HINT }, { status: 503 });
     }
-    console.error('[notification-recipients] Delete failed:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[notification-recipients] Delete failed:', binned.error);
+    return NextResponse.json({ error: binned.error }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

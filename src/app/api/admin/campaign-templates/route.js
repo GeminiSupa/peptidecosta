@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,10 +87,12 @@ export async function DELETE(request) {
   if (!id) return NextResponse.json({ error: 'A template id is required' }, { status: 400 });
 
   try {
-    const { error } = await getSupabaseAdmin().from('email_templates').delete().eq('id', id);
-    if (error) {
-      if (isMissingTableError(error)) return NextResponse.json({ error: MIGRATION_HINT }, { status: 503 });
-      throw error;
+    const binned = await moveToBin({ table: 'email_templates', ids: [id], actor: actorFrom(auth.profile) });
+    if (!binned.ok) {
+      if (isMissingTableError({ message: binned.error })) {
+        return NextResponse.json({ error: MIGRATION_HINT }, { status: 503 });
+      }
+      throw new Error(binned.error);
     }
     return NextResponse.json({ success: true });
   } catch (err) {

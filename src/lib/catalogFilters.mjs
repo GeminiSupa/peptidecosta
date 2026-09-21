@@ -12,7 +12,28 @@ export function readCatalogParams(search = '') {
   return {
     search: (params.get('search') || '').trim() || null,
     category: (params.get('category') || '').trim() || null,
+    // `?deal=week` narrows the catalog to this week's deal products — the
+    // "Build my order" button on /bulk-discounts sends it.
+    dealOnly: (params.get('deal') || '').trim().toLowerCase() === 'week',
+    // `?cart=open` opens the cart drawer, which holds checkout. The Deal of the
+    // Week page's Checkout button sends it, so the customer lands in checkout
+    // with the cart they built there instead of on the product list.
+    openCart: (params.get('cart') || '').trim().toLowerCase() === 'open',
   };
+}
+
+/**
+ * Product names compared loosely: some are stored with a non-breaking space
+ * ("GLP-1 10mg"), so every kind of space is collapsed before comparing.
+ */
+export function catalogNameKey(value = '') {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** Whether a catalog product is one of the weekly deal's products. */
+export function productInDeal(product = {}, dealProductNames = []) {
+  const wanted = new Set((dealProductNames || []).map(catalogNameKey));
+  return wanted.has(catalogNameKey(product?.product));
 }
 
 /**

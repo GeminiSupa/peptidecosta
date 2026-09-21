@@ -2,6 +2,7 @@
 import { isoToCrWall, formatCrDate } from '@/lib/crTime.mjs';
 import { cmsFieldMatches, cmsSearchStyle, cmsSearchText } from '@/lib/cmsSearch.mjs';
 import { safeLocalStorage } from '@/lib/storage';
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 
 import '@/app/admin.css';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -36,8 +37,11 @@ import {
 } from 'lucide-react';
 import AnalyticsDashboard from '@/components/admin/AnalyticsDashboard';
 import CustomersCRM from '@/components/admin/CustomersCRM';
+import ReorderTrackingPanel from '@/components/admin/ReorderTrackingPanel';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import RecycleBin from '@/components/admin/RecycleBin';
+import { deleteToBin } from '@/lib/adminApi';
 import TestPaymentPanel from '@/components/admin/TestPaymentPanel';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
@@ -150,7 +154,6 @@ const FacebookIcon = ({ size = 14, style, ...props }) => (
   </svg>
 );
 
-const FALLBACK_EXCHANGE_RATE = 454.48;
 // How often an open WhatsApp inbox silently re-fetches conversations.
 const WHATSAPP_REFRESH_MS = 15 * 1000;
 
@@ -355,8 +358,14 @@ const formatRelativeTime = (dateString) => {
 };
 
 
-/** Which CMS section cards the operator has folded away. */
-const CMS_COLLAPSED_KEY = 'cms_collapsed_sections';
+const CMS_WORKSPACE_KEY = 'cms_active_workspace';
+const CMS_WORKSPACES = [
+  { id: 'landing', label: 'Homepage', description: 'Hero, offers, trust and footer' },
+  { id: 'lead-form', label: 'Lead form', description: 'Questions, routing and consent' },
+  { id: 'pages', label: 'Site pages', description: 'About, FAQ, contact and more' },
+  { id: 'links', label: 'Business info', description: 'Phone, social and review links' },
+  { id: 'blog', label: 'Blog', description: 'Write and publish articles' },
+];
 
 export default function AdminPage() {
   const router = useRouter();
@@ -466,54 +475,37 @@ export default function AdminPage() {
   const [siteSettings, setSiteSettings] = useState(null);
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [cmsSearch, setCmsSearch] = useState('');
-  // Which section cards are folded away. Remembered across visits: an operator
-  // who only ever edits contact details should not have to re-collapse the
-  // other four hundred fields every time they open the tab.
-  const [collapsedCmsSections, setCollapsedCmsSections] = useState([]);
+  const [cmsWorkspace, setCmsWorkspace] = useState('landing');
 
   useEffect(() => {
     try {
-      const stored = JSON.parse(safeLocalStorage.getItem(CMS_COLLAPSED_KEY) || '[]');
-      if (Array.isArray(stored)) setCollapsedCmsSections(stored.filter((id) => typeof id === 'string'));
+      const stored = safeLocalStorage.getItem(CMS_WORKSPACE_KEY);
+      if (CMS_WORKSPACES.some((workspace) => workspace.id === stored)) setCmsWorkspace(stored);
     } catch {
-      // A corrupt preference is not worth a broken tab; everything opens.
+      // A blocked or corrupt preference is not worth a broken editor.
     }
   }, []);
 
-  const toggleCmsSection = (id) => {
-    setCollapsedCmsSections((current) => {
-      const next = current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id];
-      try {
-        safeLocalStorage.setItem(CMS_COLLAPSED_KEY, JSON.stringify(next));
-      } catch {
-        // Storage full or blocked; the fold still works for this visit.
-      }
-      return next;
-    });
+  const selectCmsWorkspace = (id) => {
+    setCmsWorkspace(id);
+    setCmsSearch('');
+    try {
+      safeLocalStorage.setItem(CMS_WORKSPACE_KEY, id);
+    } catch {
+      // The workspace still changes for this visit when storage is unavailable.
+    }
   };
 
-  /**
-   * A section card is only collapsed while nothing is being searched.
-   *
-   * A search that leaves its match inside a folded section finds nothing as far
-   * as the operator can see, which is worse than no search at all.
-   */
   const cmsSectionProps = (id) => {
-    const collapsed = !cmsSearch.trim() && collapsedCmsSections.includes(id);
-    return { 'data-cms-section': id, className: `cms-section${collapsed ? ' is-collapsed' : ''}` };
+    const active = cmsSearch.trim() || cmsWorkspace === id;
+    return { 'data-cms-section': id, className: `cms-section${active ? ' is-active' : ' is-inactive'}` };
   };
 
-  const cmsSectionHeading = (id, icon, title) => (
-    <button
-      type="button"
-      className="cms-section-toggle"
-      onClick={() => toggleCmsSection(id)}
-      aria-expanded={!collapsedCmsSections.includes(id)}
-    >
+  const cmsSectionHeading = (icon, title) => (
+    <div className="cms-section-title">
       {icon}
       <span>{title}</span>
-      <ChevronDown size={16} className="cms-section-chevron" />
-    </button>
+    </div>
   );
   const [cmsMatchCount, setCmsMatchCount] = useState(0);
 
@@ -1839,6 +1831,10 @@ Core Rules:
       label: 'Team',
       icon: <Shield size={iconSize} />,
     },
+    recycle_bin: {
+      label: 'Bin',
+      icon: <Trash2 size={iconSize} />,
+    },
     payment_test: {
       label: 'Payment Test',
       icon: <FlaskConical size={iconSize} style={{ color: activeTab === 'payment_test' ? 'inherit' : '#34d399' }} />,
@@ -1867,7 +1863,7 @@ Core Rules:
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
     { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
-    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'team_chat', 'payment_test'] },
+    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'recycle_bin', 'team_chat', 'payment_test'] },
   ].map((group) => ({
     ...group,
     tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),
@@ -2235,6 +2231,10 @@ Core Rules:
     const fetchRate = async () => {
       try {
         const res = await fetch('/api/exchange-rate');
+        // A failed lookup still answers { rate: 454.48 } with a 500. That is the
+        // emergency number, not today's rate, so it must not replace the last
+        // good rate the browser saved — fall through to that instead.
+        if (!res.ok) throw new Error(`Exchange rate lookup failed (${res.status})`);
         const data = await res.json();
         if (data.rate) {
           const rate = data.rate;
@@ -2566,6 +2566,11 @@ Core Rules:
             descriptionEs: item.description_es || '',
             inventoryCount: item.inventory_count !== undefined ? item.inventory_count : null,
             lowStockThreshold: item.low_stock_threshold !== undefined ? item.low_stock_threshold : 5,
+            costUsd: item.cost_usd !== undefined && item.cost_usd !== null ? item.cost_usd : 0,
+            supplierName: item.supplier_name || '',
+            supplierLeadTimeDays: item.supplier_lead_time_days || 14,
+            batchNumber: item.batch_number || '',
+            batchExpiryDate: item.batch_expiry_date || null,
             priority: item.priority || 0,
             hidden: hiddenNames.includes(item.product),
             // A product the admin has never touched shows the old name-based
@@ -3672,7 +3677,7 @@ Core Rules:
         : `₡${Number(order.total_crc || 0).toLocaleString('es-CR')}`),
       order?.status && `Status: ${order.status}`,
       order?.sales_agent && `Agent: ${order.sales_agent}`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       // Goes through the API rather than deleting the row directly: the stock
       // this order reserved has to be returned before the record that says what
@@ -3706,7 +3711,7 @@ Core Rules:
       cart?.customer_name,
       cart?.customer_phone || cart?.customer_email,
       cart?.status && `Status: ${cart.status}`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
       const res = await adminFetch('/api/admin/abandoned-carts/update', {
@@ -3931,13 +3936,12 @@ Core Rules:
     try {
       setAbandonedCarts(prev => prev.filter(c => !selectedCartIds.includes(c.session_id)));
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase
-          .from('abandoned_carts')
-          .delete()
-          .in('session_id', selectedCartIds);
-        if (error) throw error;
+        // Via the Bin rather than a direct delete, so these are recoverable.
+        // The Carts tab tracks selection by session_id, which is why the match
+        // column is named here.
+        await deleteToBin('abandoned_carts', selectedCartIds, { idColumn: 'session_id' });
       }
-      alert(`🗑️ Deleted ${selectedCartIds.length} carts successfully!`);
+      alert(`Moved ${selectedCartIds.length} carts to the Bin. Restore them from the Bin tab if needed.`);
     } catch (err) {
       console.error('Bulk delete error:', err);
       alert(`Failed to delete carts: ${err.message}`);
@@ -4324,14 +4328,30 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   // Clear ALL active abandoned carts
   const handleClearAllCarts = async () => {
-    if (!confirm('Clear ALL active cart data? This cannot be undone.')) return;
+    if (!confirm('Clear ALL active cart data? They go to the Bin and can be restored from there.')) return;
     setAbandonedCarts([]);
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('abandoned_carts').delete().eq('status', 'active');
+        // The ids are read first so each cart can be snapshotted individually.
+        // A blanket `.delete().eq('status','active')` would be one statement
+        // with nothing to put in the Bin.
+        const { data, error } = await supabase
+          .from('abandoned_carts')
+          .select('id')
+          .eq('status', 'active');
+        if (error) throw error;
+
+        const ids = (data || []).map((row) => row.id);
+        // Chunked: a shop left alone over a holiday can hold thousands of
+        // active carts, and one request with all of them times out.
+        for (let i = 0; i < ids.length; i += 200) {
+          await deleteToBin('abandoned_carts', ids.slice(i, i + 200));
+        }
       } catch(err) {
         console.error('Clear carts error:', err);
+        alert(`Could not clear the carts: ${err.message}`);
       }
+      loadAdminData();
     }
   };
 
@@ -4460,18 +4480,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       lead?.name,
       lead?.phone || lead?.email,
       lead?.status && `Status: ${lead.status}`,
-    ])) return;
+    ], { recoverable: true })) return;
     
     setLeads(prev => prev.filter(l => l.id !== id));
     
     if (isSupabaseConfigured) {
       try {
-        await supabase
-          .from('catalog_leads')
-          .delete()
-          .eq('id', id);
+        await deleteToBin('catalog_leads', id);
       } catch (err) {
         console.error("Failed to delete lead:", err);
+        // The row was taken out of the list optimistically above, so a failed
+        // delete has to put it back or the lead silently disappears.
+        setLeads(prev => (prev.some(l => l.id === id) ? prev : [lead, ...prev].filter(Boolean)));
+        alert(`Could not delete that lead: ${err.message}`);
       }
     }
   };
@@ -4625,18 +4646,17 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   const handleBulkDeleteLeads = async () => {
     if (selectedLeads.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedLeads.length} leads?`)) return;
+    if (!confirmBulkDelete(selectedLeads.length, 'lead', 'leads', { recoverable: true })) return;
 
     setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
     
     if (isSupabaseConfigured) {
       try {
-        await supabase
-          .from('catalog_leads')
-          .delete()
-          .in('id', selectedLeads);
+        await deleteToBin('catalog_leads', selectedLeads);
       } catch (err) {
         console.error("Failed to bulk delete leads:", err);
+        alert(`Could not delete those leads: ${err.message}`);
+        loadAdminData();
       }
     }
     setSelectedLeads([]);
@@ -4823,11 +4843,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       reason ? `Reason: ${reason}` : 'No moderation reason entered.',
     ])) return;
     try {
-      const { error } = await supabase.from('product_reviews').delete().eq('id', id);
-      if (!error) {
-        setReviews(reviews.filter(r => r.id !== id));
-      }
-    } catch (err) { console.error(err); }
+      // The moderation note travels with it, so the Bin says why it went.
+      await deleteToBin('product_reviews', id, { reason });
+      setReviews(reviews.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert(`Could not delete that review: ${err.message}`);
+    }
   };
 
   const reviewProducts = useMemo(
@@ -4883,14 +4905,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       note?.content && `"${String(note.content).slice(0, 80)}"`,
     ])) return;
     try {
-      const { error } = await supabase
-        .from('facebook_notifications')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await deleteToBin('facebook_notifications', id);
       setFacebookNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification:", err);
+      alert(`Could not delete that alert: ${err.message}`);
     }
   };
 
@@ -5268,10 +5287,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     if (!confirmDelete('blog post', [post?.title, post?.slug && `/${post.slug}`])) return;
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('blogs').delete().eq('id', id);
+        await deleteToBin('blogs', id);
         setBlogs(blogs.filter(b => b.id !== id));
       } catch (err) {
         console.error("Failed to delete blog:", err);
+        alert(`Could not delete that post: ${err.message}`);
       }
     }
   };
@@ -5508,6 +5528,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onOverrideStats={handleStatsOverride}
               exchangeRate={exchangeRate}
               manualExchangeRate={manualExchangeRate}
+              onExchangeRateChanged={handleExchangeRateChanged}
             />
           )
         )}
@@ -5537,8 +5558,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             handleMoveRow={handleMoveRow} handleDeleteRow={handleDeleteRow}
             handleToggleHidden={handleToggleHidden}
             changedProductIds={changedProductIds}
-            isSuperadmin={Boolean(adminProfile?.is_superadmin)}
-            onExchangeRateChanged={handleExchangeRateChanged}
+            orders={orders}
           />
           </ErrorBoundary>
         )}
@@ -6426,13 +6446,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {/* TAB: CMS */}
         {activeTab === 'cms' && (
-          <div className={`admin-orders-tab${cmsSearch.trim() ? ' cms-filtering' : ''}`}>
+          <div className={`admin-orders-tab cms-studio${cmsSearch.trim() ? ' cms-filtering' : ''}`}>
             {/* Generated rather than static: the rule has to carry the term the
                 operator typed. Empty while nothing is being searched. */}
             <style>{cmsSearchStyle(cmsSearch)}</style>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
-              <h2 style={{ fontSize: '1.25rem', color: '#f8fafc', margin: 0 }}><FileText size={20} style={{ display: 'inline', marginRight: '8px', verticalAlign: 'text-bottom', color: '#38bdf8' }} /> Content Management System</h2>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <header className="cms-studio-header">
+              <div className="cms-studio-heading">
+                <div className="cms-studio-kicker"><FileText size={14} /> Website content</div>
+                <h2>Content studio</h2>
+                <p>Choose one area to edit, or search every setting at once.</p>
+              </div>
+              <button className="admin-btn cms-refresh-btn" onClick={loadAdminData}>
+                Refresh content
+              </button>
+              <div className="cms-command-bar">
                 <div className="cms-search-box">
                   <Search size={15} />
                   <input
@@ -6448,11 +6475,34 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                     </button>
                   )}
                 </div>
-                <button className="admin-btn" onClick={loadAdminData} style={{ padding: '6px 14px', fontSize: '0.85rem', background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.2)', color: '#38bdf8', borderRadius: '8px', cursor: 'pointer', fontWeight: '700' }}>
-                  Refresh
-                </button>
               </div>
-            </div>
+              <nav className="cms-workspace-nav" aria-label="CMS workspaces">
+                {CMS_WORKSPACES.map((workspace) => {
+                  const WorkspaceIcon = workspace.id === 'landing' ? Zap
+                    : workspace.id === 'lead-form' ? Target
+                    : workspace.id === 'pages' ? FileText
+                    : workspace.id === 'links' ? Link2
+                    : LayoutDashboard;
+                  const active = !cmsSearch.trim() && cmsWorkspace === workspace.id;
+                  return (
+                    <button
+                      key={workspace.id}
+                      type="button"
+                      className={`cms-workspace-button${active ? ' is-active' : ''}`}
+                      onClick={() => selectCmsWorkspace(workspace.id)}
+                      aria-pressed={active}
+                    >
+                      <span className="cms-workspace-icon"><WorkspaceIcon size={17} /></span>
+                      <span>
+                        <strong>{workspace.label}</strong>
+                        <small>{workspace.description}</small>
+                      </span>
+                      <ChevronRight size={15} className="cms-workspace-arrow" />
+                    </button>
+                  );
+                })}
+              </nav>
+            </header>
 
             {cmsSearch.trim() && (
               <div className="cms-search-status" role="status">
@@ -6474,39 +6524,37 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             )}
 
-            <div className="cms-safety-panel">
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Draft preview</div>
-                <h3>{siteSettings?.heroTitleEn || 'Landing page title'}</h3>
-                <p>{siteSettings?.heroSubEn || 'Landing page subtitle preview'}</p>
-                <small>{siteSettings?.heroTextEn || 'Hero description will preview here as you edit.'}</small>
+            {!cmsSearch.trim() && (
+              <div className="cms-status-strip">
+                <div className="cms-status-item cms-status-preview">
+                  <span>Homepage preview</span>
+                  <strong>{siteSettings?.heroTitleEn || 'Landing page title'}</strong>
+                </div>
+                <div className="cms-status-item">
+                  <span>Publishing</span>
+                  <strong>Save each workspace separately</strong>
+                </div>
+                <div className="cms-status-item">
+                  <span>This session</span>
+                  <strong>
+                    {cmsChangeHistory.length === 0
+                      ? 'No saved changes yet'
+                      : `${cmsChangeHistory[0].area} saved at ${new Date(cmsChangeHistory[0].at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                  </strong>
+                </div>
               </div>
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Publish safety</div>
-                <ul>
-                  <li>Use full https:// links for external URLs; internal links can start with /.</li>
-                  <li>Changes stay in draft fields until you press Save.</li>
-                  <li>Blog posts still use their own published toggle.</li>
-                </ul>
-              </div>
-              <div className="cms-preview-card">
-                <div className="cms-panel-kicker">Recent changes</div>
-                {cmsChangeHistory.length === 0 ? (
-                  <p>No changes saved in this session.</p>
-                ) : cmsChangeHistory.map(entry => (
-                  <p key={`${entry.area}-${entry.at}`}><strong>{entry.area}</strong> saved {new Date(entry.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-                ))}
-              </div>
+            )}
+
+            <div className={`cms-lead-workspace${!cmsSearch.trim() && cmsWorkspace === 'lead-form' ? ' is-active' : ''}`}>
+              <LandingLeadSettingsManager />
             </div>
 
-            <LandingLeadSettingsManager />
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            <div className="cms-workspace-content">
               
               {/* Landing Page Settings */}
               <div {...cmsSectionProps('landing')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('landing', <Zap size={18} color="#f59e0b" />, 'Landing Page Controls')}
+                  {cmsSectionHeading(<Zap size={18} color="#f59e0b" />, 'Homepage content')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6649,7 +6697,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* Public Page Settings */}
               <div {...cmsSectionProps('pages')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('pages', <FileText size={18} color="#38bdf8" />, 'Phase 3 Public Pages')}
+                  {cmsSectionHeading(<FileText size={18} color="#38bdf8" />, 'Public pages')}
                 </h3>
 
                 {loadingSettings ? (
@@ -6881,7 +6929,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               {/* Business Links Settings */}
               <div {...cmsSectionProps('links')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                 <h3 className="cms-section-head" style={{ fontSize: '1.1rem', color: '#f8fafc', marginBottom: '16px' }}>
-                  {cmsSectionHeading('links', <Link2 size={18} color="#3b82f6" />, 'Global Business Links')}
+                  {cmsSectionHeading(<Link2 size={18} color="#3b82f6" />, 'Business details')}
                 </h3>
                 
                 {loadingSettings ? (
@@ -6956,7 +7004,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               <div {...cmsSectionProps('blog')} style={{ background: '#0e1626', padding: '24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', gridColumn: '1 / -1' }}>
                 <div className="cms-section-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <h3 style={{ fontSize: '1.1rem', color: '#f8fafc', margin: 0 }}>
-                    {cmsSectionHeading('blog', <LayoutDashboard size={18} color="#10b981" />, 'Blog Post Manager')}
+                    {cmsSectionHeading(<LayoutDashboard size={18} color="#10b981" />, 'Blog posts')}
                   </h3>
                   <button className="admin-btn admin-btn-accent" onClick={() => setEditingBlog({ slug: '', title_en: '', title_es: '', excerpt_en: '', excerpt_es: '', content_en: '', content_es: '', image_url: '', published: false })}>
                     <Plus size={16} /> New Post
@@ -7006,7 +7054,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             ) : (
               <ErrorBoundary>
-              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} onNavigate={navigateToTab} />
+              <AnalyticsDashboard orders={orders} abandonedCarts={abandonedCarts} products={products} productViews={productViews} onNavigate={navigateToTab} exchangeRate={exchangeRate} />
               </ErrorBoundary>
             )}
 
@@ -7036,6 +7084,25 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             />
               </ErrorBoundary>
             )}
+          </div>
+        )}
+
+        {activeTab === 'reorder_tracking' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <ReorderTrackingPanel
+                orders={orders}
+                onOpenCustomerProfile={(customer) => {
+                  setActiveTab('customers');
+                  try {
+                    const searchVal = customer.customer_email || customer.customer_phone || customer.customer_name || '';
+                    if (searchVal) window.localStorage.setItem('admin_customer_search', searchVal);
+                  } catch (e) {}
+                }}
+                onWhatsAppClick={(recipient) => openWhatsAppComposer(recipient)}
+                onCreateOrder={openManualOrder}
+              />
+            </ErrorBoundary>
           </div>
         )}
 
@@ -7102,6 +7169,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'team' && (
           <div className="admin-orders-tab admin-tab-panel">
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
+          </div>
+        )}
+
+        {activeTab === 'recycle_bin' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <RecycleBin />
           </div>
         )}
 
@@ -7416,8 +7489,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         const qualificationAnswers = Array.isArray(currentLead.qualification_data?.answers)
           ? currentLead.qualification_data.answers
           : [];
-        const responseDue = currentLead.response_due_at ? new Date(currentLead.response_due_at) : null;
-        const responseOverdue = responseDue && !currentLead.last_contacted_at && responseDue.getTime() < Date.now();
         return (
         <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -7510,12 +7581,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                 </div>
               </div>
 
-              {(qualificationAnswers.length > 0 || currentLead.lead_source || responseDue) && (
+              {(qualificationAnswers.length > 0 || currentLead.lead_source) && (
                 <div style={{ background: 'rgba(245, 158, 11, 0.06)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
                   <h3 style={{ fontSize: '0.8rem', fontWeight: '800', color: '#fbbf24', textTransform: 'uppercase', marginBottom: '12px', marginTop: 0, letterSpacing: '0.05em' }}>Landing Qualification</h3>
                   <div className="admin-form-grid-2" style={{ marginBottom: qualificationAnswers.length ? 14 : 0 }}>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Lead source</label><span style={{ color: '#f8fafc', fontSize: '.85rem' }}>{currentLead.lead_source || 'Landing page'}</span></div>
-                    <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Response deadline</label><span style={{ color: responseOverdue ? '#f87171' : '#86efac', fontSize: '.85rem', fontWeight: 800 }}>{responseDue ? `${responseDue.toLocaleString()}${responseOverdue ? ' — OVERDUE' : ''}` : 'Not set'}</span></div>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Assigned at</label><span style={{ color: '#cbd5e1', fontSize: '.82rem' }}>{currentLead.assigned_at ? new Date(currentLead.assigned_at).toLocaleString() : 'Not recorded'}</span></div>
                     <div><label style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Consent</label><span style={{ color: currentLead.marketing_consent ? '#86efac' : '#fca5a5', fontSize: '.82rem', fontWeight: 700 }}>{currentLead.marketing_consent ? `Accepted (${currentLead.consent_version || 'version not recorded'})` : 'Not accepted'}</span></div>
                   </div>

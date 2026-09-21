@@ -12,6 +12,7 @@ import {
 } from '@/lib/whatsappConversations.mjs';
 import { isMissingWhatsAppChannelsSchema } from '@/lib/whatsappChannels.mjs';
 import { sanitizeWhatsAppLabels, sanitizeWhatsAppPriority } from '@/lib/whatsappWorkflow.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 
@@ -490,12 +491,14 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Forbidden: this conversation belongs to another agent' }, { status: 403 });
     }
 
-    const { error: deleteError } = await supabase
-      .from('whatsapp_conversations')
-      .delete()
-      .eq('wa_id', waId);
+    // By primary key rather than wa_id: the row is already loaded above, and
+    // the Bin snapshots the rows it has read.
+    const binned = await moveToBin(
+      { table: 'whatsapp_conversations', ids: [conversation.id], actor: actorFrom(auth.profile) },
+      supabase,
+    );
 
-    if (deleteError) throw deleteError;
+    if (!binned.ok) throw new Error(binned.error);
 
     return NextResponse.json({ success: true, waId });
   } catch (err) {

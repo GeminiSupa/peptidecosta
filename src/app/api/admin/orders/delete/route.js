@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { restoreInventoryForDeletedOrder } from '@/lib/inventoryRestoreServer';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 // Deleting an order used to be a direct browser call, which meant the stock it
 // had reserved vanished with the row — nothing was left to restore it from.
@@ -65,35 +66,23 @@ export async function POST(request) {
     // *and* its vials back on the shelf, with the admin reading an error that
     // says nothing happened — stock reads high from then on and nothing says
     // why. Nothing is restored now unless the row is confirmed gone.
-    const { data: deleted, error: deleteError } = await supabase
-      .from('orders')
-      .delete()
-      .eq('id', orderId)
-      .select('id');
+    //
+    // Through the Bin, so the order and its items can be brought back. moveToBin
+    // keeps the same guarantee this code already relied on: it reports ok only
+    // once the row is confirmed gone, and undoes its own snapshot otherwise.
+    const binned = await moveToBin(
+      { table: 'orders', ids: [orderId], actor: actorFrom(auth.profile) },
+      supabase,
+    );
 
-    if (deleteError) {
-      console.error('[admin/orders/delete] delete failed', order.order_number, deleteError);
+    if (!binned.ok) {
+      console.error('[admin/orders/delete] delete failed', order.order_number, binned.error);
       return NextResponse.json(
         {
-          error: describeDbError(deleteError, 'Could not delete the order'),
-          code: deleteError.code || null,
+          error: binned.error,
           // Said explicitly so the admin knows the order is untouched rather
           // than half-removed, and can retry without wondering about stock.
           inventory: { restored: false, skipped: 'delete refused — nothing was changed' },
-        },
-        { status: 500 },
-      );
-    }
-
-    // Postgres reports no error when a DELETE matches nothing, so without this
-    // the caller was told the order had gone while the row was still there —
-    // which is exactly how a delete came back on the next refresh.
-    if (!deleted || deleted.length === 0) {
-      console.error('[admin/orders/delete] matched no rows', order.order_number);
-      return NextResponse.json(
-        {
-          error: 'The database accepted the delete but removed nothing. The order is still there.',
-          inventory: { restored: false, skipped: 'order still present — nothing was changed' },
         },
         { status: 500 },
       );
@@ -108,8 +97,12 @@ export async function POST(request) {
       { reason: 'order deleted' },
     );
 
-    console.log(`[admin/orders/delete] ${order.order_number} deleted by ${auth.profile.email}`);
-    return NextResponse.json({ success: true, inventory });
+    console.log(`[admin/orders/delete] ${order.order_number} binned by ${auth.profile.email}`);
+    return NextResponse.json({
+      success: true,
+      inventory,
+      message: 'Moved to the Bin. Restore it from the Bin tab if this was a mistake.',
+    });
   } catch (err) {
     console.error('[admin/orders/delete] unexpected failure', orderId, err);
     return NextResponse.json({ error: err.message || 'Could not delete the order' }, { status: 500 });

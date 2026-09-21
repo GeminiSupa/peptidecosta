@@ -206,6 +206,12 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     all_leads: 'Everyone (Customers + Leads)',
     leads_7_days: 'Recent Leads (Last 7 Days)',
     whatsapp_optins: 'WhatsApp Opt-Ins',
+    seg_weight_loss: 'Segment: ⚖️ Weight Loss',
+    seg_recovery: 'Segment: 🩹 Recovery / Injury',
+    seg_anti_aging: 'Segment: ✨ Anti-Aging',
+    seg_first_time: 'Segment: 🌟 First-Time Buyers',
+    seg_vip: 'Segment: 👑 VIP Customers',
+    seg_wholesale: 'Segment: 🩺 Wholesale & Doctors',
     custom: 'Custom List'
   };
 
@@ -666,6 +672,14 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
             <option value="all_leads">Everyone (Customers + Leads)</option>
             <option value="leads_7_days">Recent Leads (Last 7 Days)</option>
             <option value="whatsapp_optins">WhatsApp Opt-Ins (consented contacts)</option>
+            <option disabled>──────── Segment Targeted Audiences ────────</option>
+            <option value="seg_weight_loss">Segment: ⚖️ Weight Loss (Sema, Tirz, GLP-1)</option>
+            <option value="seg_recovery">Segment: 🩹 Recovery / Injury (BPC-157, TB-500)</option>
+            <option value="seg_anti_aging">Segment: ✨ Anti-Aging (GHK-Cu, CJC, Ipamorelin, NAD+)</option>
+            <option value="seg_first_time">Segment: 🌟 First-Time Buyers</option>
+            <option value="seg_vip">Segment: 👑 VIP Customers ($500+ or 3+ orders)</option>
+            <option value="seg_wholesale">Segment: 🩺 Wholesale & Doctors</option>
+            <option disabled>─────────────────────────────────────────────</option>
             <option value="custom">Custom List (Manual Entry)</option>
           </select>
 

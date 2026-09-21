@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   buildChatwootLeadMessage,
+  chatwootLeadColumns,
   loadChatwootLeadEnabled,
   sendAdLeadToChatwoot,
 } from '../src/lib/chatwootLead.mjs';
@@ -28,6 +29,7 @@ test('Google Ads lead message identifies both landing-page variant and CRM recor
   assert.match(content, /Ana/);
   assert.match(content, /Interest: GLP-1/);
   assert.match(content, /CRM lead ID: lead-7/);
+  assert.doesNotMatch(content, /CRM owner/);
 });
 
 test('missing Chatwoot environment skips delivery without making a network call', async () => {
@@ -62,7 +64,19 @@ test('the lead route and Team notification API share the admin Chatwoot switch',
   assert.match(leadRoute, /loadChatwootLeadEnabled\(supabase\)/);
   assert.match(adminRoute, /CHATWOOT_LEAD_SETTING_ID/);
   assert.match(adminRoute, /chatwootEnabled/);
-  assert.match(teamScreen, /Send Google Ads leads to Chatwoot/);
+  assert.match(teamScreen, /Send lead alerts to Chatwoot/);
+});
+
+test('TikTok form leads use the same Chatwoot switch, owner lookup and rotation as /lp and /glp-1', async () => {
+  const tiktok = await readFile(new URL('../src/app/api/leads/tiktok/route.js', import.meta.url), 'utf8');
+  assert.match(tiktok, /loadChatwootLeadEnabled\(supabase\)/);
+  assert.match(tiktok, /sendAdLeadToChatwoot\(/);
+  assert.match(tiktok, /resolveLeadOwnerDetailed\(/);
+  assert.match(tiktok, /HISTORY_RETRY_WINDOW_MS = 30_000/);
+  assert.match(tiktok, /resolveCampaignAgent\(supabase, landingSettings\)/);
+  assert.match(tiktok, /resolveRotationAgent\(supabase, landingSettings\)/);
+  // The old TikTok-only rotation is kept only as the fallback.
+  assert.ok(tiktok.indexOf('resolveRotationAgent(supabase') < tiktok.indexOf('resolveNextTikTokAgent(supabase)'));
 });
 
 test('creates a contact, conversation and incoming message in the configured inbox', async () => {
@@ -93,6 +107,45 @@ test('creates a contact, conversation and incoming message in the configured inb
   assert.match(JSON.parse(calls[3].options.body).content, /Omer test/);
 });
 
+test('assigns the chat to the Chatwoot agent with the CRM owner email', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 50, source_id: 'contact-source' }),
+    response({ id: 60 }),
+    response({ id: 70 }),
+    response([{ id: 1, email: 'other@example.com' }, { id: 9, email: 'Pollita@Example.com' }]),
+    response({ id: 9 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-4', name: 'Ana', source: 'adwords_lp', assigneeEmail: 'pollita@example.com', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.assigneeId, 9);
+  assert.match(calls[4].url, /\/api\/v1\/accounts\/12\/agents$/);
+  assert.match(calls[5].url, /\/api\/v1\/accounts\/12\/conversations\/60\/assignments$/);
+  assert.deepEqual(JSON.parse(calls[5].options.body), { assignee_id: 9 });
+  assert.equal(calls[5].options.headers.api_access_token, 'server-secret');
+});
+
+test('an unknown assignee leaves the delivered chat unassigned and says why', async () => {
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 50, source_id: 'contact-source' }),
+    response({ id: 60 }),
+    response({ id: 70 }),
+    response([{ id: 1, email: 'other@example.com' }]),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-5', assigneeEmail: 'missing@example.com', env: ENV,
+    fetchImpl: async () => replies.shift(),
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.assigneeId, null);
+  assert.match(result.assignmentError, /missing@example\.com/);
+});
+
 test('returns a safe failure when Chatwoot rejects a request', async () => {
   const result = await sendAdLeadToChatwoot({
     leadId: 'lead-3', env: ENV,
@@ -100,4 +153,69 @@ test('returns a safe failure when Chatwoot rejects a request', async () => {
   });
   assert.deepEqual(result, { configured: true, sent: false, error: 'Inbox unavailable' });
   assert.doesNotMatch(JSON.stringify(result), /server-secret/);
+});
+
+test('only real international numbers are sent to Chatwoot as the contact phone', async () => {
+  const { chatwootPhone } = await import('../src/lib/chatwootLead.mjs');
+  assert.equal(chatwootPhone('50684046973'), '+50684046973');
+  assert.equal(chatwootPhone('+1 (305) 555-0100'), '+13055550100');
+  // Local formats Chatwoot rejects as "not e164" — the 2026-09-17 lost chat.
+  assert.equal(chatwootPhone('03001234567'), '');
+  assert.equal(chatwootPhone('1234567890123456'), '');
+  assert.equal(chatwootPhone(''), '');
+});
+
+test('outbound delivery records identifiers needed by the reverse webhook sync', () => {
+  const columns = chatwootLeadColumns({
+    configured: true,
+    sent: true,
+    conversationId: 60,
+    contactId: 50,
+    conversationUrl: 'https://chat.example.com/app/accounts/12/conversations/60',
+    assigneeEmail: 'pollita@example.com',
+  }, { at: '2026-09-20T12:00:00.000Z' });
+  assert.equal(columns.chatwoot_conversation_id, 60);
+  assert.equal(columns.chatwoot_contact_id, 50);
+  assert.equal(columns.chatwoot_conversation_status, 'open');
+  assert.equal(columns.chatwoot_assignee_email, 'pollita@example.com');
+});
+
+test('a phone Chatwoot refuses still opens the chat, without the phone on the contact', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ message: 'Phone number should be in e164 format' }, 422),
+    response({ payload: [] }),
+    response({ id: 51, source_id: 'contact-source' }),
+    response({ id: 61 }),
+    response({ id: 71 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-8', name: 'Ana', email: 'ana@example.com', phone: '50684046973', source: 'glp1_lp', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(result.conversationId, 61);
+  const retry = JSON.parse(calls[3].options.body);
+  assert.deepEqual(retry, { identifier: 'google-ads-lead-lead-8', name: 'Ana' });
+  // The agent still gets the phone and email, in the message.
+  assert.match(JSON.parse(calls[5].options.body).content, /50684046973/);
+  assert.match(JSON.parse(calls[5].options.body).content, /ana@example\.com/);
+});
+
+test('a local-format phone is left off the contact instead of failing it', async () => {
+  const calls = [];
+  const replies = [
+    response({ inbox_identifier: 'public-inbox-key' }),
+    response({ id: 52, source_id: 'contact-source' }),
+    response({ id: 62 }),
+    response({ id: 72 }),
+  ];
+  const result = await sendAdLeadToChatwoot({
+    leadId: 'lead-9', name: 'Ali', phone: '03001234567', source: 'adwords_lp', env: ENV,
+    fetchImpl: async (url, options) => { calls.push({ url, options }); return replies.shift(); },
+  });
+  assert.equal(result.sent, true);
+  assert.equal(JSON.parse(calls[1].options.body).phone_number, undefined);
+  assert.match(JSON.parse(calls[3].options.body).content, /03001234567/);
 });

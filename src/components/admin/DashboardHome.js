@@ -10,8 +10,9 @@ import { orderReportableAtMs } from '@/lib/agentDashboard.mjs';
 import KpiBreakdownModal from './KpiBreakdownModal';
 import { formatCrDate, formatCrInstant } from '@/lib/crTime.mjs';
 import { isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
-
-const FALLBACK_RATE = 454.48;
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
+import ExchangeRateSettings from './ExchangeRateSettings';
+import { calculateExpandedSalesMetrics } from '@/lib/salesAnalytics.mjs';
 
 // Trustpilot's FREE plan sends 50 verified review invitations per month.
 // If the account is upgraded, change this (Starter = 100, Plus = 300).
@@ -110,8 +111,9 @@ export default function DashboardHome({
   onCreateOrder,
   isSuperadmin = false,
   onOverrideStats,
-  exchangeRate = FALLBACK_RATE,
+  exchangeRate = FALLBACK_EXCHANGE_RATE,
   manualExchangeRate = null,
+  onExchangeRateChanged,
 }) {
   // Which tile's breakdown is open: 'revenue' | 'pendingOrders'.
   const [openTile, setOpenTile] = useState(null);
@@ -124,6 +126,11 @@ export default function DashboardHome({
   const activeKpiRange = KPI_RANGE_BY_ID.get(kpiRange) || KPI_RANGES[0];
   const kpiRangeStart = useMemo(() => activeKpiRange.start(new Date()), [activeKpiRange]);
   const kpiRangeHint = kpiRangeTooltip(activeKpiRange, kpiRangeStart, new Date());
+
+  const expandedMetrics = useMemo(
+    () => calculateExpandedSalesMetrics(orders, products, exchangeRate),
+    [orders, products, exchangeRate]
+  );
 
   const stats = useMemo(() => {
     const now = new Date();
@@ -331,10 +338,14 @@ export default function DashboardHome({
             <strong>Manual exchange rate in use:</strong> $1 = ₡{Number(manualExchangeRate.rate).toLocaleString('en-US', { maximumFractionDigits: 2 })}
             {manualExchangeRate.setBy ? `, set by ${manualExchangeRate.setBy}` : ''}
             {manualExchangeRate.setAt ? ` on ${formatCrInstant(manualExchangeRate.setAt)}` : ''}.
-            {' '}The API rate is being ignored.
+            {' '}The automatic market rate is being ignored.
           </span>
-          {isSuperadmin && onNavigate && (
-            <button type="button" className="admin-btn admin-btn-secondary" onClick={() => onNavigate('spreadsheet')}>
+          {isSuperadmin && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={() => document.getElementById('exchange-rate-settings')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            >
               Change
             </button>
           )}
@@ -437,6 +448,91 @@ export default function DashboardHome({
         </div>
       </div>
 
+      {/* Expanded Sales & Inventory Analytics Grid */}
+      <section className="dashboard-section" style={{ marginTop: '24px' }}>
+        <div className="dashboard-section-heading-row">
+          <h3 className="dashboard-section-title">Sales &amp; Inventory Overview</h3>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
+              <DollarSign size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">${expandedMetrics.revenueTodayUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>
+              <div className="dashboard-kpi-label">Revenue Today (₡{expandedMetrics.revenueTodayCrc.toLocaleString()})</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+              <DollarSign size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">${expandedMetrics.revenueMonthUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>
+              <div className="dashboard-kpi-label">Revenue This Month ({expandedMetrics.ordersMonthCount} orders)</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+              <Target size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">{expandedMetrics.repeatCustomerPct}%</div>
+              <div className="dashboard-kpi-label">Repeat Customer Rate ({expandedMetrics.repeatCustomers}/{expandedMetrics.totalCustomers})</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc' }}>
+              <Package size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">${expandedMetrics.aovUsd.toFixed(2)}</div>
+              <div className="dashboard-kpi-label">Avg Order Value (AOV)</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
+              <Star size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">${expandedMetrics.ltvUsd.toFixed(2)}</div>
+              <div className="dashboard-kpi-label">Customer Lifetime Value (LTV)</div>
+            </div>
+          </div>
+
+          <div className="dashboard-kpi-card">
+            <div className="dashboard-kpi-icon" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+              <Package size={20} />
+            </div>
+            <div>
+              <div className="dashboard-kpi-value">${expandedMetrics.inventoryCostValueUsd.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</div>
+              <div className="dashboard-kpi-label">Inventory Cost (Retail: ${expandedMetrics.inventoryRetailValueUsd.toLocaleString()})</div>
+            </div>
+          </div>
+        </div>
+
+        {expandedMetrics.bestSellers.length > 0 && (
+          <div style={{ background: 'rgba(15, 23, 42, 0.5)', borderRadius: '12px', padding: '16px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#cbd5e1', fontWeight: 700 }}>🏆 Top Selling Products</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+              {expandedMetrics.bestSellers.slice(0, 4).map((item, idx) => (
+                <div key={item.name} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <span style={{ fontSize: '1rem', fontWeight: 800, color: idx === 0 ? '#fbbf24' : idx === 1 ? '#cbd5e1' : '#cd7f32' }}>#{idx + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{item.unitsSold} units sold · ${item.revenueUsd.toFixed(2)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       <section className="dashboard-section dashboard-health-section">
         <div className="dashboard-section-heading-row">
           <h3 className="dashboard-section-title">Health</h3>
@@ -453,6 +549,13 @@ export default function DashboardHome({
           </div>
         </div>
       </section>
+
+      {/* One authority for every USD -> CRC conversion. The editor belongs on
+          Home where the owner sees shop health, not inside product editing.
+          It is mounted only for superadmins; the route repeats that check. */}
+      {isSuperadmin && (
+        <ExchangeRateSettings onChanged={onExchangeRateChanged} />
+      )}
 
       <div className="dashboard-two-col">
         <section className="dashboard-section">

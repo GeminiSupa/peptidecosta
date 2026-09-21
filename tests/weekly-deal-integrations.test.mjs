@@ -91,6 +91,23 @@ test('bulk threshold controls live in Deal of the Week and checkout enforces exc
   assert.match(catalog, /!getMatchedWeeklyDeal\(\) && <div/);
 });
 
+test('flexible offer setup guides non-technical admins and derives its rules from saved settings', () => {
+  const dealPanel = fs.readFileSync('src/components/admin/DealOfWeekPanel.js', 'utf8');
+  const dealPage = fs.readFileSync('src/app/deal-of-the-week/page.js', 'utf8');
+
+  assert.match(dealPanel, /All available peptide products/);
+  assert.match(dealPanel, /Same products as offer above/);
+  assert.match(dealPanel, /\+ Add percentage offer/);
+  assert.match(dealPanel, /\+ Add Buy\/Get-Free offer/);
+  assert.match(dealPanel, /Duplicate/);
+  assert.match(dealPanel, /Customer name — Spanish/);
+  assert.match(dealPanel, /Deal setup progress/);
+  assert.match(dealPanel, /Rules checkout will enforce automatically/);
+  assert.match(dealPanel, /Ready for final review/);
+  assert.match(dealPanel, /dealOfferRuleSummaries\(offersPayload, 'en'\)/);
+  assert.match(dealPage, /dealOfferRuleSummaries\(deal\.offers, lang\)/);
+});
+
 test('weekly deal pricing migration preserves legacy percent deals atomically', () => {
   const migration = fs.readFileSync('add-weekly-deal-pricing-modes.sql', 'utf8');
 

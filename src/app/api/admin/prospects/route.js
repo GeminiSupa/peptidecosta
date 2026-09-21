@@ -32,6 +32,8 @@ import {
   parseProspectPipelineParams,
 } from '@/lib/prospectPipeline.mjs';
 
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
+
 export const dynamic = 'force-dynamic';
 
 const SELECT_FIELDS = [
@@ -423,19 +425,14 @@ export async function DELETE(request) {
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Prospect ID is required' }, { status: 400 });
 
-  const { data, error } = await getSupabaseAdmin()
-    .from('sales_prospects')
-    .delete()
-    .eq('id', id)
-    .select('id')
-    .maybeSingle();
-  if (isProspectsTableMissing(error)) {
-    return NextResponse.json({ error: 'Run prospector-migration.sql first.', setupRequired: true }, { status: 503 });
-  }
-  if (error) {
-    console.error('[Prospects] Delete failed:', error.message);
+  const binned = await moveToBin({ table: 'sales_prospects', ids: [id], actor: actorFrom(auth.profile) });
+  if (!binned.ok) {
+    if (isProspectsTableMissing({ message: binned.error })) {
+      return NextResponse.json({ error: 'Run prospector-migration.sql first.', setupRequired: true }, { status: 503 });
+    }
+    if (binned.notFound) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
+    console.error('[Prospects] Delete failed:', binned.error);
     return NextResponse.json({ error: 'Unable to delete prospect' }, { status: 500 });
   }
-  if (!data) return NextResponse.json({ error: 'Prospect not found' }, { status: 404 });
   return NextResponse.json({ success: true });
 }

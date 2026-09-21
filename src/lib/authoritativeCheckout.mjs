@@ -13,13 +13,41 @@ import {
   isGiftLine,
   isSellableBacWater,
   stripGiftSuffix,
+  summarizeBacWater,
 } from './bacWater.mjs';
+import { chooseDealOffer, freeVialLine } from './dealOffers.mjs';
 import { effectiveVolumeDiscountPct } from './promoEligibility.mjs';
 import { computeOrderTotals, getUnitPrice, getVolumeDiscountPct } from './pricing.js';
 
 const round2 = (value) => Math.round(Number(value || 0) * 100) / 100;
 const roundCurrency = (value, currency) => currency === 'USD' ? round2(value) : Math.round(Number(value || 0));
 const normalize = (value) => String(value || '').trim().toLowerCase();
+// Looser than normalize: also ignores dashes, spaces and other punctuation, so
+// a product renamed "Slu-pp332 5mg" -> "SLU-PP-332 5mg" still matches the
+// orders saved under its old name.
+const looseKey = (value) => normalize(value).normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * Build a lookup that finds a catalog row by name. An exact (case-insensitive)
+ * match wins; otherwise a match that ignores dashes and spaces is used, but
+ * only when exactly one product has that shape, so two genuinely different
+ * products are never merged.
+ */
+export function productNameResolver(products) {
+  const exact = new Map();
+  const loose = new Map();
+  for (const product of products || []) {
+    const name = product?.product;
+    if (!name) continue;
+    exact.set(normalize(name), product);
+    const key = looseKey(name);
+    loose.set(key, loose.has(key) ? null : product);
+  }
+  return (name) => {
+    if (!name) return null;
+    return exact.get(normalize(name)) || loose.get(looseKey(name)) || null;
+  };
+}
 
 function qtyOf(item) {
   const qty = Number.parseInt(item?.qty ?? item?.quantity ?? 0, 10);
@@ -63,18 +91,34 @@ export function authoritativeCheckout({
   // customer agreed to the moment the deal lapsed. Null/undefined means "work
   // it out from the cart", which is what every new order does.
   volumeDiscountPctOverride = null,
+  // The live two-offer Deal of the Week's `offers`, when the cart contains one
+  // of its products and no promo code applies. The server works out which
+  // offer applies and which vials are free; nothing about it is read from the
+  // posted order.
+  dealOffers = null,
+  // Admin routes only: a free vial already on the order (a zero-priced
+  // "(Free Gift)" peptide line from a deal) is kept as it is. The public
+  // checkout never sets this, so a posted free line cannot be smuggled in.
+  keepPostedGifts = false,
 }) {
   const currency = postedOrder?.currency === 'USD' ? 'USD' : 'CRC';
-  const productByName = new Map((products || []).map((product) => [normalize(product.product), product]));
+  const findProduct = productNameResolver(products);
   const requestedByName = new Map();
   const missing = [];
+  const postedPeptideGifts = [];
 
   for (const item of postedOrder?.items || []) {
-    if (isGiftLine(item)) continue;
+    if (isGiftLine(item)) {
+      const giftName = stripGiftSuffix(item?.product || item?.name);
+      if (keepPostedGifts && !isBacWater(giftName) && qtyOf(item) > 0) {
+        postedPeptideGifts.push({ product: item.product || item.name, qty: qtyOf(item), price: 0 });
+      }
+      continue;
+    }
     const productName = stripGiftSuffix(item?.product || item?.name);
     const qty = qtyOf(item);
     if (!productName || qty <= 0) continue;
-    const product = productByName.get(normalize(productName));
+    const product = findProduct(productName);
     if (!product) {
       missing.push(productName);
       continue;
@@ -156,21 +200,42 @@ export function authoritativeCheckout({
     && volumeDiscountPctOverride !== ''
     && Number.isFinite(overridePct)
     && overridePct >= 0;
-  const volumeDiscountPct = suppressVolumeDiscount
+  let volumeDiscountPct = suppressVolumeDiscount
     ? 0
     : (hasOverride
       ? effectiveVolumeDiscountPct(promo, overridePct)
       : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount)));
+
+  // Flexible weekly offers: exactly one configured offer or the ordinary
+  // volume tier applies — whichever saves the customer most.
+  const dealOffer = dealOffers && !promo
+    ? chooseDealOffer(dealOffers, requested, {
+      volumePct: volumeDiscountPct,
+      bacCharge: summarizeBacWater(requested, currency, exchangeRate).charge,
+    })
+    : null;
+  if (dealOffer && (dealOffer.kind === 'mix' || dealOffer.kind === 'bundle')) volumeDiscountPct = 0;
+
   const totals = computeOrderTotals(requested, currency, exchangeRate, { volumeDiscountPct });
-  const promoDiscount = promoDiscountAmount(requested, totals, promo, currency);
+  const promoDiscount = dealOffer?.kind === 'mix'
+    // "10% off your entire order": totals.subtotal is the merchandise plus the
+    // paid BAC water, so the water is discounted too.
+    ? roundCurrency(totals.subtotal * (Number(dealOffer.offer?.discount_pct ?? dealOffer.mix.discountPct) || 0), currency)
+    : promoDiscountAmount(requested, totals, promo, currency);
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);
 
+  const orderLang = postedOrder?.lang || 'es';
   const canonicalItems = buildBacAwareOrderItems(requested, {
     currency,
     exchangeRate,
     priceOf: (item) => item.unitPrice,
-    lang: postedOrder?.lang || 'es',
+    lang: orderLang,
   });
+  if (dealOffer?.kind === 'bundle') {
+    for (const free of dealOffer.bundle.freeLines) canonicalItems.push(freeVialLine(free.product, free.qty, orderLang));
+  } else if (!dealOffers) {
+    canonicalItems.push(...postedPeptideGifts);
+  }
   const postedTotal = currency === 'USD'
     ? Number(postedOrder?.total_usd || 0)
     : Number(postedOrder?.total_crc || 0);
@@ -192,6 +257,7 @@ export function authoritativeCheckout({
     volumeDiscountPct,
     volumeDiscountAmount: totals.discountAmount,
     promoDiscount,
+    dealOffer: dealOffer ? dealOffer.kind : null,
     shipping: totals.shipping,
     total: finalTotal,
     totalUsd: currency === 'USD' ? finalTotal : round2(finalTotal / exchangeRate),

@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { leadAlertAudience } from '@/lib/leadAlertAudience.mjs';
+import { AD_LANDING_SOURCES } from '@/lib/adLandingLeads.mjs';
 import { isMissingRecipientsTable, missingRecipientColumn } from '@/lib/notificationRecipients.mjs';
 
 const splitList = (value = '') => String(value || '').split(',').map((entry) => entry.trim()).filter(Boolean);
@@ -16,7 +17,7 @@ const splitList = (value = '') => String(value || '').split(',').map((entry) => 
  * exactly why the gap is easy to miss: alerts simply arrive on one channel
  * fewer. Any future landing page needs its source added here too.
  */
-const AD_LANDING_SOURCES = new Set(['adwords_lp', 'glp1_lp']);
+// The list itself lives in adLandingLeads.mjs, shared with the Leads tab.
 
 export const isAdLandingSource = (source = '') => AD_LANDING_SOURCES.has(source);
 

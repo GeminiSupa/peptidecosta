@@ -4,6 +4,7 @@ import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { isDiallablePhone } from '@/lib/leadContact.mjs';
 import { resolveLeadOwnerDetailed } from '@/lib/leadOwner';
 import { loadLandingLeadSettings, resolveCampaignAgent } from '@/lib/leadCampaignAgent';
+import { resolveRotationAgent } from '@/lib/leadRotation.mjs';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 import { classifyLeadSubmission, HONEYPOT_FIELD } from '@/lib/leadSpam.mjs';
@@ -14,7 +15,7 @@ import { sendLandingLeadWhatsAppAlerts } from '@/lib/leadWhatsAppAlert';
 import { enqueueAndProcessLeadNotification } from '@/lib/leadNotificationDelivery';
 import { responseDeadline } from '@/lib/leadNotifications.mjs';
 import { leadNotificationEmailSubject, leadNotificationTitle } from '@/lib/tiktokLeadPosting.mjs';
-import { loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
+import { chatwootLeadColumns, loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
 import {
   hasLandingQualification,
   isDuplicateLandingLeadSubmission,
@@ -32,6 +33,14 @@ import {
 // agent is meant to claim and work, not support tickets.
 
 export const runtime = 'nodejs';
+// Room for the customer-history retries below (up to 30s) plus the save,
+// Chatwoot and alerts that follow.
+export const maxDuration = 60;
+
+// If the database does not answer the "has this person bought before?" check,
+// keep asking for this long before giving the lead to the round robin.
+const HISTORY_RETRY_WINDOW_MS = 30_000;
+const HISTORY_RETRY_GAP_MS = 3_000;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -46,6 +55,19 @@ const escapeHtml = (value = '') => String(value)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
+
+// CRM owners are stored by name; Chatwoot agents are matched by login email.
+async function findAgentEmail(supabase, agentName) {
+  try {
+    const { data } = await supabase.from('admin_profiles').select('name, email');
+    const wanted = String(agentName || '').trim().toLowerCase();
+    const match = (data || []).find((profile) => String(profile.name || '').trim().toLowerCase() === wanted);
+    return String(match?.email || '').trim().toLowerCase();
+  } catch (error) {
+    console.warn('[leads/contact] Owner email lookup failed:', error.message);
+    return '';
+  }
+}
 
 async function sendLandingLeadAlert({
   supabase,
@@ -276,32 +298,56 @@ export async function POST(request) {
     // existing owner is never overwritten — an agent who already claimed this
     // lead outranks anything history says.
     const existingOwner = String(existing?.sales_agent || existing?.owner || existing?.assigned_to || '').trim();
-    const resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
-      phone,
-      email,
-      existingOwner,
-      label: 'leads/contact',
-    });
+    const historyStartedAt = Date.now();
+    let historyAttempts = 0;
+    let resolvedOwner;
+    for (;;) {
+      historyAttempts += 1;
+      resolvedOwner = await resolveLeadOwnerDetailed(supabase, {
+        phone,
+        email,
+        existingOwner,
+        label: 'leads/contact',
+      });
+      const elapsed = Date.now() - historyStartedAt;
+      if (!resolvedOwner.lookupFailed || elapsed + HISTORY_RETRY_GAP_MS > HISTORY_RETRY_WINDOW_MS) break;
+      await new Promise((resolve) => setTimeout(resolve, HISTORY_RETRY_GAP_MS));
+    }
     let owner = resolvedOwner.agent;
+    let ownerEmail = '';
     let assignmentSource = resolvedOwner.source === 'existing' ? 'existing_owner' : resolvedOwner.source;
 
     // A contact an agent already owns keeps that agent: whoever is mid-conversation
     // outranks the campaign setting, so pointing AdWords at one agent never yanks
     // a lead away from the colleague already working it.
     //
-    // Nothing picks up a lead this leaves unowned. That is deliberate: rotation
-    // was removed because it had never assigned a single lead in production, and
-    // an unowned lead is visible and claimable in the Leads tab, whereas one
-    // handed to a deactivated agent looks handled and goes cold.
+    // A new lead goes to the one campaign agent ('fixed') or the next agent in
+    // the rotation ('rotation'). If neither yields an active agent it stays
+    // unowned and claimable in the Leads tab, rather than being handed to a
+    // deactivated agent where it looks handled and goes cold.
+    // The history was retried for 30 seconds above. If Supabase still did not
+    // answer, the lead is not left waiting: it goes to the round robin, and the
+    // log says so, so a returning customer given to the wrong agent can be
+    // found and moved back by hand.
+    if (resolvedOwner.lookupFailed) {
+      console.error(
+        `[leads/contact] ROUND ROBIN FALLBACK: Supabase did not answer the customer-history check after ${historyAttempts} tries `
+          + `(${Math.round((Date.now() - historyStartedAt) / 1000)}s), so this lead goes to the next person in the round robin. `
+          + `It may be a returning customer — check who sold to them before. email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`,
+      );
+    }
     if (!owner && hasLandingQualification(qualification)) {
       try {
         const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
-        if (campaignAgent?.name) {
-          owner = campaignAgent.name;
-          assignmentSource = 'fixed_agent';
+        const rotationAgent = campaignAgent ? null : await resolveRotationAgent(supabase, landingSettings);
+        const picked = campaignAgent || rotationAgent;
+        if (picked?.name) {
+          owner = picked.name;
+          ownerEmail = picked.email;
+          assignmentSource = campaignAgent ? 'fixed_agent' : 'rotation';
         }
-      } catch (fixedError) {
-        console.warn('[leads/contact] Campaign agent lookup failed; lead saved unassigned:', fixedError.message);
+      } catch (assignError) {
+        console.warn('[leads/contact] Campaign agent lookup failed; lead saved unassigned:', assignError.message);
       }
     }
 
@@ -322,6 +368,7 @@ export async function POST(request) {
       assignmentSource === 'order_history' ? `Owner: ${owner} (returning customer — first closed by this agent)` : null,
       assignmentSource === 'crm_lead' ? `Owner: ${owner} (already this agent's lead in the CRM — not a new prospect)` : null,
       assignmentSource === 'fixed_agent' ? `Owner: ${owner} (campaign leads are set to go to this agent)` : null,
+      assignmentSource === 'rotation' ? `Owner: ${owner} (next agent in the lead rotation)` : null,
       dueAt ? `Response due: ${dueAt}` : null,
       marketingConsent ? `Marketing consent: accepted (${consentVersion || 'version not recorded'})` : null,
       marketingConsent && consentText ? `Consent text: ${consentText}` : null,
@@ -398,7 +445,9 @@ export async function POST(request) {
         new_agent: owner,
         reason: assignmentSource === 'fixed_agent'
           ? 'Landing-page leads are configured to go to a single agent'
-          : assignmentSource === 'crm_lead'
+          : assignmentSource === 'rotation'
+            ? 'Next agent in the landing-page lead rotation'
+            : assignmentSource === 'crm_lead'
             ? 'Already this agent\'s lead in the CRM'
             : 'Returning customer assigned to earliest completed order owner',
         actor_email: 'landing-system@peptidescostarica.net',
@@ -415,6 +464,9 @@ export async function POST(request) {
       ? await loadChatwootLeadEnabled(supabase)
       : false;
     if (chatwootEnabled) {
+      // The Chatwoot chat is assigned to the same person as the CRM lead, so
+      // the agent answering is the one credited when the customer orders.
+      if (owner && !ownerEmail) ownerEmail = await findAgentEmail(supabase, owner);
       chatwootResult = await sendAdLeadToChatwoot({
         leadId,
         name,
@@ -423,11 +475,40 @@ export async function POST(request) {
         source,
         qualificationLines: landingQualificationNotes(qualification),
         campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
-        assignedAgent: owner,
+        assigneeEmail: ownerEmail,
         dueAt,
       });
+      if (chatwootResult.assignmentError) {
+        console.warn('[leads/contact] Chatwoot chat left unassigned:', chatwootResult.assignmentError);
+      }
       if (!chatwootResult.sent) {
         console.error('[leads/contact] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
+      }
+    }
+
+    // Kept on the lead so the Leads tab shows which chats failed; the logs alone
+    // made a lost chat invisible. Optional columns: add-chatwoot-status-to-leads.sql.
+    if (leadId && isAdLandingSource(source)) {
+      try {
+        const { error: statusError } = await writeDroppingMissingColumns(
+          chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
+          [
+            'chatwoot_status',
+            'chatwoot_error',
+            'chatwoot_conversation_id',
+            'chatwoot_contact_id',
+            'chatwoot_conversation_status',
+            'chatwoot_assignee_email',
+            'chatwoot_conversation_url',
+            'chatwoot_synced_at',
+          ],
+          (row) => (Object.keys(row).length
+            ? supabase.from('catalog_leads').update(row).eq('id', leadId)
+            : Promise.resolve({ error: null })),
+        );
+        if (statusError) console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
+      } catch (statusError) {
+        console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
       }
     }
 

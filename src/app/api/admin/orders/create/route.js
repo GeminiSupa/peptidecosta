@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { agentMatchKeys } from '@/lib/agentOrders';
-import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { isGiftLine } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout } from '@/lib/authoritativeCheckout.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
@@ -161,15 +161,10 @@ export async function POST(request) {
     const currency = normalizeAdminOrderCurrency(order.currency);
     const orderNum = String(order.order_number || '').trim() || `WPCR-${Date.now().toString(36).toUpperCase()}`;
     const promo = await resolvePromo(supabase, { ...order, currency });
-    const names = [...new Set(order.items
-      .filter((item) => !isGiftLine(item))
-      .map((item) => stripGiftSuffix(item?.product || item?.name))
-      .filter(Boolean))];
     const [{ data: products, error: productError }, rateResult] = await Promise.all([
       supabase
         .from('products')
-        .select('id,product,price_usd,price_crc,status,inventory_count')
-        .in('product', names),
+        .select('id,product,price_usd,price_crc,status,inventory_count'),
       getDatabaseBackedUsdToCrcRate(),
     ]);
     if (productError) {
@@ -212,6 +207,8 @@ export async function POST(request) {
       promo,
       exchangeRate: liveExchangeRate,
       suppressVolumeDiscount: replaceVolumeDiscount,
+      // Staff may give a free vial by hand ("X (Free Gift)" at 0).
+      keepPostedGifts: true,
     });
     if (!authoritative.ok) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });

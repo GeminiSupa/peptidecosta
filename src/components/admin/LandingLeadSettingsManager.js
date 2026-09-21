@@ -134,6 +134,7 @@ export default function LandingLeadSettingsManager() {
               value={settings.assignmentMode}
               onChange={(event) => changeSetting('assignmentMode', event.target.value)}
             >
+              <option value="rotation">Take turns between agents (round robin)</option>
               <option value="fixed">Send every new lead to one agent</option>
               <option value="unassigned">Leave new leads unassigned</option>
             </select>
@@ -155,6 +156,12 @@ export default function LandingLeadSettingsManager() {
             </label>
           )}
         </div>
+        {settings.assignmentMode === 'rotation' && (
+          <div style={{ color: '#86efac', fontSize: '.74rem', marginTop: 10 }}>
+            Round robin is managed by a superadmin in Team → Notification Settings, where the agents are ticked.
+            {!(settings.rotationAgentEmails || []).length && ' No agents are ticked yet, so new leads arrive unassigned.'}
+          </div>
+        )}
         {settings.assignmentMode === 'fixed' && !settings.assignedAgentEmail && (
           <div style={{ color: '#fbbf24', fontSize: '.74rem', marginTop: 10 }}>
             No agent chosen yet — until one is picked, new leads arrive unassigned for anyone to claim.

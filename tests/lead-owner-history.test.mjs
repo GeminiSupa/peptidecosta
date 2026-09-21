@@ -244,10 +244,13 @@ test('the campaign agent is only assigned to a lead nobody already owns', () => 
     /if \(!owner && hasLandingQualification\(qualification\)\) \{/,
     'dropping the !owner guard sends every returning customer to the campaign agent again',
   );
+  // A failed history read is retried before falling back, and the fallback is logged.
+  assert.match(route, /HISTORY_RETRY_WINDOW_MS = 30_000/);
+  assert.match(route, /ROUND ROBIN FALLBACK: Supabase did not answer/);
   assert.match(route, /resolveLeadOwnerDetailed\(/, 'ownership must be resolved before assignment');
 });
 
-test('the retired round-robin is gone from the route', () => {
+test('the retired database round-robin is gone from the route', () => {
   const route = fs.readFileSync('src/app/api/leads/contact/route.js', 'utf8');
   assert.doesNotMatch(route, /assign_next_landing_lead_agent/);
   assert.doesNotMatch(route, /fallbackRoundRobinAgent/);
@@ -278,7 +281,8 @@ test('the outbox resolves the audience from the saved owner, not from the job', 
   // both. Asserting the helper keeps the rule in one place: a new landing page is
   // opted in by joining AD_LANDING_SOURCES, never by editing this line.
   assert.match(delivery, /isAdLandingSource\(details\.source\) \? audience\.whatsapp : \[\]/);
-  const recipients = fs.readFileSync('src/lib/leadNotificationRecipients.js', 'utf8');
+  const recipients = fs.readFileSync('src/lib/adLandingLeads.mjs', 'utf8');
+  assert.match(fs.readFileSync('src/lib/leadNotificationRecipients.js', 'utf8'), /AD_LANDING_SOURCES\.has\(source\)/);
   assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'adwords_lp'[^\]]*\]\)/);
   assert.match(recipients, /AD_LANDING_SOURCES = new Set\(\[[^\]]*'glp1_lp'[^\]]*\]\)/);
 });

@@ -1,11 +1,16 @@
 import React, { useMemo, useState } from 'react';
-import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff } from 'lucide-react';
+import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
 
 import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
-import ExchangeRateSettings from './ExchangeRateSettings';
+import {
+  calculateProductProfit,
+  calculateSalesVelocity,
+  calculateStockoutForecast,
+} from '@/lib/inventoryForecasting.mjs';
 
 export default function ProductsManager({
   products,
+  orders = [],
   productSearch, setProductSearch,
   isCsvOpen, setIsCsvOpen,
   csvDragActive, handleCsvDrag, handleCsvDrop, handleCsvFileSelect,
@@ -25,8 +30,6 @@ export default function ProductsManager({
   handleMoveRow, handleDeleteRow,
   handleToggleHidden,
   changedProductIds,
-  isSuperadmin = false,
-  onExchangeRateChanged,
 }) {
   const [mobileEditProduct, setMobileEditProduct] = useState(null);
   const [mobileProductError, setMobileProductError] = useState('');
@@ -95,6 +98,8 @@ export default function ProductsManager({
     String(p.discount || '') !== String(mobileEditProduct.discount || '') ||
     String(p.imageUrl || '') !== String(mobileEditProduct.imageUrl || '') ||
     String(p.coa || '') !== String(mobileEditProduct.coa || '') ||
+    String(p.coaExpiryDate || p.coa_expiry_date || '') !== String(mobileEditProduct.coaExpiryDate || mobileEditProduct.coa_expiry_date || '') ||
+    String(p.coaLotNumber || p.coa_lot_number || '') !== String(mobileEditProduct.coaLotNumber || mobileEditProduct.coa_lot_number || '') ||
     Boolean(p.freeBacWater) !== Boolean(mobileEditProduct.freeBacWater) ||
     String(p.freeBacSizeMl ?? 3) !== String(mobileEditProduct.freeBacSizeMl ?? 3) ||
     String(p.freeBacVialsPerItem ?? 1) !== String(mobileEditProduct.freeBacVialsPerItem ?? 1)
@@ -206,7 +211,6 @@ export default function ProductsManager({
 
   return (
     <div>
-      {isSuperadmin && <ExchangeRateSettings onChanged={onExchangeRateChanged} />}
       <div className="admin-toolbar">
         <div>
           <h3>Master Inventory Products</h3>
@@ -358,6 +362,11 @@ export default function ProductsManager({
                 <th style={{ minWidth: '180px' }}>Category</th>
                 <th style={{ width: '100px' }}>Price (USD)</th>
                 <th style={{ width: '100px' }}>CRC Auto</th>
+                <th style={{ width: '100px' }}>Cost / Vial ($)</th>
+                <th style={{ minWidth: '120px' }}>Profit / Margin</th>
+                <th style={{ minWidth: '160px' }}>Supplier &amp; Lead Time</th>
+                <th style={{ minWidth: '130px' }}>Batch / Lot #</th>
+                <th style={{ minWidth: '220px' }}>Stockout Forecast</th>
                 <th style={{ width: '110px' }}>Orig. Price (USD)</th>
                 <th style={{ width: '110px' }}>Orig. CRC Auto</th>
                 <th style={{ width: '130px' }}>Sale Start (CR)</th>
@@ -368,6 +377,8 @@ export default function ProductsManager({
                 <th style={{ minWidth: '180px' }}>Volume/Bulk Discount Info</th>
                 <th style={{ minWidth: '200px' }}>Image URL / Physical Upload</th>
                 <th style={{ minWidth: '220px' }}>COA URL Link</th>
+                <th style={{ minWidth: '130px' }}>COA Expiry Date</th>
+                <th style={{ minWidth: '130px' }}>COA Lot #</th>
                 <th style={{ width: '120px', textAlign: 'center' }}>Info/Blog</th>
                 <th style={{ minWidth: '200px' }}>Free BAC Water Gift</th>
                 <th style={{ width: '110px', textAlign: 'center' }}>Catalog Visibility</th>
@@ -463,6 +474,134 @@ export default function ProductsManager({
                     >
                       {formatDerivedCrc(p.priceUsd)}
                     </div>
+                  </td>
+
+                  {/* Cost per Vial (USD) */}
+                  <td data-label="Cost (USD)">
+                    <div 
+                      contentEditable 
+                      suppressContentEditableWarning
+                      className="cell-editable"
+                      onBlur={(e) => {
+                        const val = e.target.innerText.trim();
+                        const num = parseFloat(val);
+                        handleCellChange(p.id, 'costUsd', isNaN(num) ? 0 : num);
+                      }}
+                    >
+                      {p.costUsd !== undefined && p.costUsd !== null ? p.costUsd : ''}
+                    </div>
+                  </td>
+
+                  {/* Profit / Margin */}
+                  <td data-label="Profit / Margin">
+                    {(() => {
+                      const profitData = calculateProductProfit(p.priceUsd, p.costUsd, exchangeRate);
+                      return (
+                        <div className="cell-editable" style={{ background: 'rgba(15, 23, 42, 0.4)', cursor: 'default' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: profitData.profitUsd >= 0 ? '#4ade80' : '#f87171' }}>
+                            ${profitData.profitUsd.toFixed(2)}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>
+                            {profitData.marginPct}% margin
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </td>
+
+                  {/* Supplier & Lead Time */}
+                  <td data-label="Supplier & Lead Time">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div 
+                        contentEditable 
+                        suppressContentEditableWarning
+                        className="cell-editable"
+                        placeholder="Supplier Name..."
+                        onBlur={(e) => handleCellChange(p.id, 'supplierName', e.target.innerText)}
+                        style={{ fontSize: '0.82rem', fontWeight: '600' }}
+                      >
+                        {p.supplierName || ''}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#94a3b8' }}>
+                        <Truck size={11} />
+                        <span>Lead:</span>
+                        <div
+                          contentEditable
+                          suppressContentEditableWarning
+                          className="cell-editable"
+                          style={{ padding: '1px 4px', minWidth: '30px' }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.innerText.trim(), 10);
+                            handleCellChange(p.id, 'supplierLeadTimeDays', isNaN(val) ? 14 : val);
+                          }}
+                        >
+                          {p.supplierLeadTimeDays || 14}
+                        </div>
+                        <span>days</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* Batch / Lot # */}
+                  <td data-label="Batch / Lot #">
+                    <div 
+                      contentEditable 
+                      suppressContentEditableWarning
+                      className="cell-editable"
+                      placeholder="LOT-..."
+                      onBlur={(e) => handleCellChange(p.id, 'batchNumber', e.target.innerText)}
+                      style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}
+                    >
+                      {p.batchNumber || ''}
+                    </div>
+                  </td>
+
+                  {/* Stockout Forecast & Reorder Alert */}
+                  <td data-label="Stockout Forecast">
+                    {(() => {
+                      const velocityData = calculateSalesVelocity(p.product, orders, 30);
+                      const forecast = calculateStockoutForecast({
+                        inventoryCount: p.inventoryCount,
+                        dailyVelocity: velocityData.dailyVelocity,
+                        supplierLeadTimeDays: p.supplierLeadTimeDays || 14,
+                        lowStockThreshold: p.lowStockThreshold || 5,
+                      });
+
+                      if (!forecast.tracked) {
+                        return <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Stock untracked</span>;
+                      }
+
+                      return (
+                        <div style={{ fontSize: '0.78rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#cbd5e1' }}>
+                            <TrendingUp size={11} style={{ color: '#38bdf8' }} />
+                            <span>{velocityData.dailyVelocity} units/day</span>
+                            <span style={{ color: '#64748b' }}>({velocityData.totalUnitsSold} in 30d)</span>
+                          </div>
+
+                          {forecast.alertStatus === 'reorder_now' && (
+                            <div style={{ marginTop: '4px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '3px 6px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.72rem' }}>
+                              ⚠️ REORDER NOW ({forecast.daysUntilStockout}d stock vs {forecast.supplierLeadTimeDays}d lead)
+                            </div>
+                          )}
+                          {forecast.alertStatus === 'out_of_stock' && (
+                            <div style={{ marginTop: '4px', background: 'rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', fontSize: '0.72rem' }}>
+                              OUT OF STOCK
+                            </div>
+                          )}
+                          {forecast.alertStatus === 'low_stock' && (
+                            <div style={{ marginTop: '4px', color: '#f59e0b', fontSize: '0.72rem' }}>
+                              Low stock ({forecast.inventoryCount} left)
+                            </div>
+                          )}
+                          {forecast.alertStatus === 'healthy' && (
+                            <div style={{ marginTop: '2px', color: '#34d399', fontSize: '0.72rem' }}>
+                              ~{Math.round(forecast.daysUntilStockout)} days supply left
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
 
                   {/* Orig USD Price */}
@@ -661,6 +800,31 @@ export default function ProductsManager({
                       title={p.coa}
                     >
                       {p.coa}
+                    </div>
+                  </td>
+
+                  {/* COA Expiry Date */}
+                  <td data-label="COA Expiry Date">
+                    <input 
+                      type="date" 
+                      className="cell-input"
+                      value={p.coaExpiryDate || p.coa_expiry_date || ''}
+                      onChange={(e) => handleCellChange(p.id, 'coaExpiryDate', e.target.value)}
+                      style={{ background: 'transparent', color: '#fff', border: 'none', width: '100%', fontSize: '0.75rem', outline: 'none' }}
+                    />
+                  </td>
+
+                  {/* COA Lot Number */}
+                  <td data-label="COA Lot #">
+                    <div 
+                      contentEditable 
+                      suppressContentEditableWarning
+                      className="cell-editable"
+                      placeholder="LOT-..."
+                      onBlur={(e) => handleCellChange(p.id, 'coaLotNumber', e.target.innerText)}
+                      style={{ fontSize: '0.82rem', fontFamily: 'monospace' }}
+                    >
+                      {p.coaLotNumber || p.coa_lot_number || ''}
                     </div>
                   </td>
 
@@ -931,6 +1095,16 @@ export default function ProductsManager({
                 <span>COA URL</span>
                 <input value={mobileEditProduct.coa || ''} onChange={(e) => updateMobileDraft('coa', e.target.value)} />
               </label>
+              <div className="product-mobile-field-grid">
+                <label>
+                  <span>COA Expiry Date</span>
+                  <input type="date" value={mobileEditProduct.coaExpiryDate || mobileEditProduct.coa_expiry_date || ''} onChange={(e) => updateMobileDraft('coaExpiryDate', e.target.value)} />
+                </label>
+                <label>
+                  <span>COA Lot #</span>
+                  <input value={mobileEditProduct.coaLotNumber || mobileEditProduct.coa_lot_number || ''} onChange={(e) => updateMobileDraft('coaLotNumber', e.target.value)} />
+                </label>
+              </div>
               <div className="product-mobile-secondary-actions">
                 <button type="button" className="admin-btn" onClick={openMobileDescriptionEditor}>
                   <FileText size={14} />

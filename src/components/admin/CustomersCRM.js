@@ -3,7 +3,7 @@ import {
   Users, User, Mail, MessageCircle, DollarSign, Calendar,
   ArrowDownUp, BadgeCheck, Search, Upload, Crown, Phone, MapPin, ShoppingBag,
   Sparkles, Brain, Edit2, Save, Send, X, History, Clock, ClipboardList,
-  Activity, CheckCircle2, Copy, AlertTriangle, Target, Trash2
+  Activity, CheckCircle2, Copy, AlertTriangle, Target, Trash2, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -11,6 +11,7 @@ import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
+import { calculateCustomerReorderStats } from '@/lib/reorderTracking.mjs';
 import {
   buildAgentHistory,
   buildAgentNameResolver,
@@ -20,6 +21,7 @@ import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { leadContactPoints } from '@/lib/leadContact.mjs';
 import { supabase } from '@/lib/supabase';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import { CUSTOMER_SEGMENTS, getCustomerSegments } from '@/lib/customerSegmentation.mjs';
 
 const takeCustomerHandoffSearch = () => {
   if (typeof window === 'undefined') return '';
@@ -175,6 +177,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
   const [exportLoading, setExportLoading] = useState(false);
   const [generatingPitchId, setGeneratingPitchId] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
+  const [segmentFilter, setSegmentFilter] = useState('all');
   const [agentFilter, setAgentFilter] = useState('all');
   
   // Sorting State
@@ -456,6 +459,12 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
       if (filterTab === 'customers' && c.isLead) return false;
       if (filterTab === 'leads' && (!c.isLead || c.isCrmLead)) return false;
       if (filterTab === 'crm_leads' && !c.isCrmLead) return false;
+
+      // Segment filter
+      if (segmentFilter !== 'all') {
+        const segs = getCustomerSegments(c);
+        if (!segs.includes(segmentFilter)) return false;
+      }
       
       // Agent filter
       if (agentFilter !== 'all') {
@@ -484,7 +493,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
     });
 
     return result;
-  }, [customers, searchTerm, filterTab, agentFilter, sortField, sortDir]);
+  }, [customers, searchTerm, filterTab, segmentFilter, agentFilter, sortField, sortDir]);
 
 
 
@@ -831,6 +840,25 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
     ? staffActivity.filter(entry => entry.customerId === selectedCustomer.id).slice(0, 8)
     : [];
   const openReminderCount = reminders.filter(reminder => reminder.status !== 'done').length;
+
+  const selectedCustomerReorderStats = useMemo(() => {
+    if (!selectedCustomer) return null;
+    const custEmail = (selectedCustomer.email || '').toLowerCase();
+    const custPhone = (selectedCustomer.phone || selectedCustomer.whatsappWaId || '').replace(/\D/g, '');
+    const custName = (selectedCustomer.name || '').toLowerCase();
+
+    const matchingOrders = orders.filter((o) => {
+      if (o.status === 'Cancelled') return false;
+      const em = (o.customer_email || '').toLowerCase();
+      const ph = (o.customer_phone || '').replace(/\D/g, '');
+      const nm = (o.customer_name || '').toLowerCase();
+      return (custEmail && em === custEmail) || (custPhone && ph.slice(-8) === custPhone.slice(-8)) || (custName && nm === custName);
+    });
+
+    if (!matchingOrders.length) return null;
+    const stats = calculateCustomerReorderStats(matchingOrders);
+    return stats[0] || null;
+  }, [selectedCustomer, orders]);
 
   return (
     <div className="crm-container">
@@ -1494,6 +1522,36 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
         </div>
       </div>
 
+      {/* Customer Segment Targeting Row */}
+      <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', padding: '8px 20px', background: 'rgba(15, 23, 42, 0.4)', borderBottom: '1px solid rgba(255,255,255,0.05)', alignItems: 'center' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '4px', whiteSpace: 'nowrap' }}>
+          Target Segments:
+        </span>
+        <button
+          className={`crm-tab ${segmentFilter === 'all' ? 'active' : ''}`}
+          onClick={() => { setSegmentFilter('all'); setCurrentPage(1); }}
+          style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+        >
+          All Segments
+        </button>
+        {CUSTOMER_SEGMENTS.map(seg => {
+          const count = customers.filter(c => getCustomerSegments(c).includes(seg.key)).length;
+          return (
+            <button
+              key={seg.key}
+              className={`crm-tab ${segmentFilter === seg.key ? 'active' : ''}`}
+              onClick={() => { setSegmentFilter(seg.key); setCurrentPage(1); }}
+              style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+              title={seg.description}
+            >
+              <span>{seg.icon}</span>
+              <span>{seg.label}</span>
+              <span className="crm-tab-badge">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
 
       {filteredCustomers.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
@@ -1962,6 +2020,37 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
 
             <div className="crm-workspace-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                {selectedCustomerReorderStats && (
+                  <div className="crm-workspace-card" style={{ border: '1px solid rgba(245, 158, 11, 0.3)', background: 'rgba(245, 158, 11, 0.04)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#fbbf24' }}>
+                        <RotateCcw size={16} /> Reorder Schedule &amp; Supply
+                      </h4>
+                      {selectedCustomerReorderStats.alertStatus === 'overdue' && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(239, 68, 68, 0.4)' }}>
+                          Overdue ({selectedCustomerReorderStats.daysOverdue}d)
+                        </span>
+                      )}
+                      {selectedCustomerReorderStats.alertStatus === 'due_soon' && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                          Due Soon ({selectedCustomerReorderStats.daysUntilDue}d)
+                        </span>
+                      )}
+                      {selectedCustomerReorderStats.alertStatus === 'on_track' && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 'bold', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', padding: '2px 8px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.4)' }}>
+                          On Track ({selectedCustomerReorderStats.daysUntilDue}d)
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>Pattern: <strong style={{ color: '#fff' }}>{selectedCustomerReorderStats.intervalPattern}</strong></div>
+                      <div>Estimated Supply: <strong style={{ color: '#fff' }}>{selectedCustomerReorderStats.estimatedSupplyDays} days</strong></div>
+                      <div>Last Purchased: <strong style={{ color: '#fff' }}>{selectedCustomerReorderStats.lastProductPurchased}</strong></div>
+                      <div>Predicted Reorder: <strong style={{ color: '#38bdf8' }}>{formatCrDate(selectedCustomerReorderStats.predictedReorderDate)}</strong></div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="crm-workspace-card">
                   <h4><Clock size={16} color="#38bdf8" /> Follow-up reminders</h4>
                   <div style={{ display: 'grid', gap: '8px' }}>

@@ -11,11 +11,14 @@
  * in this file reads the clock or the network on its own.
  */
 
-import { crWallToIso, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
+import { crWallToIso, formatCrInstant, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
+import { OFFERS_PRICING_MODE, dealOfferSummaries } from './dealOffers.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+/** A scheduled start must be at least this far ahead, so it is not already due on save. */
+const SCHEDULE_MIN_LEAD_MS = 60 * 1000;
 
 /** Free-text label written into products.discount while a deal is live. */
 export const DEAL_DISCOUNT_LABEL = 'Deal of the Week';
@@ -87,6 +90,29 @@ export function weekWindow(now = new Date(), { minHours = 24 } = {}) {
     endsAtDate: wallDateString(sunday),
     rolledForward,
   };
+}
+
+/**
+ * The window for a deal scheduled to start later: it begins at `startsAt` and
+ * ends at the Sunday that follows it, by the same rule as weekWindow.
+ *
+ * A start that overlaps the live deal is refused rather than silently cutting
+ * the live deal short — only one deal can run, and ending one early is a
+ * decision for the End button, not a side effect of scheduling.
+ *
+ * @returns {{ window?: ReturnType<typeof weekWindow>, error?: string }}
+ */
+export function scheduledWindow(startsAt, { now = new Date(), liveEndsAt = null } = {}) {
+  const start = Date.parse(startsAt || '');
+  if (!Number.isFinite(start)) return { error: 'Pick a start date and time.' };
+  const instant = now instanceof Date ? now.getTime() : Date.parse(now);
+  if (start <= instant + SCHEDULE_MIN_LEAD_MS) {
+    return { error: 'That start time has already passed. Pick a later time, or launch the deal now.' };
+  }
+  if (liveEndsAt && start < Date.parse(liveEndsAt)) {
+    return { error: `The current deal runs until ${formatCrInstant(liveEndsAt)}. Pick a start at or after that time.` };
+  }
+  return { window: weekWindow(new Date(start)) };
 }
 
 /** Strip currency symbols and separators from a stored price string. */
@@ -326,6 +352,7 @@ function joinNames(names, conjunction) {
 }
 
 export function dealPricingMode(deal) {
+  if (deal?.pricing_mode === OFFERS_PRICING_MODE) return OFFERS_PRICING_MODE;
   return deal?.pricing_mode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
 }
 
@@ -369,6 +396,14 @@ export function dealBannerText(deal, lang = 'en') {
   const pct = toPercent(deal?.discount_pct);
   if (!pct) return '';
   const isEn = String(lang).toLowerCase().startsWith('en');
+  if (dealPricingMode(deal) === OFFERS_PRICING_MODE) {
+    const custom = String((isEn ? deal?.title_en : deal?.title_es) || '').trim();
+    if (custom) return custom;
+    const offers = dealOfferSummaries(deal?.offers, lang).join(isEn ? ' — or — ' : ' — o — ');
+    return isEn
+      ? `⚡ DEAL OF THE WEEK: ${offers}. No code needed; offers do not stack.`
+      : `⚡ OFERTA DE LA SEMANA: ${offers}. Sin código; las ofertas no se acumulan.`;
+  }
   const names = deal?.product_names || [];
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
   const minimum = dealMinUnits(deal);
@@ -409,6 +444,27 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
   const requirementEn = bulk ? ` when you mix and match ${dealMinUnits(deal)}+ selected vials` : '';
   const requirementEs = bulk ? ` al combinar ${dealMinUnits(deal)}+ viales seleccionados` : '';
+
+  if (dealPricingMode(deal) === OFFERS_PRICING_MODE) {
+    const en = dealOfferSummaries(deal?.offers, 'en');
+    const es = dealOfferSummaries(deal?.offers, 'es');
+    return {
+      emailSubject: `⚡ Deal of the Week: ${en.join(' or ')}`,
+      message: [
+        `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
+        '',
+        ...en.map((offer, index) => `Offer #${index + 1}: ${offer}.`),
+        `Applied automatically, no code needed. If your order qualifies for multiple offers, you get whichever saves more — they do not stack. BAC Water does not count toward the offers. Stock is limited.`,
+        `Ends Sunday at midnight.`,
+        '',
+        ...es.map((offer, index) => `Oferta #${index + 1}: ${offer}.`),
+        `Se aplica automáticamente, sin código. Si tu pedido califica para varias ofertas, recibes la que más ahorra; no se acumulan. El agua bacteriostática no cuenta para las ofertas. Inventario limitado.`,
+        `Termina el domingo a medianoche.`,
+        '',
+        destination,
+      ].join('\n'),
+    };
+  }
 
   return {
     emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,

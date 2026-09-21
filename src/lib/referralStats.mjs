@@ -7,7 +7,7 @@
  * uses, so a name that earns commission is a name that shows up here.
  */
 
-import { orderCountsAsSale } from './orderRevenue.mjs';
+import { FALLBACK_USD_CRC_RATE, orderCountsAsSale } from './orderRevenue.mjs';
 
 const norm = (value) => String(value || '').trim().toLowerCase();
 
@@ -69,7 +69,7 @@ function netOrderUsd(order, exchangeRate) {
 }
 
 /** Order total in USD, tolerating the several shapes orders are stored in. */
-export function orderUsd(order, exchangeRate = 454.48) {
+export function orderUsd(order, exchangeRate = FALLBACK_USD_CRC_RATE) {
   const usd = Number(order?.total_usd || 0);
   if (usd > 0) return usd;
   const crc = Number(order?.total_crc || 0);
@@ -83,7 +83,7 @@ export function orderUsd(order, exchangeRate = 454.48) {
  * @returns {Array} one row per referral, scans joined to paid orders,
  *                  sorted by revenue then scans.
  */
-export function buildReferralStats(scans = [], orders = [], exchangeRate = 454.48) {
+export function buildReferralStats(scans = [], orders = [], exchangeRate = FALLBACK_USD_CRC_RATE) {
   const groups = groupScans(scans);
 
   // Seed groups for referrals that produced orders but recorded no scans -

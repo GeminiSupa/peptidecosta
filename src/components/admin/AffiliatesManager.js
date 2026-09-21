@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { adminFetch } from '@/lib/adminApi';
+import { adminFetch, deleteToBin } from '@/lib/adminApi';
 import QRCode from 'qrcode';
 import { Plus, Trash2, Edit2, CheckCircle, XCircle, RefreshCw, Users, Tag, Check, QrCode, Copy, Download, X } from 'lucide-react';
 import { getBadgeStyleOptions, resolvePromoBadgeText } from '@/lib/promoBadge.mjs';
@@ -319,8 +319,9 @@ export default function AffiliatesManager({ products = [] }) {
       `${ownedCodes.length} promo code${ownedCodes.length === 1 ? '' : 's'} will be deleted too${ownedCodes.length ? `: ${ownedCodes.map((p) => p.code).join(', ')}` : ''}`,
     ])) return;
     try {
-      const { error } = await supabase.from('affiliates').delete().eq('id', id);
-      if (error) throw error;
+      // Their promo codes are snapshotted alongside them, so restoring the
+      // affiliate from the Bin brings the codes back working.
+      await deleteToBin('affiliates', id);
       setAffiliates(affiliates.filter(a => a.id !== id));
       setPromoCodes(promoCodes.filter(p => p.affiliate_id !== id));
     } catch (err) {

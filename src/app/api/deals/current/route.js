@@ -19,6 +19,7 @@ export async function GET() {
       product_names: deal.product_names || [], discount_pct: deal.discount_pct,
       starts_at: deal.starts_at, ends_at: deal.ends_at,
       pricing_mode: deal.pricing_mode || 'shelf', min_units: deal.min_units || 0, max_units: deal.max_units || null,
+      offers: deal.offers || null,
     }});
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Could not read weekly deal.' }, { status: 503 });

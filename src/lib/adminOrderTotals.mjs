@@ -1,7 +1,9 @@
 import { isBacWater, splitCartUnits } from './bacWater.mjs';
 import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
+import { FALLBACK_USD_CRC_RATE } from './fallbackExchangeRate.mjs';
 
-export const ADMIN_FALLBACK_EXCHANGE_RATE = 454.48;
+// Same emergency rate as everywhere else — see fallbackExchangeRate.mjs.
+export const ADMIN_FALLBACK_EXCHANGE_RATE = FALLBACK_USD_CRC_RATE;
 
 export function normalizeAdminOrderCurrency(currency) {
   return String(currency || '').trim().toUpperCase() === 'USD' ? 'USD' : 'CRC';

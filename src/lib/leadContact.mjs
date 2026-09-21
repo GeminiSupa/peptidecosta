@@ -74,7 +74,9 @@ export function leadPhone(lead) {
   const contact = asPhone(lead?.contact_value);
   if (contact) return contact;
 
-  return asPhone(labelledNote(lead?.notes, 'Phone'));
+  return asPhone(labelledNote(lead?.notes, 'Phone'))
+    // The landing-page form writes its number as "Phone (WhatsApp/SMS): …".
+    || asPhone(labelledNote(lead?.notes, 'Phone \\(WhatsApp/SMS\\)'));
 }
 
 /**

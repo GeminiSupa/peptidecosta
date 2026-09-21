@@ -98,7 +98,8 @@ export function mapDbProduct(item) {
   };
 }
 
-const PRODUCT_SELECT =
+// Shared with /deal-of-the-week, which builds cart items with mapDbProduct too.
+export const PRODUCT_SELECT =
   'product,category,price_usd,price_crc,original_price_usd,original_price_crc,discount,sale_start_time,sale_end_time,status,inventory_count,low_stock_threshold,coa,image_url,description_en,description_es,emoji,priority,free_bac_water,free_bac_size_ml,free_bac_vials_per_item';
 
 /** Server-side catalog fetch with ISR-friendly caching. */

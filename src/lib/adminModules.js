@@ -21,6 +21,7 @@ export const ADMIN_MODULES = [
   { id: 'carts', label: 'Carts', title: 'Carts', group: 'Sales & Marketing' },
   { id: 'spreadsheet', label: 'Products', title: 'Products', group: 'Core Operations', superadminOnly: true },
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
+  { id: 'reorder_tracking', label: 'Reorder Tracking', title: 'Reorder Tracking', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
@@ -59,6 +60,12 @@ export const ADMIN_MODULES = [
   { id: 'whatsapp_ai', label: 'Sales WhatsApp', title: 'Sales WhatsApp', group: 'System & AI' },
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
+  // Anything a person deletes lands here first — see src/lib/recycleBin.mjs.
+  // Assignable rather than superadmin-only so whoever deleted something can put
+  // it back without chasing the owner. The tab shows only the modules that
+  // person already has, so a Bin entry never widens anybody's reach; the
+  // retention period is the superadmin-only part, checked in the route.
+  { id: 'recycle_bin', label: 'Bin', title: 'Bin (Deleted Items)', group: 'System & AI' },
   // Sandbox card payments. The panel and its route existed for a while with
   // nothing mounting them, so there was no way to reach it from the dashboard.
   { id: 'payment_test', label: 'Payment Test', title: 'Payment Test (Sandbox)', group: 'System & AI', superadminOnly: true },

@@ -149,6 +149,7 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
   footerQuickLinks: [
     { labelEn: 'Home', labelEs: 'Inicio', href: '/' },
     { labelEn: 'About us', labelEs: 'Nosotros', href: '/about' },
+    { labelEn: 'Deal of the Week', labelEs: 'Oferta de la Semana', href: '/deal-of-the-week' },
     { labelEn: 'Bulk Discounts', labelEs: 'Descuentos por volumen', href: '/bulk-discounts' },
     { labelEn: 'FAQ', labelEs: 'Preguntas frecuentes', href: '/faq' },
     { labelEn: 'Blog', labelEs: 'Blog', href: '/blog' },
@@ -465,7 +466,6 @@ export const DEFAULT_PUBLIC_PAGE_SETTINGS = {
     get tiers() { return [
       { labelEn: '5+ Vials', labelEs: '5+ Viales', valueEn: '15% OFF', valueEs: '15% DESC.', textEn: 'Automatic discount at checkout.', textEs: 'Descuento automático en caja.' },
       { labelEn: '10+ Vials', labelEs: '10+ Viales', valueEn: `${tenPlusDiscountPct()}% OFF`, valueEs: `${tenPlusDiscountPct()}% DESC.`, textEn: 'Best value for active researchers.', textEs: 'Mejor valor para investigadores activos.' },
-      { labelEn: '25+ Vials', labelEs: '25+ Viales', valueEn: 'Contact Us', valueEs: 'Contáctanos', textEn: 'Custom wholesale pricing available.', textEs: 'Precios mayoristas personalizados.' },
     ]; },
     // Index of the tier rendered with the highlighted/scaled treatment.
     featuredTierIndex: 1,

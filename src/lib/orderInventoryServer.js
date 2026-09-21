@@ -1,9 +1,14 @@
 import { stripGiftSuffix } from './bacWater.mjs';
+import { productNameResolver } from './authoritativeCheckout.mjs';
 
-function quantities(lines = []) {
+// Lines are keyed by the catalog's current spelling when one is known, so an
+// order saved before a product rename releases its stock from the same row it
+// deducts from.
+function quantities(lines = [], findProduct = () => null) {
   const byProduct = new Map();
   for (const line of lines || []) {
-    const product = stripGiftSuffix(line?.product || line?.name);
+    const name = stripGiftSuffix(line?.product || line?.name);
+    const product = findProduct(name)?.product || name;
     const qty = Math.max(0, Math.floor(Number(line?.qty ?? line?.quantity ?? 0)));
     if (!product || !qty) continue;
     byProduct.set(product, (byProduct.get(product) || 0) + qty);
@@ -12,8 +17,9 @@ function quantities(lines = []) {
 }
 
 export function inventoryReservationPlan(currentLines = [], desiredItems = [], products = []) {
-  const current = quantities(currentLines);
-  const desired = quantities(desiredItems);
+  const findProduct = productNameResolver(products);
+  const current = quantities(currentLines, findProduct);
+  const desired = quantities(desiredItems, findProduct);
   const productByName = new Map((products || []).map((row) => [row.product, row]));
   const changes = [];
   const reservations = [];
@@ -63,18 +69,16 @@ async function applyInventoryChanges(supabase, changes, direction = 'forward') {
 }
 
 export async function prepareInventoryReservation(supabase, currentLines, desiredItems) {
-  const names = [...new Set([
-    ...quantities(currentLines).keys(),
-    ...quantities(desiredItems).keys(),
-  ])];
-  if (names.length === 0) {
+  const hasLines = quantities(currentLines).size > 0 || quantities(desiredItems).size > 0;
+  if (!hasLines) {
     return { reservations: [], changes: [], rollback: async () => {} };
   }
 
+  // The whole catalog, not .in(names): an old order may spell a product the
+  // way it was named before a rename, which an exact-name filter would miss.
   const { data, error } = await supabase
     .from('products')
-    .select('product,inventory_count,low_stock_threshold')
-    .in('product', names);
+    .select('product,inventory_count,low_stock_threshold');
   if (error) throw error;
 
   const plan = inventoryReservationPlan(currentLines, desiredItems, data || []);

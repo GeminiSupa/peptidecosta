@@ -38,7 +38,7 @@
     },
     {
       "path": "/api/cron/expire-deals",
-      "schedule": "0 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/analytics-digest",
@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/prospect-enrich",
       "schedule": "0,30 * * * *"
+    },
+    {
+      "path": "/api/cron/purge-recycle-bin",
+      "schedule": "0 8 * * *"
     }
   ]
 }

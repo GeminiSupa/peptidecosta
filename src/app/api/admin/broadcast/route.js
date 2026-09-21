@@ -13,6 +13,8 @@ import { clampOutlookButtonSizes } from '@/lib/emailHtmlSafety';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
+import { getCustomerSegments } from '@/lib/customerSegmentation.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -167,8 +169,12 @@ export async function DELETE(request) {
       .from('deals')
       .update({ announcement_status: 'cancelled', broadcast_id: null })
       .eq('broadcast_id', id);
-    const { error } = await supabase.from('scheduled_broadcasts').delete().eq('id', id);
-    if (error) throw error;
+    // Via the Bin, so a cancelled announcement can be brought back.
+    const binned = await moveToBin(
+      { table: 'scheduled_broadcasts', ids: [id], actor: actorFrom(auth.profile) },
+      supabase,
+    );
+    if (!binned.ok) throw new Error(binned.error);
     
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -267,6 +273,69 @@ async function collectBroadcastTargets(audience, customContacts) {
       if (!key || targets.has(key)) return;
       const isEmail = String(key).includes('@');
       targets.set(key, { phone: isEmail ? null : key, email: isEmail ? key : null, name: null });
+    });
+  }
+
+  if (audience.startsWith('seg_')) {
+    const segmentKey = audience.replace('seg_', '');
+    const { data: orders } = await supabase.from('orders').select('*').neq('status', 'cancelled');
+    const { data: carts } = await supabase.from('abandoned_carts').select('*').eq('status', 'active');
+    
+    const customerMap = {};
+    orders?.forEach((o) => {
+      const key = (o.customer_email || '').toLowerCase() || (o.customer_phone || '').replace(/\D/g, '') || 'unknown';
+      if (key === 'unknown') return;
+      if (!customerMap[key]) {
+        customerMap[key] = {
+          id: key,
+          name: o.customer_name || 'Customer',
+          email: o.customer_email || '',
+          phone: o.customer_phone || '',
+          totalSpentUsd: 0,
+          orderCount: 0,
+          purchasedItems: [],
+          isLead: false,
+        };
+      }
+      let items = [];
+      if (Array.isArray(o.items)) items = o.items;
+      else if (typeof o.items === 'string') {
+        try { items = JSON.parse(o.items); } catch {}
+      }
+      items.forEach((it) => {
+        if (it?.product && !customerMap[key].purchasedItems.includes(it.product)) {
+          customerMap[key].purchasedItems.push(it.product);
+        }
+      });
+      customerMap[key].totalSpentUsd += parseFloat(o.total_usd || 0);
+      customerMap[key].orderCount += 1;
+    });
+
+    carts?.forEach((c) => {
+      const key = (c.customer_email || '').toLowerCase() || (c.customer_phone || '').replace(/\D/g, '') || 'unknown';
+      if (key === 'unknown') return;
+      if (!customerMap[key]) {
+        customerMap[key] = {
+          id: key,
+          name: c.customer_name || 'Lead',
+          email: c.customer_email || '',
+          phone: c.customer_phone || '',
+          totalSpentUsd: 0,
+          orderCount: 0,
+          cartItems: c.cart_data || [],
+          isLead: true,
+        };
+      }
+    });
+
+    Object.values(customerMap).forEach((cust) => {
+      const segs = getCustomerSegments(cust);
+      if (segs.includes(segmentKey)) {
+        const targetKey = cust.phone || cust.email;
+        if (targetKey && !targets.has(targetKey)) {
+          targets.set(targetKey, { phone: cust.phone || null, email: cust.email || null, name: cust.name ? cust.name.split(' ')[0] : 'Customer' });
+        }
+      }
     });
   }
 

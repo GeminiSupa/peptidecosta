@@ -10,6 +10,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+import DealPageExperimentCard from './DealPageExperimentCard';
 import { adminFetch } from '@/lib/adminApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
@@ -62,6 +63,7 @@ const ANALYTICS_SECTIONS = Object.freeze([
   { id: 'an-campaigns', label: 'Campaigns' },
   { id: 'an-revenue', label: 'Revenue' },
   { id: 'an-behaviour', label: 'Behaviour' },
+  { id: 'an-abtests', label: 'A/B tests' },
   { id: 'an-products', label: 'Products' },
 ]);
 
@@ -135,7 +137,13 @@ function renderAiSummary(text) {
   });
 }
 
-export default function AnalyticsDashboard({ orders: parentOrders = [], abandonedCarts: parentCarts = [], products: parentProducts = [], onNavigate }) {
+export default function AnalyticsDashboard({
+  orders: parentOrders = [],
+  abandonedCarts: parentCarts = [],
+  products: parentProducts = [],
+  onNavigate,
+  exchangeRate = FALLBACK_EXCHANGE_RATE,
+}) {
   const [explainerTopic, setExplainerTopic] = useState(null);
 
   const EXPLAINER_DATA = {
@@ -433,6 +441,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const [dbListHealth, setDbListHealth] = useState(null);
   const [dbOverview, setDbOverview] = useState(null);
   const [dbPrevious, setDbPrevious] = useState(null);
+  const [dbDealPageExperiment, setDbDealPageExperiment] = useState(null);
   const [expandedCampaignId, setExpandedCampaignId] = useState(null);
   const [dbClickEvents, setDbClickEvents] = useState([]);
   const [dbAnalyticsEvents, setDbAnalyticsEvents] = useState([]);
@@ -481,6 +490,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         setDbListHealth(payload.listHealth || null);
         setDbOverview(payload.overview || null);
         setDbPrevious(payload.previous || null);
+        setDbDealPageExperiment(payload.dealPageExperiment || null);
         setAnalyticsMeta({
           counts: payload.counts || {},
           sampled: payload.sampled || [],
@@ -740,7 +750,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   };
 
   const potentialAbandonedRevenueUsd = activeAbandonedCarts.reduce((sum, c) => sum + calculateCartValue(c.cart_data), 0);
-  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * FALLBACK_EXCHANGE_RATE);
+  const potentialAbandonedRevenueCrc = Math.round(potentialAbandonedRevenueUsd * exchangeRate);
 
   const abandonedProductsStats = useMemo(() => {
     const stats = {};
@@ -4074,6 +4084,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         )}
 
       </div>
+
+      {/* A/B tests */}
+      <div id="an-abtests" className="analytics-section-anchor" />
+      <DealPageExperimentCard experiment={dbDealPageExperiment} />
 
       {/* 4. Product Conversion & Funnel Panel — collapsible section */}
       <div id="an-products" className="analytics-section-anchor" />

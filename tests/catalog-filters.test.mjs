@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  productInDeal,
   readCatalogParams,
   resolveCategoryParam,
   catalogSearchAliases,
@@ -32,6 +33,21 @@ test('reads the category param the footer and landing links send', () => {
   );
 });
 
+test('?deal=week asks for the weekly deal products only', () => {
+  assert.equal(readCatalogParams('?lang=en&deal=week').dealOnly, true);
+  assert.equal(readCatalogParams('?deal=WEEK').dealOnly, true);
+  assert.equal(readCatalogParams('?deal=other').dealOnly, false);
+  assert.equal(readCatalogParams('?lang=en').dealOnly, false);
+});
+
+test('deal products match even when a name holds a non-breaking space', () => {
+  const dealNames = ['GLP-1 10mg', 'NAD+ 500mg'];
+  assert.equal(productInDeal({ product: 'GLP-1 10mg' }, dealNames), true);
+  assert.equal(productInDeal({ product: 'nad+  500mg' }, dealNames), true);
+  assert.equal(productInDeal({ product: 'GLP-1 15mg' }, dealNames), false);
+  assert.equal(productInDeal({ product: 'GLP-1 10mg' }, []), false);
+});
+
 test('both params survive alongside the params the catalog already read', () => {
   const parsed = readCatalogParams('?lang=en&search=NAD&category=Sleep&utm_source=ig');
   assert.equal(parsed.search, 'NAD');
@@ -39,8 +55,8 @@ test('both params survive alongside the params the catalog already read', () => 
 });
 
 test('absent or blank params come back null rather than empty string', () => {
-  assert.deepEqual(readCatalogParams(''), { search: null, category: null });
-  assert.deepEqual(readCatalogParams('?search=&category=%20'), { search: null, category: null });
+  assert.deepEqual(readCatalogParams(''), { search: null, category: null, dealOnly: false, openCart: false });
+  assert.deepEqual(readCatalogParams('?search=&category=%20'), { search: null, category: null, dealOnly: false, openCart: false });
 });
 
 test('resolves a category to the exact spelling the product filter compares against', () => {
@@ -185,4 +201,10 @@ test('banding survives a price tie-break, matching the price-sort branch', () =>
   });
   // Low-to-high price would put Cheap first; the sale band wins.
   assert.deepEqual(sorted.map((p) => p.product), ['Pricy', 'Cheap']);
+});
+
+test('?cart=open asks the catalog to open the cart drawer (Deal of the Week checkout)', () => {
+  assert.equal(readCatalogParams('?deal=week&cart=open').openCart, true);
+  assert.equal(readCatalogParams('?deal=week&cart=OPEN').openCart, true);
+  assert.equal(readCatalogParams('?deal=week').openCart, false);
 });

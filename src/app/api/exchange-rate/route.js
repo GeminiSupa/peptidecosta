@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,6 +11,6 @@ export async function GET() {
     return NextResponse.json(result);
   } catch (err) {
     console.error('Error fetching exchange rate:', err);
-    return NextResponse.json({ rate: 454.48 }, { status: 500 }); // Fallback rate
+    return NextResponse.json({ rate: FALLBACK_EXCHANGE_RATE }, { status: 500 });
   }
 }

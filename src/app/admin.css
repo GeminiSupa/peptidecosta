@@ -4995,6 +4995,253 @@
 .weekly-deal-inline-alert.is-danger { border-color: rgba(248, 113, 113, 0.35); background: rgba(248, 113, 113, 0.1); color: #fecaca; }
 .weekly-deal-inline-alert.is-warning { border-color: rgba(251, 191, 36, 0.35); }
 
+.weekly-deal-setup-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+/* Flexible Deal of the Week offer builder */
+.weekly-deal-offer-builder {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.weekly-deal-offer-card {
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--offer-accent) 48%, #334155);
+    border-radius: 11px;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.weekly-deal-offer-card.is-disabled {
+    opacity: 0.62;
+}
+
+.weekly-deal-offer-head,
+.weekly-deal-offer-actions,
+.weekly-deal-add-offer-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.weekly-deal-offer-head {
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.weekly-deal-offer-head > label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--offer-accent);
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.weekly-deal-offer-actions button {
+    padding: 4px 8px;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #111c30;
+    color: #cbd5e1;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.weekly-deal-offer-actions button:hover:not(:disabled) {
+    border-color: var(--offer-accent);
+    color: #fff;
+}
+
+.weekly-deal-offer-actions button.is-danger {
+    border-color: rgba(248, 113, 113, 0.45);
+    color: #fca5a5;
+}
+
+.weekly-deal-offer-actions button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.weekly-deal-offer-type-row,
+.weekly-deal-offer-names,
+.weekly-deal-offer-terms {
+    display: grid;
+    gap: 10px;
+}
+
+.weekly-deal-offer-type-row {
+    margin-bottom: 10px;
+}
+
+.weekly-deal-offer-names,
+.weekly-deal-offer-terms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.weekly-deal-offer-card .admin-input {
+    width: 100%;
+}
+
+.weekly-deal-offer-explanation {
+    margin: 8px 0 10px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.weekly-deal-add-offer-row {
+    margin-bottom: 14px;
+}
+
+.weekly-deal-add-offer-row > span {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 640px) {
+    .weekly-deal-offer-names,
+    .weekly-deal-offer-terms {
+        grid-template-columns: 1fr;
+    }
+
+    .weekly-deal-add-offer-row > span {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+.weekly-deal-setup-progress > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid #334155;
+  border-radius: 9px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #94a3b8;
+  font-size: 0.73rem;
+}
+
+.weekly-deal-setup-progress > div > span {
+  display: inline-grid;
+  flex: 0 0 23px;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border-radius: 999px;
+  background: #1e293b;
+  color: #cbd5e1;
+  font-weight: 800;
+}
+
+.weekly-deal-setup-progress > div.is-ready {
+  border-color: rgba(52, 211, 153, 0.32);
+  background: rgba(16, 185, 129, 0.08);
+  color: #d1fae5;
+}
+
+.weekly-deal-setup-progress > div.is-ready > span {
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+}
+
+.weekly-deal-scope-options {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 9px;
+}
+
+.weekly-deal-scope-options button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.weekly-deal-scope-options button:hover {
+  border-color: #64748b;
+  transform: translateY(-1px);
+}
+
+.weekly-deal-scope-options button.is-active {
+  border-color: var(--deal-scope-accent, #fbbf24);
+  background: color-mix(in srgb, var(--deal-scope-accent, #fbbf24) 10%, transparent);
+}
+
+.weekly-deal-scope-options button strong {
+  color: #f8fafc;
+  font-size: 0.79rem;
+}
+
+.weekly-deal-scope-options button span {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.weekly-deal-selection-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 9px;
+  color: #a7f3d0;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.weekly-deal-rules-card {
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 10px;
+  background: rgba(30, 64, 175, 0.08);
+}
+
+.weekly-deal-rules-card > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #bfdbfe;
+}
+
+.weekly-deal-rules-card > div svg { flex: 0 0 auto; margin-top: 2px; }
+.weekly-deal-rules-card > div span { display: grid; gap: 2px; }
+.weekly-deal-rules-card > div strong { color: #dbeafe; font-size: 0.83rem; }
+.weekly-deal-rules-card > div small { color: #93c5fd; font-size: 0.7rem; line-height: 1.4; }
+.weekly-deal-rules-card ul { margin: 10px 0 0 26px; padding: 0; color: #cbd5e1; font-size: 0.76rem; line-height: 1.55; }
+.weekly-deal-rules-card li + li { margin-top: 4px; }
+
+.weekly-deal-launch-readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 9px;
+  color: #fcd34d;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.weekly-deal-launch-readiness svg { flex: 0 0 auto; margin-top: 1px; }
+.weekly-deal-launch-readiness.is-ready { color: #6ee7b7; }
+
 .weekly-deal-product-search {
     display: flex;
     align-items: center;
@@ -5127,6 +5374,7 @@
 @media (max-width: 600px) {
     .weekly-deal-health-grid,
     .weekly-deal-stack-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .weekly-deal-setup-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .weekly-deal-modal-backdrop { place-items: end center; padding: 0; }
     .weekly-deal-modal { width: 100%; max-height: 92dvh; padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
     .weekly-deal-review-summary { grid-template-columns: 1fr; }
@@ -10719,28 +10967,81 @@
 }
 
 /* --------------------------------------------------------------------------
-   CMS search
-   --------------------------------------------------------------------------
-   The CMS renders every setting the site has, expanded, on one page. Changing
-   the support email meant scrolling past the promo ticker, the press band, the
-   offer cards and the blog editor. The filtering itself is a generated
-   stylesheet (see cmsSearch.mjs); these are the controls around it.
+   CMS content studio
    -------------------------------------------------------------------------- */
+.cms-studio {
+  --cms-line: rgba(148, 163, 184, .14);
+}
+
+.cms-studio-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px 24px;
+  padding: 24px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(56, 189, 248, .16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, .14), transparent 38%),
+    linear-gradient(145deg, rgba(15, 31, 51, .98), rgba(10, 18, 32, .98));
+  box-shadow: 0 18px 44px rgba(2, 6, 23, .18);
+}
+
+.cms-studio-heading h2 {
+  margin: 6px 0 5px;
+  color: #f8fafc;
+  font-size: clamp(1.35rem, 2vw, 1.75rem);
+  letter-spacing: -.025em;
+}
+
+.cms-studio-heading p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: .84rem;
+}
+
+.cms-studio-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #7dd3fc;
+  font-size: .7rem;
+  font-weight: 850;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.cms-refresh-btn {
+  align-self: start;
+  min-height: 38px;
+  padding: 8px 13px !important;
+  border-color: rgba(125, 211, 252, .2) !important;
+  background: rgba(56, 189, 248, .08) !important;
+  color: #bae6fd !important;
+}
+
+.cms-command-bar {
+  grid-column: 1 / -1;
+}
+
 .cms-search-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  min-width: 260px;
-  border-radius: 8px;
-  border: 1px solid rgba(56, 189, 248, .2);
-  background: rgba(56, 189, 248, .07);
+  min-height: 44px;
+  padding: 8px 12px;
+  width: 100%;
+  border-radius: 11px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  background: rgba(2, 6, 23, .38);
   color: #38bdf8;
+  transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
 }
 
 .cms-search-box:focus-within {
   border-color: rgba(56, 189, 248, .55);
-  background: rgba(56, 189, 248, .12);
+  background: rgba(2, 6, 23, .58);
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .08);
 }
 
 .cms-search-box input {
@@ -10777,9 +11078,9 @@
 .cms-search-box button:focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
 
 .cms-search-status {
-  padding: 9px 13px;
+  padding: 11px 14px;
   margin-bottom: 16px;
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid rgba(56, 189, 248, .2);
   background: rgba(56, 189, 248, .07);
   color: #bae6fd;
@@ -10787,53 +11088,176 @@
   font-weight: 600;
 }
 
-@media (max-width: 640px) {
-  .cms-search-box { min-width: 0; width: 100%; }
+.cms-workspace-nav {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
 }
 
-/* --------------------------------------------------------------------------
-   CMS collapsible sections
-   --------------------------------------------------------------------------
-   Search answers "where is that field". This answers the other half: the tab
-   is a 500-line scroll when you are just looking around. Folding a card hides
-   everything except its header row — which for the blog card carries the New
-   Post button, so the whole row is what stays rather than the heading alone.
-   -------------------------------------------------------------------------- */
-.cms-section.is-collapsed > *:not(.cms-section-head) { display: none; }
-.cms-section.is-collapsed .cms-section-head { margin-bottom: 0; }
-
-.cms-section-toggle {
-  display: flex;
+.cms-workspace-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
+  gap: 10px;
+  min-width: 0;
+  min-height: 68px;
+  padding: 10px 11px;
+  border: 1px solid var(--cms-line);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, .025);
+  color: #94a3b8;
   text-align: left;
   cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
 }
 
-.cms-section-toggle:hover { color: #38bdf8; }
-.cms-section-toggle:focus-visible { outline: 2px solid #38bdf8; outline-offset: 4px; border-radius: 4px; }
+.cms-workspace-button:hover {
+  border-color: rgba(125, 211, 252, .3);
+  background: rgba(56, 189, 248, .07);
+  color: #e0f2fe;
+  transform: translateY(-1px);
+}
 
-.cms-section-chevron {
-  margin-left: auto;
+.cms-workspace-button.is-active {
+  border-color: rgba(56, 189, 248, .46);
+  background: linear-gradient(145deg, rgba(14, 165, 233, .17), rgba(56, 189, 248, .07));
+  color: #f8fafc;
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, .05);
+}
+
+.cms-workspace-button:focus-visible,
+.cms-refresh-btn:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 3px;
+}
+
+.cms-workspace-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, .09);
+  color: #7dd3fc;
+}
+
+.cms-workspace-button.is-active .cms-workspace-icon {
+  background: rgba(56, 189, 248, .16);
+  color: #bae6fd;
+}
+
+.cms-workspace-button strong,
+.cms-workspace-button small {
+  display: block;
+}
+
+.cms-workspace-button strong {
+  color: inherit;
+  font-size: .78rem;
+  line-height: 1.25;
+}
+
+.cms-workspace-button small {
+  margin-top: 3px;
+  overflow: hidden;
   color: #64748b;
-  flex: 0 0 auto;
-  transition: transform .18s ease;
+  font-size: .65rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
 }
 
-.cms-section-toggle[aria-expanded="false"] .cms-section-chevron { transform: rotate(-90deg); }
+.cms-workspace-button.is-active small { color: #94a3b8; }
+.cms-workspace-arrow { color: #475569; }
+.cms-workspace-button.is-active .cms-workspace-arrow { color: #38bdf8; }
+
+.cms-status-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid var(--cms-line);
+  border-radius: 12px;
+  background: rgba(14, 22, 38, .72);
+}
+
+.cms-status-item {
+  min-width: 0;
+  padding: 11px 14px;
+  border-left: 1px solid var(--cms-line);
+}
+
+.cms-status-item:first-child { border-left: 0; }
+.cms-status-item span,
+.cms-status-item strong { display: block; }
+.cms-status-item span {
+  margin-bottom: 3px;
+  color: #64748b;
+  font-size: .62rem;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.cms-status-item strong {
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: .74rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cms-status-preview strong { color: #f8fafc; }
+
+.cms-workspace-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+
+.cms-section.is-inactive,
+.cms-lead-workspace { display: none; }
+.cms-lead-workspace.is-active { display: block; }
+.cms-filtering .cms-section { display: block; }
+
+.cms-section {
+  box-shadow: 0 12px 34px rgba(2, 6, 23, .12);
+}
+
+.cms-section-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #f8fafc;
+}
+
+.cms-section .cms-group {
+  border: 1px solid rgba(148, 163, 184, .09);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .018);
+}
+
+@media (max-width: 1100px) {
+  .cms-workspace-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cms-workspace-button:last-child { grid-column: span 2; }
+}
+
+@media (max-width: 640px) {
+  .cms-studio-header { grid-template-columns: minmax(0, 1fr); padding: 18px; }
+  .cms-refresh-btn { grid-row: 2; justify-self: start; }
+  .cms-command-bar { grid-column: 1; }
+  .cms-workspace-nav { grid-template-columns: minmax(0, 1fr); }
+  .cms-workspace-button:last-child { grid-column: auto; }
+  .cms-status-strip { grid-template-columns: minmax(0, 1fr); }
+  .cms-status-item,
+  .cms-status-item:first-child { border-top: 1px solid var(--cms-line); border-left: 0; }
+  .cms-status-item:first-child { border-top: 0; }
+  .cms-workspace-content { grid-template-columns: minmax(0, 1fr); }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .cms-section-chevron { transition: none; }
+  .cms-search-box,
+  .cms-workspace-button { transition: none; }
+  .cms-workspace-button:hover { transform: none; }
 }
-
-/* A folded card is still a search target: filtering forces every section open
-   (see cmsSectionProps), so a match can never hide inside one. */
 
 /* Short windows: the Workspace box repeats the page's own heading, and on a
    window this short its height is better spent on the menu. Last in the file,
@@ -10844,5 +11268,263 @@
     .admin-sidebar-collapsed .admin-navbar:hover .admin-sidebar-context,
     .admin-sidebar-collapsed .admin-navbar:focus-within .admin-sidebar-context {
         display: none !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Bin (deleted items)
+
+   The table itself rides on .responsive-table for the phone card layout, so
+   only the Bin-specific chrome lives here.
+   --------------------------------------------------------------------------- */
+
+.recycle-bin__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.recycle-bin__head h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+    font-family: var(--font-montserrat);
+    color: var(--text-main);
+}
+
+.recycle-bin__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 46ch;
+}
+
+/* The retention control. Boxed and set apart from the list because it is the
+   one thing on this screen that destroys data rather than restoring it. */
+.recycle-bin__retention {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 10px);
+    background: var(--bg-secondary);
+}
+
+.recycle-bin__retention label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.recycle-bin__retention select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.88rem;
+}
+
+.recycle-bin__retention select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.recycle-bin__locked,
+.recycle-bin__meta {
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.recycle-bin__empty {
+    padding: 7px 12px;
+    border: 1px solid #b91c1c;
+    border-radius: 8px;
+    background: transparent;
+    color: #ef4444;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.recycle-bin__empty:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.recycle-bin__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.recycle-bin__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    flex: 1 1 220px;
+}
+
+.recycle-bin__search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 0.88rem;
+    outline: none;
+    min-width: 0;
+}
+
+.recycle-bin__filters select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.recycle-bin__toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.recycle-bin__error,
+.recycle-bin__notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.87rem;
+}
+
+.recycle-bin__error {
+    border: 1px solid #b91c1c;
+    background: rgba(185, 28, 28, 0.12);
+    color: #fca5a5;
+}
+
+.recycle-bin__notice {
+    border: 1px solid #15803d;
+    background: rgba(21, 128, 61, 0.12);
+    color: #86efac;
+}
+
+.recycle-bin__empty-state {
+    padding: 28px 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.recycle-bin__table-wrap {
+    overflow-x: auto;
+}
+
+.recycle-bin__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.87rem;
+}
+
+.recycle-bin__table th {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    text-align: left;
+}
+
+.recycle-bin__table td {
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+    vertical-align: top;
+}
+
+.recycle-bin__table tr.is-restored td {
+    opacity: 0.6;
+}
+
+.recycle-bin__reason {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+}
+
+/* Past its date and waiting on tonight's run: the one row state where doing
+   nothing loses the record for good. */
+.recycle-bin__urgent {
+    color: #fca5a5;
+    font-weight: 600;
+}
+
+.recycle-bin__restored {
+    color: #86efac;
+}
+
+.recycle-bin__actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.recycle-bin__actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.recycle-bin__actions button:hover:not(:disabled) {
+    border-color: var(--primary);
+}
+
+.recycle-bin__actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.recycle-bin__actions .recycle-bin__erase {
+    border-color: rgba(185, 28, 28, 0.5);
+    color: #ef4444;
+}
+
+@media (max-width: 768px) {
+    .recycle-bin__head {
+        flex-direction: column;
+    }
+
+    .recycle-bin__retention {
+        width: 100%;
     }
 }

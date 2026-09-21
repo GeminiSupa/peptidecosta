@@ -79,7 +79,7 @@ export async function PUT(request) {
     const body = await request.json();
     const mode = String(body.mode || '').trim();
     if (![RATE_MODE_API, RATE_MODE_MANUAL].includes(mode)) {
-      return NextResponse.json({ error: 'Choose "Follow the API" or "Set it myself".' }, { status: 400 });
+      return NextResponse.json({ error: 'Choose Automatic or Manual.' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdmin();

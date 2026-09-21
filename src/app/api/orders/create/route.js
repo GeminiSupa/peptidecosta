@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { countPromoEligibleUnits, checkUnitLimits, unitLimitsMessage } from '@/lib/promoEligibility.mjs';
-import { isGiftLine, stripGiftSuffix } from '@/lib/bacWater.mjs';
+import { isGiftLine } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCheckout.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
@@ -24,6 +24,8 @@ import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/li
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { OFFERS_PRICING_MODE } from '@/lib/dealOffers.mjs';
+import { DEAL_PAGE_EXPERIMENT, normalizeVariant } from '@/lib/dealPageExperiment.mjs';
 import {
   consumeDurableRateLimit,
   getRequestIp,
@@ -545,15 +547,10 @@ export async function POST(request) {
     // Rebuild every public order from current product rows. A saved browser cart
     // can straddle a deal start/end, and callers can edit posted prices; neither
     // is allowed to decide what the customer is charged.
-    const requestedProductNames = [...new Set(order.items
-      .filter((item) => !isGiftLine(item))
-      .map((item) => stripGiftSuffix(item?.product || item?.name))
-      .filter(Boolean))];
     const [{ data: currentProducts, error: productError }, rateResult, { data: liveDealRows, error: liveDealError }] = await Promise.all([
       supabase
         .from('products')
-        .select('id,product,price_usd,price_crc,status,inventory_count')
-        .in('product', requestedProductNames),
+        .select('id,product,price_usd,price_crc,status,inventory_count'),
       getDatabaseBackedUsdToCrcRate(),
       // select('*') keeps ordinary checkout compatible during a rolling deploy:
       // pre-migration databases simply return legacy shelf-deal rows, while a
@@ -577,12 +574,18 @@ export async function POST(request) {
       }, { status: 409 });
     }
     const dealPromo = resolvedPromo ? null : automaticDealPromo(matchedDeal, order.items);
+    // A two-offer deal is priced inside authoritativeCheckout, which picks the
+    // one offer that saves the customer most and adds any free vials itself.
+    const dealOffers = !resolvedPromo && matchedDeal && dealPricingMode(matchedDeal) === OFFERS_PRICING_MODE
+      ? matchedDeal.offers
+      : null;
     const authoritative = authoritativeCheckout({
       postedOrder: order,
       products: currentProducts || [],
       promo: resolvedPromo || dealPromo,
       exchangeRate: rateResult.rate,
       suppressVolumeDiscount: Boolean(matchedDeal && dealPricingMode(matchedDeal) === 'shelf'),
+      dealOffers,
     });
     if (!authoritative.ok) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
@@ -737,6 +740,30 @@ export async function POST(request) {
       await recordNewOrderNotification(supabase, order, data.order_number);
     } catch (notifyErr) {
       console.error('[orders/create] New order notification insert failed:', notifyErr.message);
+    }
+
+    // Deal of the Week page A/B test: credit the order to the page version the
+    // shopper saw in the last 14 days. Best-effort — a lost tag never costs a sale.
+    const experimentTag = body?.dealPageExperiment;
+    const experimentVariant = normalizeVariant(experimentTag?.variant);
+    if (experimentTag?.experiment === DEAL_PAGE_EXPERIMENT && experimentVariant) {
+      try {
+        const { error: experimentError } = await supabase.from('ab_test_events').insert({
+          experiment: DEAL_PAGE_EXPERIMENT,
+          variant: experimentVariant,
+          event: 'order',
+          visitor_id: String(experimentTag.visitorId || '').slice(0, 100) || null,
+          session_id: body.sessionId ? String(body.sessionId).slice(0, 100) : null,
+          order_id: data.id,
+          order_number: data.order_number,
+          value_usd: Number(orderRow.total_usd) || null,
+        });
+        if (experimentError && experimentError.code !== '23505') {
+          console.warn('[orders/create] Deal page A/B order not recorded:', experimentError.message);
+        }
+      } catch (experimentErr) {
+        console.warn('[orders/create] Deal page A/B order not recorded:', experimentErr.message);
+      }
     }
 
     const updatePromises = [];

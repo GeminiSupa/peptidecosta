@@ -16,6 +16,7 @@ const rules = [
   { pattern: /^\/api\/admin\/marketing-(?:intelligence|safety|segments)(?:\/|$)/, permissions: ['marketing'] },
   { pattern: /^\/api\/admin\/prospects(?:\/|$)/, permissions: ['prospects'] },
   { pattern: /^\/api\/admin\/crm(?:\/|$)/, permissions: ['customers'] },
+  { pattern: /^\/api\/admin\/reorder-tracking(?:\/|$)/, permissions: ['reorder_tracking', 'customers'] },
   { pattern: /^\/api\/admin\/customer-timeline$/, permissions: ['customers'] },
   { pattern: /^\/api\/admin\/deals(?:\/|$)/, permissions: ['deals'] },
   { pattern: /^\/api\/admin\/inquiries(?:\/|$)/, permissions: ['inquiries'] },
@@ -28,6 +29,9 @@ const rules = [
   { pattern: /^\/api\/admin\/referral-stats$/, permissions: ['affiliates'] },
   { pattern: /^\/api\/admin\/sub-users(?:\/|$)/, permissions: ['my_team'] },
   { pattern: /^\/api\/admin\/notification-recipients(?:\/|$)/, permissions: ['team'] },
+  // The Bin itself is reachable by anyone with the tab; which entries they
+  // actually see is filtered per row against the module each one came from.
+  { pattern: /^\/api\/admin\/recycle-bin(?:\/|$)/, permissions: ['recycle_bin'] },
   { pattern: /^\/api\/admin\/whatsapp-analytics$/, permissions: ['whatsapp_ai'] },
   { pattern: /^\/api\/admin\/whatsapp-channels(?:\/|$)/, permissions: ['whatsapp_ai'] },
   { pattern: /^\/api\/admin\/whatsapp-conversations(?:\/|$)/, permissions: ['whatsapp_ai', 'wa_session'] },
