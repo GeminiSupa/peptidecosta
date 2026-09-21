@@ -30,7 +30,7 @@ import {
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
   AlertCircle, ChevronRight, ChevronUp, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
-  Brain, Shield, Moon, Flame, Zap, Sparkles, Microscope,
+  Brain, Shield, Moon, Sun, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
   PanelLeftClose, PanelLeftOpen, Wallet, MapPinned, ChevronDown, Package
@@ -5395,6 +5395,20 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             <strong>{desktopTabMeta[activeTab]?.label || ADMIN_TAB_TITLES[activeTab] || 'Dashboard'}</strong>
           </div>
           <div className="admin-nav-tools">
+            <button
+              type="button"
+              className="admin-sidebar-toggle"
+              onClick={() => {
+                const currentTheme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+                const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                document.documentElement.setAttribute('data-theme', nextTheme);
+                try { localStorage.setItem('theme', nextTheme); } catch (e) {}
+              }}
+              aria-label="Toggle Dark/Light Mode"
+              title="Toggle Dark/Light Mode"
+            >
+              <Sun size={16} />
+            </button>
             <button
               type="button"
               className="admin-sidebar-toggle"

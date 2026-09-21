@@ -82,3 +82,9 @@ CREATE POLICY deleted_records_service_only ON public.deleted_records
 INSERT INTO public.site_settings (id, value)
 VALUES ('recycle_bin', '{"retention_days": 30}'::JSONB)
 ON CONFLICT (id) DO NOTHING;
+
+GRANT ALL ON TABLE public.deleted_records TO service_role;
+
+-- So the next /api/admin/recycle-bin request sees the table without waiting
+-- for PostgREST's cache to expire on its own.
+NOTIFY pgrst, 'reload schema';
