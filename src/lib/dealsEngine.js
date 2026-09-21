@@ -33,9 +33,46 @@ import {
   scheduledWindow,
 } from '@/lib/dealOfWeek.mjs';
 import { formatCrInstant } from '@/lib/crTime.mjs';
+import {
+  OFFERS_PRICING_MODE,
+  dealOfferProductNames,
+  dealOfferSummaries,
+  dealOffersError,
+  normalizeDealOffers,
+} from '@/lib/dealOffers.mjs';
 import { dealPromoConflictMessage, findBulkPromoConflictForDeal } from '@/lib/promoStackingSafety.mjs';
 
 const BANNERS_SETTING_ID = 'announcement_banners';
+
+/**
+ * The one place a deal's settings are read. A two-offer deal has no single
+ * percentage, but discount_pct is required by the schema and read by the
+ * safety check, so its headline value stands in: the Mix & Match rate, or the
+ * share of shipped vials that are free, whichever is larger.
+ */
+function dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers }) {
+  if (pricingMode === OFFERS_PRICING_MODE) {
+    const clean = normalizeDealOffers(offers);
+    const problem = dealOffersError(clean);
+    if (problem) throw new Error(problem);
+    const mixPct = clean.mix.enabled ? clean.mix.discount_pct : 0;
+    const bundlePct = clean.bundle.enabled ? clean.bundle.free_qty / (clean.bundle.buy_qty + clean.bundle.free_qty) : 0;
+    return { pct: Math.max(mixPct, bundlePct), mode: OFFERS_PRICING_MODE, minimum: 0, maximum: 0, offers: clean };
+  }
+  const pct = Number(discountPct);
+  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
+  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
+  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
+  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
+  return { pct, mode, minimum, maximum, offers: null };
+}
+
+/** A two-offer deal needs add-deal-offers.sql; say so instead of a raw schema error. */
+function offersMigrationHint(error) {
+  return /offers|pricing_mode/i.test(String(error?.message || ''))
+    ? ' — run add-deal-offers.sql in Supabase first.'
+    : '';
+}
 
 /** The deal currently marked live, or null. Also used to block a second one. */
 export async function getLiveDeal(supabase) {
@@ -74,7 +111,9 @@ export async function getDealOperations(supabase, deal) {
   ]);
   if (productsError) throw new Error(`Could not verify deal products: ${productsError.message}`);
 
-  const thresholdDeal = dealPricingMode(deal) === 'bulk_threshold';
+  // Threshold and two-offer deals never touch shelf prices, so there is no
+  // markdown to verify.
+  const thresholdDeal = dealPricingMode(deal) !== 'shelf';
   const productHealth = (products || []).map((product) => ({
     product: product.product,
     status: product.status,
@@ -286,16 +325,15 @@ export async function launchDeal({
   pricingMode = 'shelf',
   minUnits = 0,
   maxUnits = 0,
+  offers = null,
   scheduledDeal = null,
   now = new Date(),
 }) {
   const supabase = getSupabaseAdmin();
 
-  const pct = Number(discountPct);
-  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
-  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
-  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
-  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
+  const { pct, mode, minimum, maximum, offers: dealOffers } = dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers });
+  // A two-offer deal covers whatever products its offers name.
+  if (dealOffers) productNames = dealOfferProductNames(dealOffers);
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok) throw new Error(safety.error);
 
@@ -356,6 +394,7 @@ export async function launchDeal({
     pricing_mode: mode,
     min_units: minimum,
     max_units: maximum || null,
+    ...(dealOffers ? { offers: dealOffers } : {}),
   };
   const drafts = dealBroadcastDrafts(draftDeal);
   const insertPayload = {
@@ -370,6 +409,7 @@ export async function launchDeal({
       pricing_mode: mode,
       min_units: minimum,
       max_units: maximum || null,
+      ...(dealOffers ? { offers: dealOffers } : {}),
       baseline,
       applied,
       announcement_drafts: drafts,
@@ -388,7 +428,7 @@ export async function launchDeal({
 
   if (insertError) {
     // The unique index on live deals is the backstop for two launches racing.
-    throw new Error(`Could not create the deal: ${insertError.message}`);
+    throw new Error(`Could not create the deal: ${insertError.message}${offersMigrationHint(insertError)}`);
   }
 
   // Product updates, banner creation and the durable banner pointer are one
@@ -576,16 +616,15 @@ export async function scheduleDeal({
   pricingMode = 'shelf',
   minUnits = 0,
   maxUnits = 0,
+  offers = null,
   startsAt,
   now = new Date(),
 }) {
   const supabase = getSupabaseAdmin();
 
-  const pct = Number(discountPct);
-  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
-  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
-  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
-  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
+  const { pct, mode, minimum, maximum, offers: dealOffers } = dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers });
+  // A two-offer deal covers whatever products its offers name.
+  if (dealOffers) productNames = dealOfferProductNames(dealOffers);
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok) throw new Error(safety.error);
 
@@ -628,13 +667,14 @@ export async function scheduleDeal({
       pricing_mode: mode,
       min_units: minimum,
       max_units: maximum || null,
+      ...(dealOffers ? { offers: dealOffers } : {}),
       baseline: {},
       created_by: createdBy || null,
     }])
     .select('*')
     .single();
 
-  if (error) throw new Error(`Could not schedule the deal: ${error.message}`);
+  if (error) throw new Error(`Could not schedule the deal: ${error.message}${offersMigrationHint(error)}`);
   return { deal, window };
 }
 
@@ -741,6 +781,7 @@ export async function startDueScheduledDeals(now = new Date()) {
         pricingMode: deal.pricing_mode,
         minUnits: deal.min_units,
         maxUnits: deal.max_units,
+        offers: deal.offers,
         scheduledDeal: deal,
         now,
       });
@@ -759,14 +800,12 @@ export async function startDueScheduledDeals(now = new Date()) {
  * Lets the panel show the resolved Sunday and the real before/after prices
  * before the admin commits.
  */
-export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, pricingMode = 'shelf', minUnits = 0, maxUnits = 0, startsAt = null, now = new Date() }) {
+export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, pricingMode = 'shelf', minUnits = 0, maxUnits = 0, offers = null, startsAt = null, now = new Date() }) {
   const supabase = getSupabaseAdmin();
 
-  const pct = Number(discountPct);
-  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
-  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
-  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
-  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
+  const { pct, mode, minimum, maximum, offers: dealOffers } = dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers });
+  // A two-offer deal covers whatever products its offers name.
+  if (dealOffers) productNames = dealOfferProductNames(dealOffers);
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok && !safety.needsConfirmation) throw new Error(safety.error);
 
@@ -786,6 +825,7 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     pricing_mode: mode,
     min_units: minimum,
     max_units: maximum || null,
+    ...(dealOffers ? { offers: dealOffers } : {}),
   };
 
   return {
@@ -798,7 +838,9 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
       const baseline = snapshotBaseline(product);
       // Threshold deals keep the shelf price unchanged, but the preview still
       // shows the per-unit price customers receive after qualifying.
-      const markdown = buildMarkdown(baseline, pct, window, rate);
+      const markdown = dealOffers
+        ? { price_usd: baseline.price_usd, price_crc: baseline.price_crc }
+        : buildMarkdown(baseline, pct, window, rate);
       return {
         product: product.product,
         wasUsd: baseline.price_usd,
@@ -815,5 +857,6 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
     pricingMode: mode,
     minUnits: minimum,
     maxUnits: maximum || null,
+    offers: dealOffers ? { en: dealOfferSummaries(dealOffers, 'en'), es: dealOfferSummaries(dealOffers, 'es') } : null,
   };
 }

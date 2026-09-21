@@ -10,6 +10,9 @@ import { useDealPageExperiment } from '@/hooks/useDealPageExperiment';
 import { useSharedCart } from '@/hooks/useSharedCart';
 import { PRODUCT_SELECT } from '@/lib/catalogProducts';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, normalizeDealOffers } from '@/lib/dealOffers.mjs';
+import { isBacWater } from '@/lib/bacWater.mjs';
+import { getVolumeDiscountPct } from '@/lib/pricing';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
 import MobileActionBar from '@/components/MobileActionBar';
 import EvenProductImage from '@/components/EvenProductImage';
@@ -115,6 +118,12 @@ export default function DealOfTheWeekPage() {
   const ready = Boolean(variant) && deal !== undefined && (!deal || productsReady) && (en || rateReady);
   const pct = deal ? Math.round(Number(deal.discount_pct || 0) * 100) : 0;
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
+  // Two-offer deal: Mix & Match (% off the whole order) and Buy X Get Y free.
+  const offersDeal = dealPricingMode(deal) === OFFERS_PRICING_MODE;
+  const offers = normalizeDealOffers(deal?.offers);
+  const mixPct = Math.round(offers.mix.discount_pct * 100);
+  const mixKeys = new Set(offers.mix.enabled ? offers.mix.product_names.map(nameKey) : []);
+  const bundleKeys = new Set(offers.bundle.enabled ? offers.bundle.product_names.map(nameKey) : []);
   const minUnits = dealMinUnits(deal);
   const maxUnits = dealMaxUnits(deal);
   const productCount = (deal?.product_names || []).length;
@@ -131,6 +140,8 @@ export default function DealOfTheWeekPage() {
   const priceFor = (product) => {
     const shelf = priceNumber(product.price_usd);
     if (!shelf) return null;
+    // Offers change no shelf price; the saving is worked out in the cart.
+    if (offersDeal) return { now: shelf, was: null };
     if (bulk) return { now: shelf * (1 - pct / 100), was: shelf };
     const was = priceNumber(product.original_price_usd);
     return { now: shelf, was: was > shelf ? was : null };
@@ -179,7 +190,26 @@ export default function DealOfTheWeekPage() {
     document.getElementById('dow-products')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const progressText = !bulk
+  // Which offer the cart has earned so far — the same chooser checkout uses,
+  // for the progress line only; the checkout recalculates everything.
+  const offerChoice = offersDeal
+    ? chooseDealOffer(deal.offers, cart.map((item) => {
+      const row = products.find((product) => nameKey(product.product) === nameKey(item.product));
+      return {
+        product: item.product,
+        qty: item.qty,
+        unitPrice: priceNumber(row?.price_usd ?? item.price_usd ?? item.priceUsd),
+        inventoryCount: row?.inventory_count ?? item.inventoryCount ?? null,
+      };
+    }), {
+      volumePct: getVolumeDiscountPct(cart.reduce((sum, item) => sum + (isBacWater(item.product) ? 0 : Number(item.qty) || 0), 0)),
+    })
+    : null;
+  const offerEarned = offerChoice && (offerChoice.kind === 'mix' || offerChoice.kind === 'bundle');
+
+  const progressText = offersDeal
+    ? dealOfferCartMessage(offerChoice, deal, lang)
+    : !bulk
     ? (en ? 'Deal prices apply at checkout.' : 'Los precios de oferta se aplican al pagar.')
     : overMax
       ? (en ? `The deal price is for up to ${maxUnits} vials. Remove ${dealUnits - maxUnits} to keep it.` : `El precio de oferta es para hasta ${maxUnits} viales. Quita ${dealUnits - maxUnits} para mantenerlo.`)
@@ -187,7 +217,19 @@ export default function DealOfTheWeekPage() {
         ? (en ? `Add ${unitsToGo} more deal ${unitsToGo === 1 ? 'vial' : 'vials'} to unlock ${pct}% off` : `Agrega ${unitsToGo} ${unitsToGo === 1 ? 'vial' : 'viales'} más de la oferta para el ${pct}% de descuento`)
         : (en ? `${pct}% off unlocked — applied at checkout` : `${pct}% de descuento activado — se aplica al pagar`);
 
-  const rules = !deal ? [] : bulk
+  const rules = !deal ? [] : offersDeal
+    ? [
+      ...(offers.mix.enabled ? [en
+        ? `Offer #1 — Mix & Match: buy ${offers.mix.min_units} or more vials from the products on this page, in any combination, and get ${mixPct}% off your entire order.`
+        : `Oferta #1 — Combina: compra ${offers.mix.min_units} o más viales de los productos de esta página, en cualquier combinación, y obtén ${mixPct}% de descuento en todo tu pedido.`] : []),
+      ...(offers.bundle.enabled ? [en
+        ? `Offer #2 — Buy ${offers.bundle.buy_qty}, Get ${offers.bundle.free_qty} Free: every ${offers.bundle.buy_qty} vials of the same product and size add ${offers.bundle.free_qty} more of that product free (${offers.bundle.buy_qty * 2} → ${offers.bundle.free_qty * 2} free, ${offers.bundle.buy_qty * 3} → ${offers.bundle.free_qty * 3} free).`
+        : `Oferta #2 — Compra ${offers.bundle.buy_qty} y llévate ${offers.bundle.free_qty} gratis: cada ${offers.bundle.buy_qty} viales del mismo producto y tamaño suman ${offers.bundle.free_qty} más de ese producto gratis (${offers.bundle.buy_qty * 2} → ${offers.bundle.free_qty * 2} gratis, ${offers.bundle.buy_qty * 3} → ${offers.bundle.free_qty * 3} gratis).`] : []),
+      en ? 'If your order qualifies for both, you automatically get whichever saves you more. The offers do not stack with each other or with any other discount or promo code.' : 'Si tu pedido califica para ambas, recibes automáticamente la que más te ahorra. Las ofertas no se acumulan entre sí ni con otros descuentos o códigos.',
+      en ? 'BAC Water does not count toward either offer.' : 'El agua bacteriostática no cuenta para ninguna de las ofertas.',
+      en ? 'Applied automatically at checkout. No code needed.' : 'Se aplica automáticamente al pagar. Sin código.',
+    ]
+    : bulk
     ? [
       en ? `Choose ${minUnits} or more vials from the products on this page, in any combination.` : `Elige ${minUnits} o más viales de los productos de esta página, en cualquier combinación.`,
       en ? `The ${pct}% discount applies automatically at checkout, on the selected vials only. No code needed.` : `El ${pct}% de descuento se aplica automáticamente al pagar, solo en los viales seleccionados. Sin código.`,
@@ -209,7 +251,23 @@ export default function DealOfTheWeekPage() {
     const price = priceFor(product);
     return price?.was ? Math.max(best, price.was - price.now) : best;
   }, 0);
-  const headline = !deal ? '' : variant === 'b'
+  // The most a free vial is worth, for version A's money-first wording.
+  const maxFreeVial = products.reduce((best, product) => (
+    bundleKeys.has(nameKey(product.product)) ? Math.max(best, priceNumber(product.price_usd)) : best
+  ), 0);
+  const offerHeadline = () => {
+    if (variant === 'b') return en ? 'Two ways to save this week' : 'Dos formas de ahorrar esta semana';
+    const parts = [];
+    if (offers.bundle.enabled) {
+      parts.push(maxFreeVial > 0
+        ? (en ? `Free vials worth up to ${money(maxFreeVial)}` : `Viales gratis de hasta ${money(maxFreeVial)}`)
+        : (en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty} y llévate ${offers.bundle.free_qty} gratis`));
+    }
+    if (offers.mix.enabled) parts.push(en ? `${mixPct}% off your whole order` : `${mixPct}% de descuento en todo tu pedido`);
+    return parts.join(en ? ' or ' : ' o ');
+  };
+
+  const headline = !deal ? '' : offersDeal ? offerHeadline() : variant === 'b'
     ? (bulk ? (en ? 'Build your wholesale order' : 'Arma tu pedido mayorista') : (en ? 'This week\'s deal picks' : 'Las ofertas de esta semana'))
     : maxSaving > 0
       ? (bulk
@@ -222,7 +280,7 @@ export default function DealOfTheWeekPage() {
   const productGrid = (
     <section className={styles.section} aria-labelledby="dow-products">
       <div className={styles.sectionHead}>
-        <h2 id="dow-products">{bulk ? (en ? 'Mix and match from these products' : 'Combina entre estos productos') : (en ? 'Products on sale' : 'Productos en oferta')}</h2>
+        <h2 id="dow-products">{offersDeal ? (en ? 'Products in this week\'s offers' : 'Productos en las ofertas de esta semana') : bulk ? (en ? 'Mix and match from these products' : 'Combina entre estos productos') : (en ? 'Products on sale' : 'Productos en oferta')}</h2>
         {bulk && <p>{en ? `Prices shown apply when your order has ${minUnits}+ of these vials.` : `Los precios mostrados aplican cuando tu pedido tiene ${minUnits}+ de estos viales.`}</p>}
       </div>
       <div className={styles.grid}>
@@ -246,6 +304,12 @@ export default function DealOfTheWeekPage() {
                 )}
                 {savingLabel(price) && <span className={styles.saving}>{savingLabel(price)}</span>}
                 {bulk && price && <span className={styles.priceNote}>{en ? `each, at ${minUnits}+ vials` : `c/u, con ${minUnits}+ viales`}</span>}
+                {offersDeal && bundleKeys.has(nameKey(product.product)) && (
+                  <span className={styles.saving}>{en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty}, llévate ${offers.bundle.free_qty} gratis`}</span>
+                )}
+                {offersDeal && mixKeys.has(nameKey(product.product)) && (
+                  <span className={styles.priceNote}>{en ? `Counts toward ${mixPct}% off with ${offers.mix.min_units}+ vials` : `Cuenta para el ${mixPct}% con ${offers.mix.min_units}+ viales`}</span>
+                )}
                 {soldOut
                   ? <span className={styles.soldOut}>{en ? 'Sold out' : 'Agotado'}</span>
                   : qtyOf(product.product) > 0
@@ -306,12 +370,21 @@ export default function DealOfTheWeekPage() {
               {eyebrow}
               <h1>{headline}</h1>
               <p className={styles.lead}>
-                {bulk
+                {offersDeal
+                  ? (en
+                    ? 'Two offers this week, applied automatically at checkout. If your order qualifies for both, you get whichever saves you more.'
+                    : 'Dos ofertas esta semana, aplicadas automáticamente al pagar. Si tu pedido califica para ambas, recibes la que más te ahorra.')
+                  : bulk
                   ? (en ? `Mix and match any ${minUnits} or more vials from the ${productCount} products below. The discount applies automatically at checkout.` : `Combina ${minUnits} o más viales de los ${productCount} productos de abajo. El descuento se aplica automáticamente al pagar.`)
                   : (en ? 'The prices below are already marked down. No code needed.' : 'Los precios de abajo ya tienen el descuento. Sin código.')}
               </p>
               <div className={styles.facts}>
-                {maxSaving > 0
+                {offersDeal ? (
+                  <>
+                    {offers.mix.enabled && <span><strong>{mixPct}%</strong>{en ? `off everything, ${offers.mix.min_units}+ vials` : `en todo, ${offers.mix.min_units}+ viales`}</span>}
+                    {offers.bundle.enabled && <span><strong>{offers.bundle.buy_qty}+{offers.bundle.free_qty}</strong>{en ? 'free vial, same product' : 'vial gratis, mismo producto'}</span>}
+                  </>
+                ) : maxSaving > 0
                   ? <span><strong>{money(maxSaving)}</strong>{en ? 'max. saved per vial' : 'máx. de ahorro por vial'}</span>
                   : <span><strong>{pct}%</strong>{en ? 'off' : 'de descuento'}</span>}
                 {bulk && <span><strong>{minUnits}+</strong>{en ? 'vials, mix & match' : 'viales combinables'}</span>}
@@ -332,7 +405,9 @@ export default function DealOfTheWeekPage() {
               {eyebrow}
               <h1>{headline}</h1>
               <p className={styles.summaryLine}>
-                <span><Tag aria-hidden="true" />{bulk ? (en ? `${pct}% off ${minUnits}+ vials` : `${pct}% desc. en ${minUnits}+ viales`) : (en ? `${pct}% off` : `${pct}% de descuento`)}</span>
+                {offersDeal && offers.mix.enabled && <span><Tag aria-hidden="true" />{en ? `${mixPct}% off with ${offers.mix.min_units}+ vials` : `${mixPct}% desc. con ${offers.mix.min_units}+ viales`}</span>}
+                {offersDeal && offers.bundle.enabled && <span><Tag aria-hidden="true" />{en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty}, llévate ${offers.bundle.free_qty} gratis`}</span>}
+                {!offersDeal && <span><Tag aria-hidden="true" />{bulk ? (en ? `${pct}% off ${minUnits}+ vials` : `${pct}% desc. en ${minUnits}+ viales`) : (en ? `${pct}% off` : `${pct}% de descuento`)}</span>}
                 <span><PackageCheck aria-hidden="true" />{en ? 'Limited stock' : 'Inventario limitado'}</span>
               </p>
               {timeLeft && !timeLeft.done && (
@@ -416,7 +491,7 @@ export default function DealOfTheWeekPage() {
               <ShoppingCart aria-hidden="true" />
               <span>
                 <strong>{en ? `${cartUnits} ${cartUnits === 1 ? 'vial' : 'vials'} in cart` : `${cartUnits} ${cartUnits === 1 ? 'vial' : 'viales'} en el carrito`}</strong>
-                <span className={overMax ? styles.progressWarn : unitsToGo > 0 ? styles.progressTodo : styles.progressDone}>{progressText}</span>
+                <span className={overMax ? styles.progressWarn : (offersDeal ? !offerEarned : unitsToGo > 0) ? styles.progressTodo : styles.progressDone}>{progressText}</span>
               </span>
             </button>
             {bulk && (

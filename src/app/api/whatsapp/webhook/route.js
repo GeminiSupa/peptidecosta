@@ -366,7 +366,9 @@ export async function POST(request) {
                   const nowIso = new Date().toISOString();
                   const dealResult = await supabase
                     .from('deals')
-                    .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status')
+                    // pricing_mode, min_units and offers let the bot describe a
+                    // threshold or two-offer deal instead of a flat markdown.
+                    .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status,pricing_mode,min_units,offers')
                     .eq('status', 'live')
                     .lte('starts_at', nowIso)
                     .gte('ends_at', nowIso)

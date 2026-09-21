@@ -68,6 +68,7 @@ export async function POST(request) {
         pricingMode: body.pricing_mode,
         minUnits: body.min_units,
         maxUnits: body.max_units,
+        offers: body.offers || null,
         startsAt: body.starts_at || null,
       }));
     }
@@ -84,6 +85,7 @@ export async function POST(request) {
         pricingMode: body.pricing_mode,
         minUnits: body.min_units,
         maxUnits: body.max_units,
+        offers: body.offers || null,
         startsAt: body.starts_at,
       });
       return NextResponse.json({ ok: true, ...result });
@@ -106,6 +108,7 @@ export async function POST(request) {
         pricingMode: body.pricing_mode,
         minUnits: body.min_units,
         maxUnits: body.max_units,
+        offers: body.offers || null,
       });
       return NextResponse.json({ ok: true, ...result });
     }

@@ -208,6 +208,8 @@ export function summarizeFreeVials(cart = []) {
   const bySize = new Map();
   let freeUnits = 0;
   for (const item of cart || []) {
+    // A free peptide vial from a deal is a gift itself; it does not earn water.
+    if (isGiftLine(item)) continue;
     const { vials, sizeMl } = bacFreeGrantForItem(item);
     if (vials <= 0) continue;
     freeUnits += vials;
@@ -391,6 +393,14 @@ export function stripGiftSuffix(name) {
 }
 
 /** Whether an order line is a granted vial rather than a bought one. */
+/**
+ * A gifted BAC water vial specifically. A deal can also gift a peptide vial
+ * (see dealOffers.mjs), which must not be counted as water already shipped.
+ */
+function isBacGiftLine(item) {
+  return isGiftLine(item) && isBacWater(stripGiftSuffix(item?.product ?? item?.name));
+}
+
 export function isGiftLine(item) {
   const name = String(item?.product ?? item?.name ?? '');
   if (GIFT_SUFFIX.test(name)) return true;
@@ -418,7 +428,7 @@ export function isGiftLine(item) {
 export function bacGiftShortfall(items = []) {
   const { freeUnits } = summarizeFreeVials(items);
   const present = (items || []).reduce(
-    (sum, item) => (isGiftLine(item) ? sum + qtyOf(item) : sum),
+    (sum, item) => (isBacGiftLine(item) ? sum + qtyOf(item) : sum),
     0,
   );
 
@@ -445,7 +455,7 @@ export function withBacGiftLines(items = [], lang = 'es') {
   // what is genuinely missing and never doubles a size that is already there.
   const presentBySize = new Map();
   for (const item of items || []) {
-    if (!isGiftLine(item)) continue;
+    if (!isBacGiftLine(item)) continue;
     const size = getBacWaterSizeMl(stripGiftSuffix(item?.product ?? item?.name)) ?? 3;
     presentBySize.set(size, (presentBySize.get(size) || 0) + qtyOf(item));
   }

@@ -13,7 +13,9 @@ import {
   isGiftLine,
   isSellableBacWater,
   stripGiftSuffix,
+  summarizeBacWater,
 } from './bacWater.mjs';
+import { chooseDealOffer, freeVialLine } from './dealOffers.mjs';
 import { effectiveVolumeDiscountPct } from './promoEligibility.mjs';
 import { computeOrderTotals, getUnitPrice, getVolumeDiscountPct } from './pricing.js';
 
@@ -89,14 +91,30 @@ export function authoritativeCheckout({
   // customer agreed to the moment the deal lapsed. Null/undefined means "work
   // it out from the cart", which is what every new order does.
   volumeDiscountPctOverride = null,
+  // The live two-offer Deal of the Week's `offers`, when the cart contains one
+  // of its products and no promo code applies. The server works out which
+  // offer applies and which vials are free; nothing about it is read from the
+  // posted order.
+  dealOffers = null,
+  // Admin routes only: a free vial already on the order (a zero-priced
+  // "(Free Gift)" peptide line from a deal) is kept as it is. The public
+  // checkout never sets this, so a posted free line cannot be smuggled in.
+  keepPostedGifts = false,
 }) {
   const currency = postedOrder?.currency === 'USD' ? 'USD' : 'CRC';
   const findProduct = productNameResolver(products);
   const requestedByName = new Map();
   const missing = [];
+  const postedPeptideGifts = [];
 
   for (const item of postedOrder?.items || []) {
-    if (isGiftLine(item)) continue;
+    if (isGiftLine(item)) {
+      const giftName = stripGiftSuffix(item?.product || item?.name);
+      if (keepPostedGifts && !isBacWater(giftName) && qtyOf(item) > 0) {
+        postedPeptideGifts.push({ product: item.product || item.name, qty: qtyOf(item), price: 0 });
+      }
+      continue;
+    }
     const productName = stripGiftSuffix(item?.product || item?.name);
     const qty = qtyOf(item);
     if (!productName || qty <= 0) continue;
@@ -182,21 +200,42 @@ export function authoritativeCheckout({
     && volumeDiscountPctOverride !== ''
     && Number.isFinite(overridePct)
     && overridePct >= 0;
-  const volumeDiscountPct = suppressVolumeDiscount
+  let volumeDiscountPct = suppressVolumeDiscount
     ? 0
     : (hasOverride
       ? effectiveVolumeDiscountPct(promo, overridePct)
       : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount)));
+
+  // Two-offer deal: exactly one of Mix & Match, Buy X Get Y, or the ordinary
+  // volume tier applies — whichever saves the customer most.
+  const dealOffer = dealOffers && !promo
+    ? chooseDealOffer(dealOffers, requested, {
+      volumePct: volumeDiscountPct,
+      bacCharge: summarizeBacWater(requested, currency, exchangeRate).charge,
+    })
+    : null;
+  if (dealOffer && (dealOffer.kind === 'mix' || dealOffer.kind === 'bundle')) volumeDiscountPct = 0;
+
   const totals = computeOrderTotals(requested, currency, exchangeRate, { volumeDiscountPct });
-  const promoDiscount = promoDiscountAmount(requested, totals, promo, currency);
+  const promoDiscount = dealOffer?.kind === 'mix'
+    // "10% off your entire order": totals.subtotal is the merchandise plus the
+    // paid BAC water, so the water is discounted too.
+    ? roundCurrency(totals.subtotal * dealOffer.mix.discountPct, currency)
+    : promoDiscountAmount(requested, totals, promo, currency);
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);
 
+  const orderLang = postedOrder?.lang || 'es';
   const canonicalItems = buildBacAwareOrderItems(requested, {
     currency,
     exchangeRate,
     priceOf: (item) => item.unitPrice,
-    lang: postedOrder?.lang || 'es',
+    lang: orderLang,
   });
+  if (dealOffer?.kind === 'bundle') {
+    for (const free of dealOffer.bundle.freeLines) canonicalItems.push(freeVialLine(free.product, free.qty, orderLang));
+  } else if (!dealOffers) {
+    canonicalItems.push(...postedPeptideGifts);
+  }
   const postedTotal = currency === 'USD'
     ? Number(postedOrder?.total_usd || 0)
     : Number(postedOrder?.total_crc || 0);
@@ -218,6 +257,7 @@ export function authoritativeCheckout({
     volumeDiscountPct,
     volumeDiscountAmount: totals.discountAmount,
     promoDiscount,
+    dealOffer: dealOffer ? dealOffer.kind : null,
     shipping: totals.shipping,
     total: finalTotal,
     totalUsd: currency === 'USD' ? finalTotal : round2(finalTotal / exchangeRate),

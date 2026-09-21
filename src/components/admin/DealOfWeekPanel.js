@@ -3,6 +3,8 @@ import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, S
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrInstant, formatCrDate, crWallToIso, isoToCrWall } from '@/lib/crTime.mjs';
 import { toPercent, hasUntrackedStock, isUnavailableForDeal } from '@/lib/dealOfWeek.mjs';
+import { OFFERS_PRICING_MODE, dealOfferSummaries, dealOffersError, normalizeDealOffers } from '@/lib/dealOffers.mjs';
+import { isBacWater } from '@/lib/bacWater.mjs';
 
 /**
  * Deal of the Week — one promotion a week, ending Sunday midnight Costa Rica.
@@ -75,6 +77,90 @@ function DealTime({ iso }) {
   );
 }
 
+/** "40% OFF" for a one-discount deal; both offers, in words, for a two-offer deal. */
+function dealHeadline(deal) {
+  if (deal?.pricing_mode === OFFERS_PRICING_MODE) return dealOfferSummaries(deal.offers, 'en').join('  ·  OR  ·  ').toUpperCase();
+  return `${toPercent(deal?.discount_pct)}% OFF`;
+}
+
+function dealModeLine(deal) {
+  if (deal?.pricing_mode === OFFERS_PRICING_MODE) return 'Two offers · each order gets whichever saves more';
+  if (deal?.pricing_mode === 'bulk_threshold') {
+    return `Automatic mix-and-match · ${deal.min_units}+ selected units${deal.max_units ? ` · maximum ${deal.max_units}` : ''}`;
+  }
+  return 'Automatic instant product sale';
+}
+
+/** The deal's products; for a two-offer deal, each offer's own list. */
+function DealProductsLine({ deal }) {
+  if (deal?.pricing_mode !== OFFERS_PRICING_MODE) return <>{(deal?.product_names || []).join(', ')}</>;
+  const offers = normalizeDealOffers(deal.offers);
+  return (
+    <>
+      {offers.mix.enabled && <span style={{ display: 'block' }}>Mix &amp; Match: {offers.mix.product_names.join(', ')}</span>}
+      {offers.bundle.enabled && <span style={{ display: 'block' }}>Buy {offers.bundle.buy_qty} Get {offers.bundle.free_qty}: {offers.bundle.product_names.join(', ')}</span>}
+    </>
+  );
+}
+
+/**
+ * A product checklist with search and the three bulk buttons. Each offer in a
+ * two-offer deal has its own, because the owner may want Buy-4-Get-1 on only
+ * some of the Mix & Match products.
+ */
+function OfferProductPicker({ products, selected, onChange, accent }) {
+  const [query, setQuery] = useState('');
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // BAC water can never be an offer product, so it is not offered here.
+    const eligible = products.filter((product) => !isBacWater(product.product));
+    if (!q) return eligible;
+    return eligible.filter((product) => (
+      String(product.product || '').toLowerCase().includes(q)
+      || String(product.category || '').toLowerCase().includes(q)
+    ));
+  }, [query, products]);
+  const toggle = (name) => onChange(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
+  const small = { padding: '3px 9px', fontSize: '0.72rem' };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
+        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{selected.length} selected</span>
+        <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+          <button type="button" className="admin-btn" style={small} onClick={() => onChange(products.filter((p) => !isBacWater(p.product)).map((p) => p.product))}>Select all</button>
+          <button type="button" className="admin-btn" style={small} onClick={() => onChange(products.filter((p) => p.status === 'In Stock' && !isBacWater(p.product)).map((p) => p.product))}>In stock only</button>
+          <button type="button" className="admin-btn" style={small} onClick={() => onChange([])} disabled={selected.length === 0}>Clear</button>
+        </div>
+      </div>
+      <div className="weekly-deal-product-search">
+        <Search size={15} />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" aria-label="Search offer products" />
+        {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear product search"><X size={14} /></button>}
+      </div>
+      <div className="admin-input" style={{ width: '100%', maxHeight: '170px', overflowY: 'auto', padding: '8px 12px', background: '#0b1220', border: '1px solid #334155', borderRadius: '8px' }}>
+        {visible.map((p) => {
+          const isChecked = selected.includes(p.product);
+          return (
+            <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <input type="checkbox" style={{ width: '16px', height: '16px', accentColor: accent, cursor: 'pointer' }} checked={isChecked} onChange={() => toggle(p.product)} />
+              <span style={{ fontSize: '0.85rem', fontWeight: isChecked ? 'bold' : 'normal', color: isChecked ? accent : '#e2e8f0' }}>{p.product}</span>
+              {p.status !== 'In Stock' && (
+                <span style={{ fontSize: '0.7rem', color: '#f87171', border: '1px solid rgba(248,113,113,0.4)', borderRadius: '4px', padding: '1px 5px' }}>{p.status}</span>
+              )}
+              <span className="weekly-deal-product-meta">
+                <span>{p.priceUsd}</span>
+                <small>{p.inventoryCount === null ? 'stock untracked' : `${p.inventoryCount} available`}</small>
+              </span>
+            </label>
+          );
+        })}
+        {visible.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No matching products found.</div>}
+      </div>
+    </div>
+  );
+}
+
 /** The first whole minute at or after an instant, as a CR datetime-local value. */
 function crWallAtOrAfter(iso) {
   const ms = Date.parse(iso);
@@ -98,6 +184,18 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const [titleEn, setTitleEn] = useState('');
   const [titleEs, setTitleEs] = useState('');
 
+  // 'single' is the one-discount deal; 'offers' runs Mix & Match and
+  // Buy X Get Y side by side, each on its own products.
+  const [dealType, setDealType] = useState('single');
+  const [mixEnabled, setMixEnabled] = useState(true);
+  const [mixSelected, setMixSelected] = useState([]);
+  const [mixMin, setMixMin] = useState(2);
+  const [mixPct, setMixPct] = useState(10);
+  const [bundleEnabled, setBundleEnabled] = useState(true);
+  const [bundleSelected, setBundleSelected] = useState([]);
+  const [bundleBuy, setBundleBuy] = useState(4);
+  const [bundleFree, setBundleFree] = useState(1);
+
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState('');
   const [isPreviewing, setIsPreviewing] = useState(false);
@@ -115,25 +213,40 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
   const parsedMinUnits = Math.floor(Number(minUnits));
   const parsedMaxUnits = Math.floor(Number(maxUnits));
-  const pricingMode = Number.isFinite(parsedMinUnits) && parsedMinUnits > 1 ? 'bulk_threshold' : 'shelf';
-  const bulkUnitRangeError = minUnits !== '' && (!Number.isFinite(parsedMinUnits) || parsedMinUnits < 1)
+  const isOffers = dealType === 'offers';
+  const pricingMode = isOffers
+    ? 'offers'
+    : (Number.isFinite(parsedMinUnits) && parsedMinUnits > 1 ? 'bulk_threshold' : 'shelf');
+  const bulkUnitRangeError = isOffers ? '' : minUnits !== '' && (!Number.isFinite(parsedMinUnits) || parsedMinUnits < 1)
     ? 'Minimum selected units must be at least 1. Use 1 when the deal should apply immediately.'
     : (pricingMode === 'bulk_threshold' && maxUnits !== '' && (!Number.isFinite(parsedMaxUnits) || parsedMaxUnits < parsedMinUnits)
       ? 'Maximum selected units cannot be lower than the minimum.'
       : '');
 
+  const offersPayload = useMemo(() => ({
+    mix: { enabled: mixEnabled, product_names: mixSelected, min_units: Number(mixMin), discount_pct: Number(mixPct) / 100 },
+    bundle: { enabled: bundleEnabled, product_names: bundleSelected, buy_qty: Number(bundleBuy), free_qty: Number(bundleFree) },
+  }), [mixEnabled, mixSelected, mixMin, mixPct, bundleEnabled, bundleSelected, bundleBuy, bundleFree]);
+  const offersError = isOffers ? dealOffersError(offersPayload) : '';
+  // Every product the deal touches, whichever type it is.
+  const dealProducts = useMemo(() => (
+    isOffers
+      ? [...new Set([...(mixEnabled ? mixSelected : []), ...(bundleEnabled ? bundleSelected : [])])]
+      : selected
+  ), [isOffers, mixEnabled, mixSelected, bundleEnabled, bundleSelected, selected]);
+
   const outOfStockSelected = useMemo(() => (
-    selected.filter((name) => {
+    dealProducts.filter((name) => {
       const row = products.find((p) => p.product === name);
       return row && isUnavailableForDeal(row);
     })
-  ), [selected, products]);
+  ), [dealProducts, products]);
   const untrackedStockSelected = useMemo(() => (
-    selected.filter((name) => {
+    dealProducts.filter((name) => {
       const row = products.find((p) => p.product === name);
       return row && hasUntrackedStock(row);
     })
-  ), [selected, products]);
+  ), [dealProducts, products]);
   const visibleProducts = useMemo(() => {
     const query = productQuery.trim().toLowerCase();
     if (!query) return products;
@@ -180,22 +293,37 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (saved.maxUnits !== undefined) setMaxUnits(saved.maxUnits);
       if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
       if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
+      if (saved.dealType === 'offers') setDealType('offers');
+      if (saved.offers) {
+        const { mix = {}, bundle = {} } = saved.offers;
+        if (typeof mix.enabled === 'boolean') setMixEnabled(mix.enabled);
+        if (Array.isArray(mix.product_names)) setMixSelected(mix.product_names);
+        if (mix.min_units) setMixMin(mix.min_units);
+        if (mix.discount_pct) setMixPct(Math.round(mix.discount_pct * 100));
+        if (typeof bundle.enabled === 'boolean') setBundleEnabled(bundle.enabled);
+        if (Array.isArray(bundle.product_names)) setBundleSelected(bundle.product_names);
+        if (bundle.buy_qty) setBundleBuy(bundle.buy_qty);
+        if (bundle.free_qty) setBundleFree(bundle.free_qty);
+      }
     } catch {}
   }, []);
 
   useEffect(() => {
     try {
-      localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({ selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs }));
+      localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({
+        selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs, dealType, offers: offersPayload,
+      }));
     } catch {}
-  }, [selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs]);
+  }, [selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs, dealType, offersPayload]);
 
   // The preview is the only place the resolved Sunday and the real before/after
   // prices appear, so it refreshes whenever the inputs change rather than
   // sitting behind a button the admin might not press.
   useEffect(() => {
-    if (selected.length === 0 || !percentIsValid || bulkUnitRangeError) {
+    if (dealProducts.length === 0 || offersError || (!isOffers && (!percentIsValid || bulkUnitRangeError))) {
       setPreview(null);
-      setPreviewError(bulkUnitRangeError);
+      // "Pick a product" is not an error worth shouting; a bad setting is.
+      setPreviewError(dealProducts.length === 0 && isOffers ? '' : (offersError || bulkUnitRangeError));
       return;
     }
 
@@ -208,7 +336,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           method: 'POST',
           body: JSON.stringify({
             action: 'preview',
-            product_names: selected,
+            product_names: dealProducts,
+            offers: isOffers ? offersPayload : null,
             discount_pct: discountPct,
             title_en: titleEn,
             title_es: titleEs,
@@ -231,7 +360,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
     }, 350);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selected, discountPct, pricingMode, minUnits, maxUnits, titleEn, titleEs, percentIsValid, confirmedHighDiscount, bulkUnitRangeError, startsAtIso]);
+  }, [dealProducts, discountPct, pricingMode, minUnits, maxUnits, titleEn, titleEs, percentIsValid, confirmedHighDiscount, bulkUnitRangeError, startsAtIso, isOffers, offersPayload, offersError]);
 
   const toggleProduct = (name) => {
     setSelected((current) => (
@@ -255,7 +384,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         body: JSON.stringify({
           action: isScheduling ? 'schedule' : 'launch',
           starts_at: startsAtIso,
-          product_names: selected,
+          product_names: dealProducts,
+          offers: isOffers ? offersPayload : null,
           discount_pct: discountPct,
           title_en: titleEn,
           title_es: titleEs,
@@ -274,6 +404,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (!isScheduling) setLaunched(data);
       setStartWall('');
       setSelected([]);
+      setMixSelected([]);
+      setBundleSelected([]);
       setTitleEn('');
       setTitleEs('');
       setPreview(null);
@@ -352,8 +484,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const announcementDeal = launched || (live?.drafts ? { deal: live, drafts: live.drafts } : null);
   const announcementStatus = live?.announcement?.status || live?.announcement_status || (launched ? 'not_sent' : null);
   const announcementNeedsAction = announcementDeal && !['queued', 'scheduled', 'sending', 'completed'].includes(announcementStatus);
-  const liveIsBulk = live?.pricing_mode === 'bulk_threshold';
-  const announcementIsBulk = announcementDeal?.deal?.pricing_mode === 'bulk_threshold';
+  // Threshold and two-offer deals leave shelf prices alone: nothing to restore.
+  const liveIsBulk = ['bulk_threshold', OFFERS_PRICING_MODE].includes(live?.pricing_mode);
+  const announcementIsBulk = ['bulk_threshold', OFFERS_PRICING_MODE].includes(announcementDeal?.deal?.pricing_mode);
 
   return (
     <div className="admin-orders-tab">
@@ -382,18 +515,16 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 800, fontSize: '0.9rem' }}>
-                <Zap size={15} /> LIVE NOW — {toPercent(live.discount_pct)}% OFF
+                <Zap size={15} /> LIVE NOW — {dealHeadline(live)}
               </div>
               <div style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 700, marginTop: '6px' }}>
-                {(live.product_names || []).join(', ')}
+                <DealProductsLine deal={live} />
               </div>
               <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Clock size={13} /> Ends <DealTime iso={live.ends_at} />
               </div>
               <div style={{ color: '#fbbf24', fontSize: '0.78rem', marginTop: '6px' }}>
-                {liveIsBulk
-                  ? `Automatic mix-and-match · ${live.min_units}+ selected units${live.max_units ? ` · maximum ${live.max_units}` : ''}`
-                  : 'Automatic instant product sale'} · no code · no stacking
+                {dealModeLine(live)} · no code · no stacking
               </div>
             </div>
             <button
@@ -466,7 +597,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             {announcementNeedsAction ? 'DEAL IS LIVE — ANNOUNCEMENT STILL NEEDS TO BE SENT' : `ANNOUNCEMENT ${String(announcementStatus || '').toUpperCase()}`}
           </div>
           <div style={{ color: '#d1fae5', fontSize: '0.84rem', margin: '10px 0 14px' }}>
-            {announcementIsBulk ? 'The automatic threshold discount' : 'The marked-down prices'} and site banner are live.
+            {announcementIsBulk ? 'The automatic checkout discount' : 'The marked-down prices'} and site banner are live.
             {' '}Review the announcement below and send it from the Announcements screen, where you pick the audience.
           </div>
 
@@ -504,10 +635,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd', fontWeight: 800, fontSize: '0.9rem' }}>
-                <CalendarClock size={15} /> SCHEDULED — {toPercent(scheduled.discount_pct)}% OFF
+                <CalendarClock size={15} /> SCHEDULED — {dealHeadline(scheduled)}
               </div>
               <div style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 700, marginTop: '6px' }}>
-                {(scheduled.product_names || []).join(', ')}
+                <DealProductsLine deal={scheduled} />
               </div>
               <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '6px' }}>
                 Starts <DealTime iso={scheduled.starts_at} />
@@ -516,9 +647,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 Ends <DealTime iso={scheduled.ends_at} />
               </div>
               <div style={{ color: '#93c5fd', fontSize: '0.78rem', marginTop: '6px' }}>
-                {scheduled.pricing_mode === 'bulk_threshold'
-                  ? `Automatic mix-and-match · ${scheduled.min_units}+ selected units${scheduled.max_units ? ` · maximum ${scheduled.max_units}` : ''}`
-                  : 'Automatic instant product sale'} · no code · no stacking
+                {dealModeLine(scheduled)} · no code · no stacking
               </div>
             </div>
             <button
@@ -613,7 +742,73 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             )}
           </div>
 
+          <div style={{ marginBottom: '14px' }}>
+            <label style={labelStyle}>Deal type</label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button type="button" className={`admin-btn${!isOffers ? ' primary' : ''}`} onClick={() => setDealType('single')}>
+                One discount
+              </button>
+              <button type="button" className={`admin-btn${isOffers ? ' primary' : ''}`} onClick={() => setDealType('offers')}>
+                Two offers (Mix &amp; Match + Buy &amp; Get Free)
+              </button>
+            </div>
+            {isOffers && (
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '6px' }}>
+                Offers never stack. If an order qualifies for both — or its normal volume discount is bigger — the customer
+                automatically gets whichever one saves the most. BAC Water never counts toward an offer.
+              </div>
+            )}
+          </div>
+
+          {isOffers && (
+            <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', marginBottom: '14px' }}>
+              <div style={{ border: `1px solid ${mixEnabled ? 'rgba(251,191,36,0.45)' : '#334155'}`, borderRadius: '10px', padding: '14px', opacity: mixEnabled ? 1 : 0.6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 800, fontSize: '0.88rem', marginBottom: '10px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={mixEnabled} onChange={(e) => setMixEnabled(e.target.checked)} style={{ accentColor: '#fbbf24' }} />
+                  Offer #1: Mix &amp; Match
+                </label>
+                <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr', marginBottom: '8px' }}>
+                  <div>
+                    <label style={labelStyle}>Buy at least (vials)</label>
+                    <input className="admin-input" type="number" min="1" value={mixMin} onChange={(e) => setMixMin(e.target.value)} style={{ width: '100%' }} disabled={!mixEnabled} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Discount on whole order (%)</label>
+                    <input className="admin-input" type="number" min="1" max="99" value={mixPct} onChange={(e) => setMixPct(e.target.value)} style={{ width: '100%' }} disabled={!mixEnabled} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px' }}>
+                  {mixMin || '?'}+ vials from these products, in any mix, takes {mixPct || '?'}% off the entire order — BAC Water included.
+                </div>
+                {mixEnabled && <OfferProductPicker products={products} selected={mixSelected} onChange={setMixSelected} accent="#fbbf24" />}
+              </div>
+
+              <div style={{ border: `1px solid ${bundleEnabled ? 'rgba(52,211,153,0.45)' : '#334155'}`, borderRadius: '10px', padding: '14px', opacity: bundleEnabled ? 1 : 0.6 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399', fontWeight: 800, fontSize: '0.88rem', marginBottom: '10px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={bundleEnabled} onChange={(e) => setBundleEnabled(e.target.checked)} style={{ accentColor: '#34d399' }} />
+                  Offer #2: Buy &amp; Get Free
+                </label>
+                <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr', marginBottom: '8px' }}>
+                  <div>
+                    <label style={labelStyle}>Buy (same product)</label>
+                    <input className="admin-input" type="number" min="1" value={bundleBuy} onChange={(e) => setBundleBuy(e.target.value)} style={{ width: '100%' }} disabled={!bundleEnabled} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Get free</label>
+                    <input className="admin-input" type="number" min="1" value={bundleFree} onChange={(e) => setBundleFree(e.target.value)} style={{ width: '100%' }} disabled={!bundleEnabled} />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px' }}>
+                  Every {bundleBuy || '?'} of one product adds {bundleFree || '?'} more of that same product free, automatically
+                  ({Number(bundleBuy) * 2 || '?'} → {Number(bundleFree) * 2 || '?'} free). Free vials come out of stock like any other.
+                </div>
+                {bundleEnabled && <OfferProductPicker products={products} selected={bundleSelected} onChange={setBundleSelected} accent="#34d399" />}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '14px' }}>
+            {!isOffers && (<>
             <div>
               <label style={labelStyle}>Deal discount (%)</label>
               <input
@@ -657,6 +852,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 />
               </div>
             )}
+            </>)}
             <div>
               <label style={labelStyle}>Ends</label>
               <div className="admin-input" style={{ width: '100%', color: preview ? '#f8fafc' : '#64748b' }}>
@@ -680,6 +876,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               time pressure — and this form does not survive a refresh, so it can
               have to be done twice. In-stock only is offered separately because
               a sold-out product can be marked down but not bought. */}
+          {!isOffers && (<>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>Products on deal</label>
             <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
@@ -758,6 +955,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No matching products found.</div>
             )}
           </div>
+          </>)}
 
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', marginBottom: '14px' }}>
             <div>
@@ -824,6 +1022,12 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 700, marginBottom: '10px' }}>
                 What customers will see
               </div>
+              {preview.offers ? (
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: '#e2e8f0', display: 'grid', gap: '6px' }}>
+                  {preview.offers.en.map((offer, index) => <li key={offer}><strong>Offer #{index + 1}:</strong> {offer}</li>)}
+                  <li style={{ color: '#94a3b8' }}>Shelf prices stay the same. The saving is applied in the cart, and free vials are added there automatically.</li>
+                </ul>
+              ) : (
               <table style={{ width: '100%', fontSize: '0.83rem', color: '#e2e8f0', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ color: '#94a3b8', textAlign: 'left', fontSize: '0.75rem' }}>
@@ -842,14 +1046,17 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                   ))}
                 </tbody>
               </table>
+              )}
               <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#cbd5e1' }}>
                 <strong>Banner:</strong> {preview.banner.en}
               </div>
               <div style={{ marginTop: '10px', fontSize: '0.78rem', color: '#94a3b8' }}>
-                {pricingMode === 'bulk_threshold' ? `Customers may mix these products; the ${minUnits}+ selected-vial minimum is counted automatically.` : 'These products get the orange sale ribbon and move to the top of the catalog.'}
-                {' '}Volume discounts and promo codes do not stack with this deal.
+                {isOffers
+                  ? 'Each order gets only the single best saving: offer #1, offer #2, or its normal volume discount.'
+                  : pricingMode === 'bulk_threshold' ? `Customers may mix these products; the ${minUnits}+ selected-vial minimum is counted automatically.` : 'These products get the orange sale ribbon and move to the top of the catalog.'}
+                {' '}Promo codes do not stack with this deal.
               </div>
-              <div className="weekly-deal-stack-summary"><div><span>Final discount</span><strong>{preview.safety?.pct}% off</strong></div><div><span>Volume discount</span><strong>Replaced</strong></div><div><span>Promo codes</span><strong>Blocked</strong></div></div>
+              {!isOffers && <div className="weekly-deal-stack-summary"><div><span>Final discount</span><strong>{preview.safety?.pct}% off</strong></div><div><span>Volume discount</span><strong>Replaced</strong></div><div><span>Promo codes</span><strong>Blocked</strong></div></div>}
               {preview.safety?.needsConfirmation && (
                 <label className="weekly-deal-confirm-row is-warning">
                   <input
@@ -928,14 +1135,20 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <div><span>Products</span><strong>{preview.products.length}</strong></div>
               {isScheduling && <div><span>Starts</span><strong>{formatCrInstant(startsAtIso)}</strong></div>}
               <div><span>Ends</span><strong>{formatCrInstant(preview.window.endsAt)}</strong></div>
-              <div><span>Final customer saving</span><strong>{preview.safety?.pct}%</strong></div>
+              {!preview.offers && <div><span>Final customer saving</span><strong>{preview.safety?.pct}%</strong></div>}
             </div>
+
+            {preview.offers && (
+              <ul style={{ margin: '0 0 12px', paddingLeft: '18px', fontSize: '0.85rem', display: 'grid', gap: '4px' }}>
+                {preview.offers.en.map((offer, index) => <li key={offer}><strong>Offer #{index + 1}:</strong> {offer}</li>)}
+              </ul>
+            )}
 
             <div className="weekly-deal-review-products">
               {preview.products.map((product) => (
                 <div key={product.product}>
                   <span>{product.product}</span>
-                  <strong><s>{product.wasUsd}</s> → {product.nowUsd}{pricingMode === 'bulk_threshold' ? ' at threshold' : ''}</strong>
+                  <strong>{preview.offers ? product.wasUsd : <><s>{product.wasUsd}</s> → {product.nowUsd}{pricingMode === 'bulk_threshold' ? ' at threshold' : ''}</>}</strong>
                   <small>{product.inventoryCount === null ? 'Stock manually verified' : `${product.inventoryCount} available`}</small>
                 </div>
               ))}

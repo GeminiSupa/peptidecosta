@@ -13,6 +13,7 @@
 
 import { crWallToIso, formatCrInstant, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
+import { OFFERS_PRICING_MODE, dealOfferSummaries } from './dealOffers.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -351,6 +352,7 @@ function joinNames(names, conjunction) {
 }
 
 export function dealPricingMode(deal) {
+  if (deal?.pricing_mode === OFFERS_PRICING_MODE) return OFFERS_PRICING_MODE;
   return deal?.pricing_mode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
 }
 
@@ -394,6 +396,14 @@ export function dealBannerText(deal, lang = 'en') {
   const pct = toPercent(deal?.discount_pct);
   if (!pct) return '';
   const isEn = String(lang).toLowerCase().startsWith('en');
+  if (dealPricingMode(deal) === OFFERS_PRICING_MODE) {
+    const custom = String((isEn ? deal?.title_en : deal?.title_es) || '').trim();
+    if (custom) return custom;
+    const offers = dealOfferSummaries(deal?.offers, lang).join(isEn ? ' — or — ' : ' — o — ');
+    return isEn
+      ? `⚡ DEAL OF THE WEEK: ${offers}. No code needed; offers do not stack.`
+      : `⚡ OFERTA DE LA SEMANA: ${offers}. Sin código; las ofertas no se acumulan.`;
+  }
   const names = deal?.product_names || [];
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
   const minimum = dealMinUnits(deal);
@@ -434,6 +444,27 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
   const requirementEn = bulk ? ` when you mix and match ${dealMinUnits(deal)}+ selected vials` : '';
   const requirementEs = bulk ? ` al combinar ${dealMinUnits(deal)}+ viales seleccionados` : '';
+
+  if (dealPricingMode(deal) === OFFERS_PRICING_MODE) {
+    const en = dealOfferSummaries(deal?.offers, 'en');
+    const es = dealOfferSummaries(deal?.offers, 'es');
+    return {
+      emailSubject: `⚡ Deal of the Week: ${en.join(' or ')}`,
+      message: [
+        `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
+        '',
+        ...en.map((offer, index) => `Offer #${index + 1}: ${offer}.`),
+        `Applied automatically, no code needed. If your order qualifies for both, you get whichever saves more — they do not stack. BAC Water does not count toward the offers. Stock is limited.`,
+        `Ends Sunday at midnight.`,
+        '',
+        ...es.map((offer, index) => `Oferta #${index + 1}: ${offer}.`),
+        `Se aplica automáticamente, sin código. Si tu pedido califica para ambas, recibes la que más ahorra; no se acumulan. El agua bacteriostática no cuenta para las ofertas. Inventario limitado.`,
+        `Termina el domingo a medianoche.`,
+        '',
+        destination,
+      ].join('\n'),
+    };
+  }
 
   return {
     emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,

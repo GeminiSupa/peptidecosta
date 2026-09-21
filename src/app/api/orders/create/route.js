@@ -24,6 +24,7 @@ import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/li
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { OFFERS_PRICING_MODE } from '@/lib/dealOffers.mjs';
 import { DEAL_PAGE_EXPERIMENT, normalizeVariant } from '@/lib/dealPageExperiment.mjs';
 import {
   consumeDurableRateLimit,
@@ -573,12 +574,18 @@ export async function POST(request) {
       }, { status: 409 });
     }
     const dealPromo = resolvedPromo ? null : automaticDealPromo(matchedDeal, order.items);
+    // A two-offer deal is priced inside authoritativeCheckout, which picks the
+    // one offer that saves the customer most and adds any free vials itself.
+    const dealOffers = !resolvedPromo && matchedDeal && dealPricingMode(matchedDeal) === OFFERS_PRICING_MODE
+      ? matchedDeal.offers
+      : null;
     const authoritative = authoritativeCheckout({
       postedOrder: order,
       products: currentProducts || [],
       promo: resolvedPromo || dealPromo,
       exchangeRate: rateResult.rate,
       suppressVolumeDiscount: Boolean(matchedDeal && dealPricingMode(matchedDeal) === 'shelf'),
+      dealOffers,
     });
     if (!authoritative.ok) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });

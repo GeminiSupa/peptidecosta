@@ -73,6 +73,7 @@ import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, freeVialLine } from '@/lib/dealOffers.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { readDealPageOrderTag } from '@/hooks/useDealPageExperiment';
@@ -2263,6 +2264,23 @@ export default function CatalogPage() {
   };
 
   const getAutomaticDealDiscount = () => automaticDealPromo(getMatchedWeeklyDeal(), cart);
+
+  // Two-offer deal (Mix & Match / Buy X Get Y): which one this cart gets.
+  // chooseDealOffer is the same function the server charges with, fed the
+  // same lines, so the total shown here is the total that is charged.
+  const getDealOfferChoice = () => {
+    const deal = getMatchedWeeklyDeal();
+    if (!deal || dealPricingMode(deal) !== OFFERS_PRICING_MODE) return null;
+    return chooseDealOffer(deal.offers, cart.map((item) => ({
+      product: item.product,
+      qty: item.qty,
+      unitPrice: getPriceAsNumber(item, currency),
+      inventoryCount: item.inventoryCount ?? null,
+    })), {
+      volumePct: getVolumeDiscountPct(getCartVialCount()),
+      bacCharge: getBacSummary().charge,
+    });
+  };
   const getAppliedPromoData = () => (!getMatchedWeeklyDeal() && promoData?.valid ? promoData : null);
   const getWeeklyDealLimitError = () => {
     const deal = getMatchedWeeklyDeal();
@@ -2284,19 +2302,34 @@ export default function CatalogPage() {
 
   // Order lines as the customer, the database and the packing list should see
   // them — a BAC cart line resolved into its billed and gifted parts.
-  const buildOrderItems = (cartItems, cur = currency, rate = exchangeRate) =>
-    buildBacAwareOrderItems(cartItems || cart, {
+  const buildOrderItems = (cartItems, cur = currency, rate = exchangeRate) => {
+    const items = buildBacAwareOrderItems(cartItems || cart, {
       currency: cur,
       exchangeRate: rate,
       priceOf: (item) => getPriceAsNumber(item, cur, rate),
       lang,
     });
+    // Free vials from Buy X Get Y ship with the order. The server works these
+    // out again itself and ignores any free line the browser sends.
+    const offer = getDealOfferChoice();
+    if (offer?.kind === 'bundle') {
+      for (const free of offer.bundle.freeLines) items.push(freeVialLine(free.product, free.qty, lang));
+    }
+    return items;
+  };
 
   // A bulk promo (one with a unit minimum) replaces the automatic volume
   // discount instead of stacking with it, so the percentage on the code is the
   // percentage the customer actually gets. Single source of truth - every
   // checkout path reads this rather than getVolumeDiscountPct directly.
-  const getEffectiveVolumePct = () =>
+  const getEffectiveVolumePct = () => {
+    // A two-offer deal replaces the volume tier only when the offer it picked
+    // saves more; otherwise the ordinary tier stands.
+    const offer = getDealOfferChoice();
+    if (offer) return offer.kind === 'mix' || offer.kind === 'bundle' ? 0 : getVolumeDiscountPct(getCartVialCount());
+    return getNonOfferVolumePct();
+  };
+  const getNonOfferVolumePct = () =>
     getMatchedWeeklyDeal() && (dealPricingMode(getMatchedWeeklyDeal()) === 'shelf' || Boolean(getWeeklyDealLimitError()))
       ? 0
       : effectiveVolumeDiscountPct(getAppliedPromoData() || getAutomaticDealDiscount(), getVolumeDiscountPct(getCartVialCount()));
@@ -2355,6 +2388,15 @@ export default function CatalogPage() {
     // A live weekly deal is the only promotion on an order containing one of
     // its selected products. Prefer it even if a stale code was validated just
     // before the deal became live; the server enforces the same rule again.
+    const offer = getDealOfferChoice();
+    if (offer) {
+      if (offer.kind !== 'mix') return 0;
+      // "10% off your entire order": paid BAC water included. Rounded exactly
+      // as authoritativeCheckout rounds it.
+      const base = (getDiscountableSubtotal() + getBacSummary().charge) * offer.mix.discountPct;
+      return currency === 'USD' ? Math.round(base * 100) / 100 : Math.round(base);
+    }
+
     const appliedDiscount = getAutomaticDealDiscount() || getAppliedPromoData();
     if (!appliedDiscount) return 0;
     
@@ -3371,7 +3413,7 @@ export default function CatalogPage() {
     const isFreeShip = qualifiesForFreeShipping();
     const hasVolumeDiscount = getEffectiveVolumePct() > 0;
     const hasPromoDiscount = Boolean(getAppliedPromoData());
-    const hasWeeklyDealDiscount = Boolean(getAutomaticDealDiscount());
+    const hasWeeklyDealDiscount = Boolean(getAutomaticDealDiscount()) || getDealOfferChoice()?.kind === 'mix';
     const itemsBeforeShipping = getItemsTotalBeforeShipping();
 
     return (
@@ -4820,7 +4862,7 @@ export default function CatalogPage() {
 
             {/* Promo Code UI */}
             {getMatchedWeeklyDeal() && <div style={{ marginBottom:'10px', padding:'9px 12px', borderRadius:'10px', background:'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#ef4444' : '#f97316', fontSize:'.78rem', fontWeight:700 }}>
-              {getWeeklyDealLimitError() || (dealPricingMode(getMatchedWeeklyDeal()) === 'bulk_threshold'
+              {getDealOfferChoice() ? dealOfferCartMessage(getDealOfferChoice(), getMatchedWeeklyDeal(), lang) : getWeeklyDealLimitError() || (dealPricingMode(getMatchedWeeklyDeal()) === 'bulk_threshold'
                 ? (lang === 'en' ? `Weekly bulk deal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} selected vials. It applies automatically and does not stack.` : `Oferta mayorista semanal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} viales seleccionados. Se aplica automáticamente y no se acumula.`)
                 : (lang === 'en' ? 'Deal of the Week applied automatically. Other discounts do not stack.' : 'Oferta de la Semana aplicada automáticamente. Otros descuentos no se acumulan.'))}
             </div>}

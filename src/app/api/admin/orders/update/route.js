@@ -232,6 +232,8 @@ export async function PATCH(request) {
         // order onto the standing tier. Absent on older rows, which reprice as
         // they always did.
         volumeDiscountPctOverride: storedOrderVolumePct(currentOrder),
+        // A free vial a deal gave this order stays on it through an edit.
+        keepPostedGifts: true,
       });
       if (!authoritative.ok) {
         return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });

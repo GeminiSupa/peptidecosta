@@ -207,6 +207,8 @@ export async function POST(request) {
       promo,
       exchangeRate: liveExchangeRate,
       suppressVolumeDiscount: replaceVolumeDiscount,
+      // Staff may give a free vial by hand ("X (Free Gift)" at 0).
+      keepPostedGifts: true,
     });
     if (!authoritative.ok) {
       return NextResponse.json({ error: authoritative.error, errorCode: 'cart_invalid' }, { status: 409 });
