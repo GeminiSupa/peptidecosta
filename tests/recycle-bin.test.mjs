@@ -123,7 +123,7 @@ test('a long label is trimmed so one broadcast cannot flood the list', () => {
 });
 
 test('orders and live chats carry their children so a restore is not an empty shell', () => {
-  assert.deepEqual(childTablesFor('orders'), [{ table: 'order_items', foreignKey: 'order_id' }]);
+  assert.deepEqual(childTablesFor('orders'), []);
   assert.deepEqual(childTablesFor('live_chat_conversations'), [
     { table: 'live_chat_messages', foreignKey: 'conversation_id' },
   ]);

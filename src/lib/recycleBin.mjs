@@ -58,7 +58,8 @@ export const BIN_TABLES = {
     type: 'Order',
     permission: 'orders',
     labelFields: ['order_number', 'customer_name', 'customer_email'],
-    children: [{ table: 'order_items', foreignKey: 'order_id' }],
+    // No children: an order's lines live in its own items column, and there is
+    // no order_items table (listing one made every order delete fail).
   },
   products: {
     type: 'Product',
