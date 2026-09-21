@@ -10,7 +10,7 @@ import { useDealPageExperiment } from '@/hooks/useDealPageExperiment';
 import { useSharedCart } from '@/hooks/useSharedCart';
 import { PRODUCT_SELECT } from '@/lib/catalogProducts';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
-import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, normalizeDealOffers } from '@/lib/dealOffers.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferRuleSummaries, normalizeDealOffers } from '@/lib/dealOffers.mjs';
 import { isBacWater } from '@/lib/bacWater.mjs';
 import { getVolumeDiscountPct } from '@/lib/pricing';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
@@ -218,17 +218,7 @@ export default function DealOfTheWeekPage() {
         : (en ? `${pct}% off unlocked — applied at checkout` : `${pct}% de descuento activado — se aplica al pagar`);
 
   const rules = !deal ? [] : offersDeal
-    ? [
-      ...(offers.mix.enabled ? [en
-        ? `Offer #1 — Mix & Match: buy ${offers.mix.min_units} or more vials from the products on this page, in any combination, and get ${mixPct}% off your entire order.`
-        : `Oferta #1 — Combina: compra ${offers.mix.min_units} o más viales de los productos de esta página, en cualquier combinación, y obtén ${mixPct}% de descuento en todo tu pedido.`] : []),
-      ...(offers.bundle.enabled ? [en
-        ? `Offer #2 — Buy ${offers.bundle.buy_qty}, Get ${offers.bundle.free_qty} Free: every ${offers.bundle.buy_qty} vials of the same product and size add ${offers.bundle.free_qty} more of that product free (${offers.bundle.buy_qty * 2} → ${offers.bundle.free_qty * 2} free, ${offers.bundle.buy_qty * 3} → ${offers.bundle.free_qty * 3} free).`
-        : `Oferta #2 — Compra ${offers.bundle.buy_qty} y llévate ${offers.bundle.free_qty} gratis: cada ${offers.bundle.buy_qty} viales del mismo producto y tamaño suman ${offers.bundle.free_qty} más de ese producto gratis (${offers.bundle.buy_qty * 2} → ${offers.bundle.free_qty * 2} gratis, ${offers.bundle.buy_qty * 3} → ${offers.bundle.free_qty * 3} gratis).`] : []),
-      en ? 'If your order qualifies for both, you automatically get whichever saves you more. The offers do not stack with each other or with any other discount or promo code.' : 'Si tu pedido califica para ambas, recibes automáticamente la que más te ahorra. Las ofertas no se acumulan entre sí ni con otros descuentos o códigos.',
-      en ? 'BAC Water does not count toward either offer.' : 'El agua bacteriostática no cuenta para ninguna de las ofertas.',
-      en ? 'Applied automatically at checkout. No code needed.' : 'Se aplica automáticamente al pagar. Sin código.',
-    ]
+    ? dealOfferRuleSummaries(deal.offers, lang)
     : bulk
     ? [
       en ? `Choose ${minUnits} or more vials from the products on this page, in any combination.` : `Elige ${minUnits} o más viales de los productos de esta página, en cualquier combinación.`,

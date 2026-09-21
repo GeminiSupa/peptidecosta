@@ -52,9 +52,9 @@ const BANNERS_SETTING_ID = 'announcement_banners';
  */
 function dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers }) {
   if (pricingMode === OFFERS_PRICING_MODE) {
-    const clean = normalizeDealOffers(offers);
-    const problem = dealOffersError(clean);
+    const problem = dealOffersError(offers);
     if (problem) throw new Error(problem);
+    const clean = normalizeDealOffers(offers);
     const mixPct = clean.mix.enabled ? clean.mix.discount_pct : 0;
     const bundlePct = clean.bundle.enabled ? clean.bundle.free_qty / (clean.bundle.buy_qty + clean.bundle.free_qty) : 0;
     return { pct: Math.max(mixPct, bundlePct), mode: OFFERS_PRICING_MODE, minimum: 0, maximum: 0, offers: clean };

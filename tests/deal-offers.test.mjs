@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   chooseDealOffer,
   dealOfferProductNames,
+  dealOfferRuleSummaries,
   dealOffersError,
   dealOfferSummaries,
   freeVialLine,
@@ -96,10 +97,13 @@ test('free vials are recorded as gift lines that resolve to the real product', (
 test('offer setup is validated', () => {
   assert.equal(dealOffersError(OFFERS), '');
   assert.match(dealOffersError({}), /at least one offer/);
-  assert.match(dealOffersError({ mix: { enabled: true, product_names: [], discount_pct: 0.1 } }), /pick at least one/);
-  assert.match(dealOffersError({ mix: { enabled: true, product_names: ['X'], discount_pct: 0 } }), /between 1% and 99%/);
+  assert.match(dealOffersError({ mix: { enabled: true, product_names: [], discount_pct: 0.1 } }), /choose which products/);
+  assert.match(dealOffersError({ mix: { enabled: true, product_names: ['X'], min_units: 2, discount_pct: 0 } }), /between 1% and 99%/);
   assert.match(dealOffersError({ bundle: { enabled: true, product_names: ['X'], buy_qty: 1, free_qty: 2 } }), /cannot outnumber/);
-  assert.match(dealOffersError({ bundle: { enabled: true, product_names: ['Bacteriostatic Water 3ml'] } }), /BAC Water/);
+  assert.match(dealOffersError({ bundle: { enabled: true, product_names: ['Bacteriostatic Water 3ml'], buy_qty: 4, free_qty: 1 } }), /BAC Water/);
+  assert.match(dealOffersError({ mix: { enabled: true, product_names: ['X'], min_units: 0, discount_pct: 0.1 } }), /whole number/);
+  assert.match(dealOffersError({ bundle: { enabled: true, product_names: ['X'], buy_qty: 0, free_qty: 1 } }), /buy quantity/);
+  assert.match(dealOffersError({ bundle: { enabled: true, product_names: ['X'], buy_qty: 4, free_qty: 0 } }), /free quantity/);
 });
 
 test('product names and summaries cover both offers', () => {
@@ -109,6 +113,16 @@ test('product names and summaries cover both offers', () => {
     'Buy 4 of the same vial, get 1 free',
   ]);
   assert.equal(normalizeDealOffers(null).mix.enabled, false);
+});
+
+test('shared rule copy includes every enforced rule and follows admin quantities', () => {
+  const rules = dealOfferRuleSummaries(OFFERS, 'en');
+  assert.match(rules[0], /2 or more.*10% off your entire order/);
+  assert.match(rules[1], /exact same product and size.*8 → 2 free.*12 → 3 free/);
+  assert.match(rules[2], /saves the customer the most.*never stack/);
+  assert.match(rules[3], /BAC Water does not count.*cannot earn a free vial.*discount still includes BAC Water/);
+  assert.match(rules[4], /automatically at checkout.*No code/);
+  assert.equal(dealOfferRuleSummaries(OFFERS, 'es').length, 5);
 });
 
 // --- The server's authoritative checkout, with the offers switched on ---

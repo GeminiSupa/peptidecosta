@@ -67,17 +67,21 @@ export function dealOfferProductNames(offers) {
 
 /** '' when the offers can be launched, otherwise what the admin must fix. */
 export function dealOffersError(offers) {
-  const clean = normalizeDealOffers(offers);
-  if (!clean.mix.enabled && !clean.bundle.enabled) return 'Turn on at least one offer.';
-  if (clean.mix.enabled) {
-    if (clean.mix.product_names.length === 0) return 'Mix & Match: pick at least one product.';
-    if (!(clean.mix.discount_pct > 0 && clean.mix.discount_pct < 1)) return 'Mix & Match: the discount must be between 1% and 99%.';
-    if (clean.mix.product_names.some(isBacWater)) return 'Mix & Match: BAC Water cannot be an offer product.';
+  const mix = offers?.mix || {};
+  const bundle = offers?.bundle || {};
+  if (mix.enabled !== true && bundle.enabled !== true) return 'Turn on at least one offer.';
+  if (mix.enabled === true) {
+    if (names(mix.product_names).length === 0) return 'Mix & Match: choose which products qualify.';
+    if (!Number.isInteger(Number(mix.min_units)) || Number(mix.min_units) < 1) return 'Mix & Match: the vial minimum must be a whole number of 1 or more.';
+    if (!(Number(mix.discount_pct) > 0 && Number(mix.discount_pct) < 1)) return 'Mix & Match: the discount must be between 1% and 99%.';
+    if (names(mix.product_names).some(isBacWater)) return 'Mix & Match: BAC Water cannot be an offer product.';
   }
-  if (clean.bundle.enabled) {
-    if (clean.bundle.product_names.length === 0) return 'Buy & Get Free: pick at least one product.';
-    if (clean.bundle.free_qty > clean.bundle.buy_qty) return 'Buy & Get Free: the free vials cannot outnumber the vials bought.';
-    if (clean.bundle.product_names.some(isBacWater)) return 'Buy & Get Free: BAC Water cannot be an offer product.';
+  if (bundle.enabled === true) {
+    if (names(bundle.product_names).length === 0) return 'Buy & Get Free: choose which products qualify.';
+    if (!Number.isInteger(Number(bundle.buy_qty)) || Number(bundle.buy_qty) < 1) return 'Buy & Get Free: the buy quantity must be a whole number of 1 or more.';
+    if (!Number.isInteger(Number(bundle.free_qty)) || Number(bundle.free_qty) < 1) return 'Buy & Get Free: the free quantity must be a whole number of 1 or more.';
+    if (Number(bundle.free_qty) > Number(bundle.buy_qty)) return 'Buy & Get Free: the free vials cannot outnumber the vials bought.';
+    if (names(bundle.product_names).some(isBacWater)) return 'Buy & Get Free: BAC Water cannot be an offer product.';
   }
   return '';
 }
@@ -247,4 +251,52 @@ export function dealOfferSummaries(offers, lang = 'en') {
       : `Compra ${buy} del mismo vial y llévate ${free} gratis`);
   }
   return out;
+}
+
+/**
+ * The complete customer-facing rules for the configured offers.
+ *
+ * Kept beside the pricing engine so the storefront page and the admin review
+ * cannot drift into describing different rules. Every number comes from the
+ * saved deal; changing a threshold in admin changes this copy automatically.
+ */
+export function dealOfferRuleSummaries(offers, lang = 'en') {
+  const clean = normalizeDealOffers(offers);
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  const rules = [];
+
+  if (clean.mix.enabled) {
+    const pct = Math.round(clean.mix.discount_pct * 100);
+    rules.push(isEn
+      ? `Mix & Match: buy ${clean.mix.min_units} or more qualifying peptide vials in any combination and get ${pct}% off your entire order.`
+      : `Combina: compra ${clean.mix.min_units} o más viales de péptidos participantes en cualquier combinación y obtén ${pct}% de descuento en todo tu pedido.`);
+  }
+  if (clean.bundle.enabled) {
+    const { buy_qty: buy, free_qty: free } = clean.bundle;
+    rules.push(isEn
+      ? `Buy & Get Free: every ${buy} paid vials of the exact same product and size add ${free} more of that same item free (${buy * 2} → ${free * 2} free, ${buy * 3} → ${free * 3} free).`
+      : `Compra y recibe gratis: cada ${buy} viales pagados del mismo producto y tamaño agregan ${free} más del mismo artículo gratis (${buy * 2} → ${free * 2} gratis, ${buy * 3} → ${free * 3} gratis).`);
+  }
+
+  rules.push(isEn
+    ? 'If more than one deal or the normal volume discount qualifies, checkout automatically applies only the option that saves the customer the most. Promo codes and promotions never stack.'
+    : 'Si califica más de una oferta o el descuento normal por volumen, el pago aplica automáticamente solo la opción que más ahorra al cliente. Los códigos y promociones nunca se acumulan.');
+  if (clean.mix.enabled && clean.bundle.enabled) {
+    rules.push(isEn
+      ? 'BAC Water does not count toward the Mix & Match minimum and cannot earn a free vial. Once Mix & Match is unlocked, its whole-order discount still includes BAC Water.'
+      : 'El agua bacteriostática no cuenta para el mínimo de Combina y no puede generar un vial gratis. Cuando se activa Combina, su descuento para todo el pedido sí incluye el agua bacteriostática.');
+  } else if (clean.mix.enabled) {
+    rules.push(isEn
+      ? 'BAC Water does not count toward the Mix & Match minimum. Once the offer is unlocked, its whole-order discount still includes BAC Water.'
+      : 'El agua bacteriostática no cuenta para el mínimo de Combina. Cuando se activa la oferta, su descuento para todo el pedido sí incluye el agua bacteriostática.');
+  } else {
+    rules.push(isEn
+      ? 'BAC Water does not qualify and cannot earn a free vial.'
+      : 'El agua bacteriostática no califica y no puede generar un vial gratis.');
+  }
+  rules.push(isEn
+    ? 'The winning offer is applied automatically at checkout. No code is needed.'
+    : 'La oferta ganadora se aplica automáticamente al pagar. No se necesita código.');
+
+  return rules;
 }
