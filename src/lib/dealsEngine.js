@@ -30,7 +30,9 @@ import {
   hasUntrackedStock,
   isUnavailableForDeal,
   dealPricingMode,
+  scheduledWindow,
 } from '@/lib/dealOfWeek.mjs';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 import { dealPromoConflictMessage, findBulkPromoConflictForDeal } from '@/lib/promoStackingSafety.mjs';
 
 const BANNERS_SETTING_ID = 'announcement_banners';
@@ -284,6 +286,7 @@ export async function launchDeal({
   pricingMode = 'shelf',
   minUnits = 0,
   maxUnits = 0,
+  scheduledDeal = null,
   now = new Date(),
 }) {
   const supabase = getSupabaseAdmin();
@@ -319,7 +322,14 @@ export async function launchDeal({
   if (untracked.length > 0 && !allowUntrackedStock) {
     throw new Error(`Confirm untracked stock before launch: ${untracked.map((p) => p.product).join(', ')}`);
   }
-  const window = weekWindow(now);
+  // A scheduled deal keeps the end it was given when it was scheduled; it starts
+  // now because now is when the cron got to it.
+  if (scheduledDeal && Date.parse(scheduledDeal.ends_at) <= now.getTime()) {
+    throw new Error('Its end time has already passed, so it was never started.');
+  }
+  const window = scheduledDeal
+    ? { startsAt: now.toISOString(), endsAt: scheduledDeal.ends_at, rolledForward: false }
+    : weekWindow(now);
   const { rate } = await getDatabaseBackedUsdToCrcRate();
 
   // Snapshot before touching anything. If the markdown loop fails partway, this
@@ -333,7 +343,7 @@ export async function launchDeal({
     }
   }
 
-  const dealId = randomUUID();
+  const dealId = scheduledDeal?.id || randomUUID();
   const draftDeal = {
     id: dealId,
     title_en: String(titleEn || '').trim() || null,
@@ -369,7 +379,11 @@ export async function launchDeal({
   const { data: deal, error: insertError, droppedColumns } = await writeDroppingMissingColumns(
     insertPayload,
     ['applied', 'announcement_drafts', 'announcement_status'],
-    (row) => supabase.from('deals').insert([row]).select('*').single(),
+    (row) => (scheduledDeal
+      // Only a row still waiting to start may be switched on, so two cron runs
+      // racing over the same scheduled deal cannot both launch it.
+      ? supabase.from('deals').update(row).eq('id', dealId).eq('status', 'draft').select('*').single()
+      : supabase.from('deals').insert([row]).select('*').single()),
   );
 
   if (insertError) {
@@ -410,9 +424,13 @@ export async function launchDeal({
   } catch (err) {
     await removeDealBanner(supabase, { ...deal, id: dealId });
     await restoreProducts(supabase, baseline, applied, { safe: false });
+    // A scheduled deal goes back to waiting, so the next cron run retries it and
+    // the admin screen shows it as not started instead of it vanishing.
     await supabase
       .from('deals')
-      .update({ status: 'ended', ended_at: new Date().toISOString() })
+      .update(scheduledDeal
+        ? { status: 'draft', starts_at: scheduledDeal.starts_at, baseline: {}, applied: {} }
+        : { status: 'ended', ended_at: new Date().toISOString() })
       .eq('id', deal.id);
     throw new Error(`Deal launch failed and was rolled back — ${err.message}`);
   }
@@ -523,11 +541,225 @@ export async function expireDueDeals(now = new Date()) {
 }
 
 /**
+ * The deal waiting for its start time, or null.
+ *
+ * Stored with status 'draft' — the schema's "created but prices untouched"
+ * state — so scheduling needed no migration. Every storefront, checkout and bot
+ * query reads status = 'live' only, so a scheduled deal is invisible to
+ * customers until the cron switches it on.
+ */
+export async function getScheduledDeal(supabase) {
+  const { data, error } = await supabase
+    .from('deals')
+    .select('*')
+    .eq('status', 'draft')
+    .order('starts_at', { ascending: true })
+    .limit(1);
+
+  if (error) throw new Error(`Could not read the scheduled deal: ${error.message}`);
+  return data?.[0] || null;
+}
+
+/**
+ * Save a deal to start later. Runs every launch check now, so a mistake shows
+ * up while the admin is still at the screen, and launchDeal runs them all again
+ * at the start time because stock and promos can change in between.
+ */
+export async function scheduleDeal({
+  productNames,
+  discountPct,
+  titleEn,
+  titleEs,
+  createdBy,
+  confirmedHighDiscount = false,
+  allowUntrackedStock = false,
+  pricingMode = 'shelf',
+  minUnits = 0,
+  maxUnits = 0,
+  startsAt,
+  now = new Date(),
+}) {
+  const supabase = getSupabaseAdmin();
+
+  const pct = Number(discountPct);
+  const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';
+  const minimum = mode === 'bulk_threshold' ? Math.max(1, Math.floor(Number(minUnits || 0))) : 0;
+  const maximum = Math.max(0, Math.floor(Number(maxUnits || 0)));
+  if (maximum && maximum < minimum) throw new Error('Maximum units cannot be lower than minimum units.');
+  const safety = dealSafety(pct, { confirmedHighDiscount });
+  if (!safety.ok) throw new Error(safety.error);
+
+  const existing = await getScheduledDeal(supabase);
+  if (existing) {
+    throw new Error(`A deal is already scheduled to start ${formatCrInstant(existing.starts_at)}. Cancel it before scheduling another.`);
+  }
+
+  const live = await getLiveDeal(supabase);
+  const { window, error: windowError } = scheduledWindow(startsAt, { now, liveEndsAt: live?.ends_at });
+  if (windowError) throw new Error(windowError);
+
+  const products = await resolveProducts(supabase, productNames);
+  const unavailable = products.filter(isUnavailableForDeal);
+  if (unavailable.length > 0) {
+    throw new Error(`These products cannot be promoted because they are not available: ${unavailable.map((p) => p.product).join(', ')}`);
+  }
+  const untracked = products.filter(hasUntrackedStock);
+  if (untracked.length > 0 && !allowUntrackedStock) {
+    throw new Error(`Confirm untracked stock before scheduling: ${untracked.map((p) => p.product).join(', ')}`);
+  }
+  const promoConflict = await findBulkPromoConflictForDeal(
+    supabase,
+    products.map((product) => product.product),
+    new Date(window.startsAt),
+  );
+  if (promoConflict) throw new Error(`${dealPromoConflictMessage(promoConflict)} (checked at the scheduled start time)`);
+
+  const { data: deal, error } = await supabase
+    .from('deals')
+    .insert([{
+      id: randomUUID(),
+      title_en: String(titleEn || '').trim() || null,
+      title_es: String(titleEs || '').trim() || null,
+      product_names: products.map((p) => p.product),
+      discount_pct: pct,
+      starts_at: window.startsAt,
+      ends_at: window.endsAt,
+      status: 'draft',
+      pricing_mode: mode,
+      min_units: minimum,
+      max_units: maximum || null,
+      baseline: {},
+      created_by: createdBy || null,
+    }])
+    .select('*')
+    .single();
+
+  if (error) throw new Error(`Could not schedule the deal: ${error.message}`);
+  return { deal, window };
+}
+
+/**
+ * Cancel the scheduled deal. Nothing was changed on the storefront, so there
+ * is nothing to restore; the row is closed rather than deleted so the history
+ * keeps it (its ended_at falls before its starts_at, which is how the screen
+ * tells a cancelled schedule from a deal that ran).
+ */
+export async function cancelScheduledDeal(supabase) {
+  const scheduled = await getScheduledDeal(supabase);
+  if (!scheduled) throw new Error('No deal is scheduled.');
+
+  const { error } = await supabase
+    .from('deals')
+    .update({ status: 'ended', ended_at: new Date().toISOString() })
+    .eq('id', scheduled.id)
+    .eq('status', 'draft');
+
+  if (error) throw new Error(`Could not cancel the scheduled deal: ${error.message}`);
+  return scheduled;
+}
+
+/**
+ * What would stop the scheduled deal from starting, checked against the
+ * storefront as it is right now. Shown on the admin screen before the start
+ * time, so an out-of-stock product or a clashing promo can be fixed while
+ * there is still time, instead of the deal silently not starting.
+ */
+export async function scheduledDealProblems(supabase, deal, now = new Date()) {
+  const problems = [];
+  const startAt = new Date(Math.max(now.getTime(), Date.parse(deal.starts_at)));
+
+  if (Date.parse(deal.ends_at) <= now.getTime()) {
+    problems.push('Its end time has already passed, so it will not start. Cancel it and schedule a new one.');
+    return problems;
+  }
+
+  let products;
+  try {
+    products = await resolveProducts(supabase, deal.product_names);
+  } catch (err) {
+    problems.push(err.message);
+    return problems;
+  }
+
+  const unavailable = products.filter(isUnavailableForDeal);
+  if (unavailable.length > 0) {
+    problems.push(`Not in stock: ${unavailable.map((p) => p.product).join(', ')}.`);
+  }
+
+  const promoConflict = await findBulkPromoConflictForDeal(
+    supabase,
+    products.map((product) => product.product),
+    startAt,
+  );
+  if (promoConflict) problems.push(dealPromoConflictMessage(promoConflict));
+
+  const live = await getLiveDeal(supabase);
+  if (live && Date.parse(live.ends_at) > Date.parse(deal.starts_at)) {
+    problems.push(`Another deal is live until ${formatCrInstant(live.ends_at)}. This one waits and starts after that deal ends.`);
+  }
+
+  return problems;
+}
+
+/**
+ * Cron entry point: start any scheduled deal whose start time has come.
+ * Runs right after expiry, so a deal scheduled for the moment the previous one
+ * ends goes live in the same run.
+ */
+export async function startDueScheduledDeals(now = new Date()) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('deals')
+    .select('*')
+    .eq('status', 'draft')
+    .lte('starts_at', now.toISOString())
+    .order('starts_at', { ascending: true });
+
+  if (error) throw new Error(`Could not look for scheduled deals: ${error.message}`);
+
+  const results = [];
+  for (const deal of data || []) {
+    try {
+      if (await getLiveDeal(supabase)) {
+        // Not a failure: the live deal is ended by expiry or by hand, and the
+        // next run starts this one.
+        results.push({ id: deal.id, ok: true, waiting: 'another deal is still live' });
+        continue;
+      }
+
+      await launchDeal({
+        productNames: deal.product_names,
+        discountPct: deal.discount_pct,
+        titleEn: deal.title_en,
+        titleEs: deal.title_es,
+        createdBy: deal.created_by,
+        // Both were approved on the scheduling screen; scheduleDeal refuses
+        // to save without them. Every other launch check runs again as normal.
+        confirmedHighDiscount: true,
+        allowUntrackedStock: true,
+        pricingMode: deal.pricing_mode,
+        minUnits: deal.min_units,
+        maxUnits: deal.max_units,
+        scheduledDeal: deal,
+        now,
+      });
+      results.push({ id: deal.id, ok: true, started: true });
+    } catch (err) {
+      console.error('[deals/start-scheduled]', deal.id, err.message);
+      results.push({ id: deal.id, ok: false, error: err.message });
+    }
+  }
+
+  return results;
+}
+
+/**
  * A draft for the admin screen: what a deal WOULD do, without writing anything.
  * Lets the panel show the resolved Sunday and the real before/after prices
  * before the admin commits.
  */
-export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, pricingMode = 'shelf', minUnits = 0, maxUnits = 0, now = new Date() }) {
+export async function previewDeal({ productNames, discountPct, titleEn, titleEs, confirmedHighDiscount = false, pricingMode = 'shelf', minUnits = 0, maxUnits = 0, startsAt = null, now = new Date() }) {
   const supabase = getSupabaseAdmin();
 
   const pct = Number(discountPct);
@@ -539,7 +771,11 @@ export async function previewDeal({ productNames, discountPct, titleEn, titleEs,
   if (!safety.ok && !safety.needsConfirmation) throw new Error(safety.error);
 
   const products = await resolveProducts(supabase, productNames);
-  const window = weekWindow(now);
+  // A scheduled start ends at the Sunday after it, not the Sunday after today.
+  const scheduledStart = Date.parse(startsAt || '');
+  const window = Number.isFinite(scheduledStart) && scheduledStart > now.getTime()
+    ? weekWindow(new Date(scheduledStart))
+    : weekWindow(now);
   const { rate } = await getDatabaseBackedUsdToCrcRate();
 
   const draftDeal = {

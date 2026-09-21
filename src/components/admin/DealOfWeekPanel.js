@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X } from 'lucide-react';
+import { Zap, Loader, AlertTriangle, CheckCircle, Megaphone, RotateCcw, Clock, Search, X, CalendarClock } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
-import { formatCrInstant } from '@/lib/crTime.mjs';
+import { formatCrInstant, formatCrDate, crWallToIso, isoToCrWall } from '@/lib/crTime.mjs';
 import { toPercent, hasUntrackedStock, isUnavailableForDeal } from '@/lib/dealOfWeek.mjs';
 
 /**
@@ -50,8 +50,44 @@ function dealHealthProblems(live) {
   return problems.length > 0 ? problems : ['Something about this deal no longer matches the storefront.'];
 }
 
+const TIME_FIELDS = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+
+/**
+ * A deal time in Costa Rica AND on the reader's own clock. The business runs on
+ * Costa Rica time, but the team schedules from Pakistan (11 hours ahead), so a
+ * start typed as "Monday 00:00" has to show that it is Monday 11:00 for them.
+ */
+function DealTime({ iso }) {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return null;
+  let zone = '';
+  let viewer = '';
+  try {
+    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    viewer = new Intl.DateTimeFormat('en-US', TIME_FIELDS).format(new Date(iso));
+  } catch {}
+  return (
+    <span>
+      <strong>{formatCrDate(iso, TIME_FIELDS)}</strong> Costa Rica
+      {viewer && zone !== 'America/Costa_Rica' && (
+        <span style={{ color: '#94a3b8' }}> · {viewer} your time{zone ? ` (${zone})` : ''}</span>
+      )}
+    </span>
+  );
+}
+
+/** The first whole minute at or after an instant, as a CR datetime-local value. */
+function crWallAtOrAfter(iso) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  return isoToCrWall(new Date(Math.ceil(ms / 60000) * 60000).toISOString());
+}
+
 export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onProductsChanged }) {
   const [live, setLive] = useState(null);
+  const [scheduled, setScheduled] = useState(null);
+  const [startMode, setStartMode] = useState('now');
+  const [startWall, setStartWall] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -73,6 +109,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const [allowUntrackedStock, setAllowUntrackedStock] = useState(false);
   const [showLaunchReview, setShowLaunchReview] = useState(false);
 
+  const isScheduling = startMode === 'later';
+  const startsAtIso = isScheduling ? crWallToIso(startWall) : null;
   const discountPct = useMemo(() => Number(percent) / 100, [percent]);
   const percentIsValid = Number(percent) > 0 && Number(percent) < 100;
   const parsedMinUnits = Math.floor(Number(minUnits));
@@ -112,7 +150,14 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not load deals');
       setLive(data.live || null);
+      setScheduled(data.scheduled || null);
       setRecent(data.recent || []);
+      // With a deal live, the only option is to schedule the next one, and
+      // the natural start is the moment the live one ends.
+      if (data.live) {
+        setStartMode('later');
+        setStartWall((current) => current || crWallAtOrAfter(data.live.ends_at));
+      }
     } catch (err) {
       setPreviewError(err.message);
     } finally {
@@ -171,6 +216,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             pricing_mode: pricingMode,
             min_units: minUnits,
             max_units: maxUnits,
+            starts_at: startsAtIso,
           }),
         });
         const data = await res.json();
@@ -185,7 +231,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
     }, 350);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [selected, discountPct, pricingMode, minUnits, maxUnits, titleEn, titleEs, percentIsValid, confirmedHighDiscount, bulkUnitRangeError]);
+  }, [selected, discountPct, pricingMode, minUnits, maxUnits, titleEn, titleEs, percentIsValid, confirmedHighDiscount, bulkUnitRangeError, startsAtIso]);
 
   const toggleProduct = (name) => {
     setSelected((current) => (
@@ -207,7 +253,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       const res = await adminFetch('/api/admin/deals', {
         method: 'POST',
         body: JSON.stringify({
-          action: 'launch',
+          action: isScheduling ? 'schedule' : 'launch',
+          starts_at: startsAtIso,
           product_names: selected,
           discount_pct: discountPct,
           title_en: titleEn,
@@ -220,9 +267,12 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.ok) throw new Error(data.error || 'Launch failed');
+      if (!res.ok || !data.ok) throw new Error(data.error || (isScheduling ? 'Scheduling failed' : 'Launch failed'));
 
-      setLaunched(data);
+      // A scheduled deal has not touched the storefront, so there is no
+      // announcement to hand over yet.
+      if (!isScheduling) setLaunched(data);
+      setStartWall('');
       setSelected([]);
       setTitleEn('');
       setTitleEs('');
@@ -237,9 +287,27 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         console.warn('[weekly-deal] Product refresh after launch failed:', refreshError);
       }
     } catch (err) {
-      alert('Could not launch the deal: ' + err.message);
+      alert(`Could not ${isScheduling ? 'schedule' : 'launch'} the deal: ${err.message}`);
     } finally {
       setIsLaunching(false);
+    }
+  };
+
+  const handleCancelSchedule = async () => {
+    if (!window.confirm('Cancel the scheduled deal? It will not start. Nothing on the site changes.')) return;
+    try {
+      setIsCancelling(true);
+      const res = await adminFetch('/api/admin/deals', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'cancel_schedule' }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Could not cancel the scheduled deal');
+      await load();
+    } catch (err) {
+      alert('Could not cancel the scheduled deal: ' + err.message);
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -320,7 +388,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 {(live.product_names || []).join(', ')}
               </div>
               <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Clock size={13} /> Ends {formatCrInstant(live.ends_at)}
+                <Clock size={13} /> Ends <DealTime iso={live.ends_at} />
               </div>
               <div style={{ color: '#fbbf24', fontSize: '0.78rem', marginTop: '6px' }}>
                 {liveIsBulk
@@ -430,10 +498,120 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         </div>
       )}
 
+      {/* ---------- The scheduled deal ---------- */}
+      {!loading && scheduled && (
+        <div style={{ ...card, borderColor: 'rgba(96,165,250,0.45)', background: 'rgba(96,165,250,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd', fontWeight: 800, fontSize: '0.9rem' }}>
+                <CalendarClock size={15} /> SCHEDULED — {toPercent(scheduled.discount_pct)}% OFF
+              </div>
+              <div style={{ color: '#f8fafc', fontSize: '0.95rem', fontWeight: 700, marginTop: '6px' }}>
+                {(scheduled.product_names || []).join(', ')}
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '6px' }}>
+                Starts <DealTime iso={scheduled.starts_at} />
+              </div>
+              <div style={{ color: '#cbd5e1', fontSize: '0.82rem', marginTop: '4px' }}>
+                Ends <DealTime iso={scheduled.ends_at} />
+              </div>
+              <div style={{ color: '#93c5fd', fontSize: '0.78rem', marginTop: '6px' }}>
+                {scheduled.pricing_mode === 'bulk_threshold'
+                  ? `Automatic mix-and-match · ${scheduled.min_units}+ selected units${scheduled.max_units ? ` · maximum ${scheduled.max_units}` : ''}`
+                  : 'Automatic instant product sale'} · no code · no stacking
+              </div>
+            </div>
+            <button
+              className="admin-btn"
+              onClick={handleCancelSchedule}
+              disabled={isCancelling}
+              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              {isCancelling ? <Loader size={14} className="spin" /> : <X size={14} />}
+              Cancel schedule
+            </button>
+          </div>
+          <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#94a3b8' }}>
+            It starts on its own within 5 minutes of the start time: banner, discount and prices, the same as pressing Launch.
+            The A/B test on the Deal of the Week page carries on by itself. The announcement is not sent automatically —
+            come back after it starts to review and send it.
+          </div>
+          {(scheduled.problems || []).length > 0 ? (
+            <div className="weekly-deal-inline-alert is-danger">
+              <AlertTriangle size={16} />
+              <span>
+                {scheduled.problems.map((problem) => <span key={problem} style={{ display: 'block' }}>{problem}</span>)}
+              </span>
+            </div>
+          ) : (
+            <div className="weekly-deal-inline-alert">
+              <CheckCircle size={16} /> Ready to start — no problems found right now.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ---------- Set up the next deal ---------- */}
-      {!loading && !live && (
+      {!loading && !scheduled && (
         <div style={card}>
-          <h4 style={{ margin: '0 0 14px', color: '#f8fafc', fontSize: '0.95rem' }}>Set up this week&apos;s deal</h4>
+          <h4 style={{ margin: '0 0 14px', color: '#f8fafc', fontSize: '0.95rem' }}>
+            {live ? 'Schedule the next deal' : 'Set up this week’s deal'}
+          </h4>
+
+          <div style={{ marginBottom: '14px' }}>
+            <label style={labelStyle}>Start</label>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+              <button
+                type="button"
+                className={`admin-btn${startMode === 'now' ? ' primary' : ''}`}
+                onClick={() => setStartMode('now')}
+                disabled={Boolean(live)}
+                title={live ? 'A deal is live. End it first, or schedule this one.' : undefined}
+              >
+                Right now
+              </button>
+              <button
+                type="button"
+                className={`admin-btn${startMode === 'later' ? ' primary' : ''}`}
+                onClick={() => {
+                  setStartMode('later');
+                  if (!startWall && live) setStartWall(crWallAtOrAfter(live.ends_at));
+                }}
+              >
+                At a date and time
+              </button>
+            </div>
+            {isScheduling && (
+              <div style={{ display: 'grid', gap: '6px', maxWidth: '420px' }}>
+                <input
+                  className="admin-input"
+                  type="datetime-local"
+                  value={startWall}
+                  onChange={(e) => setStartWall(e.target.value)}
+                  aria-label="Start date and time, Costa Rica time"
+                  style={{ width: '100%' }}
+                />
+                <div style={{ fontSize: '0.75rem', color: '#fbbf24' }}>
+                  Type the start in <strong>Costa Rica time</strong>, not your own.
+                </div>
+                {startsAtIso && (
+                  <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                    Starts <DealTime iso={startsAtIso} />
+                  </div>
+                )}
+                {live && (
+                  <button
+                    type="button"
+                    className="admin-btn"
+                    style={{ justifySelf: 'start', padding: '3px 9px', fontSize: '0.72rem' }}
+                    onClick={() => setStartWall(crWallAtOrAfter(live.ends_at))}
+                  >
+                    Start when the current deal ends
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', marginBottom: '14px' }}>
             <div>
@@ -484,9 +662,14 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
               <div className="admin-input" style={{ width: '100%', color: preview ? '#f8fafc' : '#64748b' }}>
                 {preview ? formatCrInstant(preview.window.endsAt) : 'Pick a product…'}
               </div>
+              {preview && (
+                <div style={{ fontSize: '0.75rem', color: '#cbd5e1', marginTop: '4px' }}>
+                  <DealTime iso={preview.window.endsAt} />
+                </div>
+              )}
               {preview?.window?.rolledForward && (
                 <div style={{ fontSize: '0.75rem', color: '#fbbf24', marginTop: '4px' }}>
-                  This Sunday is less than a day away, so the deal runs to the following Sunday.
+                  That Sunday is less than a day after the start, so the deal runs to the following Sunday.
                 </div>
               )}
             </div>
@@ -683,14 +866,16 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <button
             className="admin-btn primary"
             onClick={handleLaunch}
-            disabled={!preview || Boolean(bulkUnitRangeError) || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount)}
+            disabled={!preview || Boolean(bulkUnitRangeError) || isLaunching || isPreviewing || outOfStockSelected.length > 0 || (untrackedStockSelected.length > 0 && !allowUntrackedStock) || Boolean(preview?.safety?.needsConfirmation && !confirmedHighDiscount) || (isScheduling && !startsAtIso) || (!isScheduling && Boolean(live))}
             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
           >
-            {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
-            Launch deal
+            {isLaunching ? <Loader size={15} className="spin" /> : (isScheduling ? <CalendarClock size={15} /> : <Zap size={15} />)}
+            {isScheduling ? 'Schedule deal' : 'Launch deal'}
           </button>
           <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '8px' }}>
-            {pricingMode === 'bulk_threshold'
+            {isScheduling
+              ? 'Nothing changes on the site until the start time. The deal then starts on its own within 5 minutes.'
+              : pricingMode === 'bulk_threshold'
               ? 'Launching activates the automatic cart discount and site banner right away.'
               : 'Launching changes the selected live prices and activates the site banner right away.'}
             {' '}The email and WhatsApp announcement is drafted for you to review and send afterwards.
@@ -703,12 +888,17 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
         <div style={card}>
           <h4 style={{ margin: '0 0 12px', color: '#f8fafc', fontSize: '0.95rem' }}>Past deals</h4>
           <div style={{ display: 'grid', gap: '8px' }}>
-            {recent.filter((deal) => deal.status !== 'live').map((deal) => (
+            {recent.filter((deal) => deal.status === 'ended').map((deal) => (
               <div key={deal.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '0.82rem' }}>
                 <span style={{ color: '#e2e8f0' }}>
                   <strong>{toPercent(deal.discount_pct)}%</strong> — {(deal.product_names || []).join(', ')}
                 </span>
-                <span style={{ color: '#64748b' }}>ended {formatCrInstant(deal.ended_at || deal.ends_at)}</span>
+                <span style={{ color: '#64748b' }}>
+                  {/* A schedule cancelled before its start is closed with ended_at before starts_at. */}
+                  {deal.ended_at && Date.parse(deal.ended_at) < Date.parse(deal.starts_at)
+                    ? `schedule cancelled ${formatCrInstant(deal.ended_at)}`
+                    : `ended ${formatCrInstant(deal.ended_at || deal.ends_at)}`}
+                </span>
               </div>
             ))}
           </div>
@@ -727,7 +917,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             <div className="weekly-deal-modal-heading">
               <div>
                 <span>Final review</span>
-                <h4 id="weekly-deal-review-title">Launch {preview.safety?.pct}% weekly deal?</h4>
+                <h4 id="weekly-deal-review-title">{isScheduling ? 'Schedule' : 'Launch'} {preview.safety?.pct}% weekly deal?</h4>
               </div>
               <button type="button" onClick={() => setShowLaunchReview(false)} aria-label="Close launch review">
                 <X size={18} />
@@ -736,6 +926,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
 
             <div className="weekly-deal-review-summary">
               <div><span>Products</span><strong>{preview.products.length}</strong></div>
+              {isScheduling && <div><span>Starts</span><strong>{formatCrInstant(startsAtIso)}</strong></div>}
               <div><span>Ends</span><strong>{formatCrInstant(preview.window.endsAt)}</strong></div>
               <div><span>Final customer saving</span><strong>{preview.safety?.pct}%</strong></div>
             </div>
@@ -751,14 +942,20 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
             </div>
 
             <div className="weekly-deal-inline-alert is-warning">
-              <AlertTriangle size={16} /> Launch activates the deal on the live catalog immediately. The announcement is created as a separate review step and is not sent automatically.
+              <AlertTriangle size={16} />
+              <span>
+                {isScheduling
+                  ? <>The deal goes live on its own at <DealTime iso={startsAtIso} />.</>
+                  : 'Launch activates the deal on the live catalog immediately.'}
+                {' '}The announcement is created as a separate review step and is not sent automatically.
+              </span>
             </div>
 
             <div className="weekly-deal-modal-actions">
               <button type="button" className="admin-btn" onClick={() => setShowLaunchReview(false)}>Go back</button>
               <button type="button" className="admin-btn primary" onClick={confirmLaunch} disabled={isLaunching}>
-                {isLaunching ? <Loader size={15} className="spin" /> : <Zap size={15} />}
-                Confirm &amp; launch
+                {isLaunching ? <Loader size={15} className="spin" /> : (isScheduling ? <CalendarClock size={15} /> : <Zap size={15} />)}
+                {isScheduling ? 'Confirm & schedule' : <>Confirm &amp; launch</>}
               </button>
             </div>
           </section>

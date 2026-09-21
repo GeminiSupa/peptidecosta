@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { getLiveDeal, listDeals, getDealOperations, previewDeal, launchDeal, endDeal } from '@/lib/dealsEngine';
+import {
+  getLiveDeal,
+  listDeals,
+  getDealOperations,
+  previewDeal,
+  launchDeal,
+  endDeal,
+  getScheduledDeal,
+  scheduleDeal,
+  cancelScheduledDeal,
+  scheduledDealProblems,
+} from '@/lib/dealsEngine';
 
 export const runtime = 'nodejs';
 
@@ -12,10 +23,18 @@ export async function GET(request) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const [live, recent] = await Promise.all([getLiveDeal(supabase), listDeals(supabase)]);
-    const operations = live ? await getDealOperations(supabase, live) : null;
+    const [live, recent, scheduled] = await Promise.all([
+      getLiveDeal(supabase),
+      listDeals(supabase),
+      getScheduledDeal(supabase),
+    ]);
+    const [operations, problems] = await Promise.all([
+      live ? getDealOperations(supabase, live) : null,
+      scheduled ? scheduledDealProblems(supabase, scheduled) : null,
+    ]);
     return NextResponse.json({
       live: live && operations ? { ...live, ...operations } : live,
+      scheduled: scheduled ? { ...scheduled, problems } : null,
       recent,
     });
   } catch (err) {
@@ -25,9 +44,11 @@ export async function GET(request) {
 }
 
 /**
- * preview → what the deal would do, writing nothing
- * launch  → mark the prices down and raise the banner (does NOT send announcements)
- * end     → restore the prices and take the banner down
+ * preview         → what the deal would do, writing nothing
+ * launch          → mark the prices down and raise the banner (does NOT send announcements)
+ * schedule        → save a deal that the expire-deals cron launches at its start time
+ * cancel_schedule → drop the scheduled deal (nothing on the storefront changes)
+ * end             → restore the prices and take the banner down
  */
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
@@ -47,7 +68,30 @@ export async function POST(request) {
         pricingMode: body.pricing_mode,
         minUnits: body.min_units,
         maxUnits: body.max_units,
+        startsAt: body.starts_at || null,
       }));
+    }
+
+    if (action === 'schedule') {
+      const result = await scheduleDeal({
+        productNames: body.product_names,
+        discountPct: body.discount_pct,
+        titleEn: body.title_en,
+        titleEs: body.title_es,
+        createdBy: auth.user?.id || null,
+        confirmedHighDiscount: body.confirm_high_discount === true,
+        allowUntrackedStock: body.allow_untracked_stock === true,
+        pricingMode: body.pricing_mode,
+        minUnits: body.min_units,
+        maxUnits: body.max_units,
+        startsAt: body.starts_at,
+      });
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (action === 'cancel_schedule') {
+      const cancelled = await cancelScheduledDeal(getSupabaseAdmin());
+      return NextResponse.json({ ok: true, cancelled: cancelled.id });
     }
 
     if (action === 'launch') {

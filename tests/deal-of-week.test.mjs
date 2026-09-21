@@ -20,6 +20,7 @@ import {
   DEAL_DISCOUNT_LABEL,
   hasUntrackedStock,
   isUnavailableForDeal,
+  scheduledWindow,
 } from '../src/lib/dealOfWeek.mjs';
 
 // Costa Rica is UTC-6, so 23:59:59.999 CR is 05:59:59.999 UTC the NEXT day.
@@ -328,4 +329,42 @@ test('a counted product with units left is available and reads as tracked', () =
   const tracked = { status: 'In Stock', inventory_count: 12 };
   assert.equal(isUnavailableForDeal(tracked), false);
   assert.equal(hasUntrackedStock(tracked), false);
+});
+
+// The live deal of 15-21 Sep 2026 ended Sunday 20 Sep 23:59:59.999 CR.
+const LIVE_ENDS = '2026-09-21T05:59:59.999Z';
+
+test('a deal scheduled for the moment the live one ends runs to the next Sunday', () => {
+  // Monday 21 Sep 00:00 CR = 06:00 UTC = 11:00 in Pakistan.
+  const { window, error } = scheduledWindow('2026-09-21T06:00:00.000Z', {
+    now: new Date('2026-09-21T05:30:00Z'),
+    liveEndsAt: LIVE_ENDS,
+  });
+  assert.equal(error, undefined);
+  assert.equal(window.startsAt, '2026-09-21T06:00:00.000Z');
+  assert.equal(window.endsAt, '2026-09-28T05:59:59.999Z');
+  assert.equal(window.rolledForward, false);
+});
+
+test('a scheduled start that overlaps the live deal is refused', () => {
+  const { window, error } = scheduledWindow('2026-09-21T05:00:00.000Z', {
+    now: new Date('2026-09-21T04:00:00Z'),
+    liveEndsAt: LIVE_ENDS,
+  });
+  assert.equal(window, undefined);
+  assert.match(error, /current deal runs until/);
+});
+
+test('a scheduled start in the past, or missing, is refused', () => {
+  const now = new Date('2026-09-21T06:00:00Z');
+  assert.match(scheduledWindow('2026-09-21T05:59:00.000Z', { now }).error, /already passed/);
+  assert.match(scheduledWindow('', { now }).error, /Pick a start/);
+  assert.match(scheduledWindow(null, { now }).error, /Pick a start/);
+});
+
+test('a Sunday-evening scheduled start rolls to the following Sunday', () => {
+  // Sunday 27 Sep 20:00 CR = Monday 28 Sep 02:00 UTC; the close of that Sunday is 4h away.
+  const { window } = scheduledWindow('2026-09-28T02:00:00.000Z', { now: new Date('2026-09-21T06:00:00Z') });
+  assert.equal(window.endsAt, '2026-10-05T05:59:59.999Z');
+  assert.equal(window.rolledForward, true);
 });

@@ -11,11 +11,13 @@
  * in this file reads the clock or the network on its own.
  */
 
-import { crWallToIso, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
+import { crWallToIso, formatCrInstant, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
+/** A scheduled start must be at least this far ahead, so it is not already due on save. */
+const SCHEDULE_MIN_LEAD_MS = 60 * 1000;
 
 /** Free-text label written into products.discount while a deal is live. */
 export const DEAL_DISCOUNT_LABEL = 'Deal of the Week';
@@ -87,6 +89,29 @@ export function weekWindow(now = new Date(), { minHours = 24 } = {}) {
     endsAtDate: wallDateString(sunday),
     rolledForward,
   };
+}
+
+/**
+ * The window for a deal scheduled to start later: it begins at `startsAt` and
+ * ends at the Sunday that follows it, by the same rule as weekWindow.
+ *
+ * A start that overlaps the live deal is refused rather than silently cutting
+ * the live deal short — only one deal can run, and ending one early is a
+ * decision for the End button, not a side effect of scheduling.
+ *
+ * @returns {{ window?: ReturnType<typeof weekWindow>, error?: string }}
+ */
+export function scheduledWindow(startsAt, { now = new Date(), liveEndsAt = null } = {}) {
+  const start = Date.parse(startsAt || '');
+  if (!Number.isFinite(start)) return { error: 'Pick a start date and time.' };
+  const instant = now instanceof Date ? now.getTime() : Date.parse(now);
+  if (start <= instant + SCHEDULE_MIN_LEAD_MS) {
+    return { error: 'That start time has already passed. Pick a later time, or launch the deal now.' };
+  }
+  if (liveEndsAt && start < Date.parse(liveEndsAt)) {
+    return { error: `The current deal runs until ${formatCrInstant(liveEndsAt)}. Pick a start at or after that time.` };
+  }
+  return { window: weekWindow(new Date(start)) };
 }
 
 /** Strip currency symbols and separators from a stored price string. */
