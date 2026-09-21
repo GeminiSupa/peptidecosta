@@ -1,12 +1,23 @@
 "use client";
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
+import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
 import styles from './BulkWholesaleSpotlight.module.css';
 
 export default function BulkWholesaleSpotlight({ lang = 'es', compact = false }) {
   const campaign = useBulkWholesaleCampaign();
-  if (!campaign.active) return null;
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!campaign.validUntil) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [campaign.validUntil]);
+
+  const countdown = dealCountdownParts(campaign.validUntil, now);
+  if (!campaign.active || countdown?.expired) return null;
 
   const en = lang === 'en';
   const href = `/deal-of-the-week?lang=${en ? 'en' : 'es'}`;
@@ -23,9 +34,29 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
   if (compact) {
     return (
       <Link className={styles.strip} href={href}>
-        <span aria-hidden="true">⚡</span>
-        <strong>{compactHeadline}</strong>
-        <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>
+        <span className={styles.stripIcon} aria-hidden="true">⚡</span>
+        <span className={styles.stripCopy}>
+          <strong>{compactHeadline}</strong>
+          <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>
+        </span>
+        {countdown && (
+          <span
+            className={styles.countdown}
+            role="timer"
+            aria-live="off"
+            aria-label={en
+              ? `${countdown.days} days, ${countdown.hours} hours, ${countdown.minutes} minutes and ${countdown.seconds} seconds remaining`
+              : `Quedan ${countdown.days} días, ${countdown.hours} horas, ${countdown.minutes} minutos y ${countdown.seconds} segundos`}
+          >
+            <small>{en ? 'Ends in' : 'Termina en'}</small>
+            <span className={styles.countdownUnits} aria-hidden="true">
+              <span><b>{countdown.days}</b><em>d</em></span>
+              <span><b>{String(countdown.hours).padStart(2, '0')}</b><em>h</em></span>
+              <span><b>{String(countdown.minutes).padStart(2, '0')}</b><em>m</em></span>
+              <span><b>{String(countdown.seconds).padStart(2, '0')}</b><em>s</em></span>
+            </span>
+          </span>
+        )}
       </Link>
     );
   }

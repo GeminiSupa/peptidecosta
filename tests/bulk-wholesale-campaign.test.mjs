@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bulkWholesaleDealState, bulkWholesaleCatalogHref } from '../src/lib/bulkWholesaleCampaign.mjs';
+import { bulkWholesaleDealState, bulkWholesaleCatalogHref, dealCountdownParts } from '../src/lib/bulkWholesaleCampaign.mjs';
 import { automaticDealPromo, dealEligibleUnits } from '../src/lib/dealOfWeek.mjs';
 
 const deal = { status:'live', pricing_mode:'bulk_threshold', discount_pct:.4, min_units:20, max_units:50, product_names:['A','B'], starts_at:'2026-09-01', ends_at:'2026-09-30', title_en:'Bulk week' };
@@ -43,6 +43,15 @@ test('an expired two-offer deal does not leave a stale catalog badge behind', ()
     starts_at: '2026-09-01', ends_at: '2026-09-10',
   }, new Date('2026-09-15'));
   assert.equal(state.active, false);
+});
+
+test('the catalog countdown follows the real deal end time', () => {
+  assert.deepEqual(
+    dealCountdownParts('2026-09-23T12:34:56.000Z', new Date('2026-09-21T10:30:50.000Z')),
+    { expired: false, days: 2, hours: 2, minutes: 4, seconds: 6 },
+  );
+  assert.equal(dealCountdownParts('2026-09-20T12:00:00.000Z', new Date('2026-09-21T12:00:00.000Z')).expired, true);
+  assert.equal(dealCountdownParts(null), null);
 });
 
 test('the build-my-order link narrows the catalog to deal products, product links do not', () => {

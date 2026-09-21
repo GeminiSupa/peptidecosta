@@ -1,6 +1,24 @@
 import { dealPricingMode } from './dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE, dealOfferProductNames, dealOfferSummaries } from './dealOffers.mjs';
 
+/** Remaining whole countdown units for a deal end time. */
+export function dealCountdownParts(validUntil, now = new Date()) {
+  const end = Date.parse(validUntil || '');
+  const current = now instanceof Date
+    ? now.getTime()
+    : (typeof now === 'number' ? now : Date.parse(now || ''));
+  if (!Number.isFinite(end) || !Number.isFinite(current)) return null;
+
+  const totalSeconds = Math.max(0, Math.ceil((end - current) / 1000));
+  return {
+    expired: totalSeconds === 0,
+    days: Math.floor(totalSeconds / 86400),
+    hours: Math.floor((totalSeconds % 86400) / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
 export function bulkWholesaleDealState(deal, now = new Date()) {
   const instant = now instanceof Date ? now.getTime() : new Date(now).getTime();
   const pricingMode = dealPricingMode(deal);
