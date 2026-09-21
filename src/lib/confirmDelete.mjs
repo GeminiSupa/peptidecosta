@@ -14,7 +14,7 @@
  * `false` arrives here constantly when a field is absent. Stringifying it would
  * print a bullet reading "false" on almost every dialog.
  */
-export function buildDeleteMessage(subject, details = []) {
+export function buildDeleteMessage(subject, details = [], options = {}) {
   const lines = (Array.isArray(details) ? details : [details])
     .map((line) => (line == null || line === false || line === true ? '' : String(line).trim()))
     .filter(Boolean);
@@ -23,22 +23,27 @@ export function buildDeleteMessage(subject, details = []) {
     `Delete this ${subject}?`,
     ...(lines.length ? ['', ...lines.map((line) => `  • ${line}`)] : []),
     '',
-    'This cannot be undone.',
+    options.recoverable
+      ? 'It will move to the Bin. You can restore it from there.'
+      : 'This cannot be undone.',
   ].join('\n');
 }
 
 /** Same, for deleting several things at once. */
-export function buildBulkDeleteMessage(count, subject, subjectPlural) {
+export function buildBulkDeleteMessage(count, subject, subjectPlural, options = {}) {
   const noun = count === 1 ? subject : subjectPlural || `${subject}s`;
-  return `Delete ${count} ${noun}?\n\nThis cannot be undone.`;
+  const footer = options.recoverable
+    ? 'They will move to the Bin. You can restore them from there.'
+    : 'This cannot be undone.';
+  return `Delete ${count} ${noun}?\n\n${footer}`;
 }
 
-export function confirmDelete(subject, details) {
+export function confirmDelete(subject, details, options) {
   if (typeof window === 'undefined') return false;
-  return window.confirm(buildDeleteMessage(subject, details));
+  return window.confirm(buildDeleteMessage(subject, details, options));
 }
 
-export function confirmBulkDelete(count, subject, subjectPlural) {
+export function confirmBulkDelete(count, subject, subjectPlural, options) {
   if (typeof window === 'undefined') return false;
-  return window.confirm(buildBulkDeleteMessage(count, subject, subjectPlural));
+  return window.confirm(buildBulkDeleteMessage(count, subject, subjectPlural, options));
 }

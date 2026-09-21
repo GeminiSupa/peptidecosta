@@ -45,4 +45,8 @@ test('bulk deletes state the count and get the plural right', () => {
   assert.equal(buildBulkDeleteMessage(3, 'cart entry', 'cart entries'), 'Delete 3 cart entries?\n\nThis cannot be undone.');
   assert.equal(buildBulkDeleteMessage(1, 'cart entry', 'cart entries'), 'Delete 1 cart entry?\n\nThis cannot be undone.');
   assert.equal(buildBulkDeleteMessage(5, 'lead'), 'Delete 5 leads?\n\nThis cannot be undone.');
+  assert.equal(
+    buildBulkDeleteMessage(2, 'lead', 'leads', { recoverable: true }),
+    'Delete 2 leads?\n\nThey will move to the Bin. You can restore them from there.',
+  );
 });

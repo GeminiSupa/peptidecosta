@@ -127,7 +127,7 @@ export default function InquiriesManager({ adminEmail, products = [], onOpenCust
       inquiry?.name,
       inquiry?.email || inquiry?.phone,
       inquiry?.message && `"${String(inquiry.message).slice(0, 80)}"`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       await adminFetch(`/api/admin/inquiries/update?id=${inquiryId}`, { method: 'DELETE' });
       setInquiries(prev => prev.filter(i => i.id !== inquiryId));

@@ -138,6 +138,7 @@ const ProspectorManager = dynamicTab(() => import('@/components/admin/Prospector
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
 const LiveChatInbox = dynamicTab(() => import('@/components/admin/LiveChatInbox'), 'Loading live chat…');
+const BinManager = dynamicTab(() => import('@/components/admin/BinManager'), 'Loading bin…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -207,6 +208,10 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
       return 'Discover and qualify potential Costa Rica business partners';
     case 'live_chat':
       return 'Website chat inbox · reply without WhatsApp';
+    case 'inquiries':
+      return 'Contact form messages';
+    case 'bin':
+      return 'Deleted orders, leads, carts, and inquiries — restore or remove forever';
     case 'reviews':
       return pendingReviews
         ? `${pendingReviews} awaiting approval`
@@ -1746,6 +1751,10 @@ Core Rules:
       icon: <Inbox size={iconSize} />,
       badge: inquiryCount,
     },
+    bin: {
+      label: 'Bin',
+      icon: <Trash2 size={iconSize} />,
+    },
     live_chat: {
       label: 'Live Chat',
       icon: <MessageCircle size={iconSize} />,
@@ -1855,7 +1864,7 @@ Core Rules:
       : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
-    { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
+    { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'bin', 'prospects'] },
     { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
     { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'team_chat', 'payment_test'] },
   ].map((group) => ({
@@ -3671,7 +3680,7 @@ Core Rules:
         : `₡${Number(order.total_crc || 0).toLocaleString('es-CR')}`),
       order?.status && `Status: ${order.status}`,
       order?.sales_agent && `Agent: ${order.sales_agent}`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       // Goes through the API rather than deleting the row directly: the stock
       // this order reserved has to be returned before the record that says what
@@ -3690,7 +3699,7 @@ Core Rules:
       // so a delete that the database refused looked like it had worked, right
       // up until the next refresh brought the order back.
       setOrders(prev => prev.filter(o => o.id !== orderId));
-      setToastMessage(`Order ${order?.order_number ? `#${order.order_number}` : ''} deleted.`.replace('  ', ' '));
+      setToastMessage(`Order ${order?.order_number ? `#${order.order_number}` : ''} moved to the Bin.`.replace('  ', ' '));
       setTimeout(() => setToastMessage(''), 3000);
     } catch(err) {
       console.error('Order delete error:', err);
@@ -3705,7 +3714,7 @@ Core Rules:
       cart?.customer_name,
       cart?.customer_phone || cart?.customer_email,
       cart?.status && `Status: ${cart.status}`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       const matchedCart = abandonedCarts.find((c) => (c.session_id || c.id) === cartKey || c.id === cartKey);
       const res = await adminFetch('/api/admin/abandoned-carts/update', {
@@ -4459,19 +4468,24 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       lead?.name,
       lead?.phone || lead?.email,
       lead?.status && `Status: ${lead.status}`,
-    ])) return;
-    
-    setLeads(prev => prev.filter(l => l.id !== id));
-    
-    if (isSupabaseConfigured) {
-      try {
-        await supabase
-          .from('catalog_leads')
-          .delete()
-          .eq('id', id);
-      } catch (err) {
-        console.error("Failed to delete lead:", err);
+    ], { recoverable: true })) return;
+
+    try {
+      const res = await adminFetch('/api/admin/leads', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Delete failed with status ${res.status}`);
       }
+      setLeads(prev => prev.filter(l => l.id !== id));
+      setToastMessage('Lead moved to the Bin.');
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      console.error('Failed to delete lead:', err);
+      alert(`Could not delete this lead: ${err.message}`);
     }
   };
 
@@ -4624,21 +4638,26 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   const handleBulkDeleteLeads = async () => {
     if (selectedLeads.length === 0) return;
-    if (!window.confirm(`Are you sure you want to delete ${selectedLeads.length} leads?`)) return;
+    if (!confirmBulkDelete(selectedLeads.length, 'lead', 'leads', { recoverable: true })) return;
 
-    setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
-    
-    if (isSupabaseConfigured) {
-      try {
-        await supabase
-          .from('catalog_leads')
-          .delete()
-          .in('id', selectedLeads);
-      } catch (err) {
-        console.error("Failed to bulk delete leads:", err);
+    try {
+      const res = await adminFetch('/api/admin/leads', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedLeads }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Delete failed with status ${res.status}`);
       }
+      setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
+      setSelectedLeads([]);
+      setToastMessage(`${data.deleted || selectedLeads.length} lead${(data.deleted || selectedLeads.length) === 1 ? '' : 's'} moved to the Bin.`);
+      setTimeout(() => setToastMessage(''), 3000);
+    } catch (err) {
+      console.error('Failed to bulk delete leads:', err);
+      alert(`Could not delete those leads: ${err.message}`);
     }
-    setSelectedLeads([]);
   };
 
   // Save changes batch
@@ -7274,6 +7293,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onNavigate={navigateToTab}
               onWhatsAppClick={openWhatsAppComposer}
             />
+          </div>
+        )}
+
+        {activeTab === 'bin' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <BinManager isSuperadmin={Boolean(adminProfile?.is_superadmin)} />
+            </ErrorBoundary>
           </div>
         )}
 

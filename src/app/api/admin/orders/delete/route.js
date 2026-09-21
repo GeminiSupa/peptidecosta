@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { stashInBin } from '@/lib/adminBin.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { restoreInventoryForDeletedOrder } from '@/lib/inventoryRestoreServer';
 
@@ -55,6 +56,18 @@ export async function POST(request) {
       return NextResponse.json({ error: describeDbError(readError, 'Could not read the order') }, { status: 500 });
     }
     if (!order) return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+
+    const binned = await stashInBin(supabase, {
+      entityType: 'order',
+      rows: [order],
+      deletedBy: auth.user.email || auth.profile.email || null,
+    });
+    if (!binned.ok) {
+      return NextResponse.json(
+        { error: binned.error?.message || 'Could not copy this order to the Bin' },
+        { status: 500 },
+      );
+    }
 
     // Delete first, restore second — against the copy of the row already read
     // above, which is every bit as complete as the row itself.

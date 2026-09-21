@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { stashInBin } from '@/lib/adminBin.mjs';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +34,20 @@ export async function PATCH(request) {
 
     if (patch.cart_data !== undefined && !cartHasItems(patch.cart_data)) {
       const supabase = getSupabaseAdmin();
+      const { data: existing } = await supabase
+        .from('abandoned_carts')
+        .select('*')
+        .eq('session_id', sessionId);
+      if (existing?.length) {
+        const binned = await stashInBin(supabase, {
+          entityType: 'cart',
+          rows: existing,
+          deletedBy: auth.user.email || auth.profile.email || null,
+        });
+        if (!binned.ok) {
+          return NextResponse.json({ error: binned.error?.message || 'Could not copy this cart to the Bin' }, { status: 500 });
+        }
+      }
       const { error } = await supabase
         .from('abandoned_carts')
         .delete()
@@ -79,46 +94,62 @@ export async function DELETE(request) {
     }
 
     const supabase = getSupabaseAdmin();
-    const deletedIds = [];
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(cartKey));
 
-    const { data: bySession, error: sessionError } = await supabase
+    const { data: bySession, error: sessionReadError } = await supabase
       .from('abandoned_carts')
-      .delete()
-      .eq('session_id', cartKey)
-      .select('id, session_id');
+      .select('*')
+      .eq('session_id', cartKey);
 
-    if (sessionError) {
-      console.error('[admin/abandoned-carts/delete] session delete failed:', sessionError.message);
-      return NextResponse.json({ error: sessionError.message }, { status: 500 });
+    if (sessionReadError) {
+      console.error('[admin/abandoned-carts/delete] session read failed:', sessionReadError.message);
+      return NextResponse.json({ error: sessionReadError.message }, { status: 500 });
     }
 
-    if (Array.isArray(bySession)) {
-      deletedIds.push(...bySession.map((row) => row.id).filter(Boolean));
-    }
-
-    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cartKey);
-    if (deletedIds.length === 0 && looksLikeUuid) {
-      const { data: byId, error: idError } = await supabase
+    let rows = Array.isArray(bySession) ? bySession : [];
+    if (rows.length === 0 && looksLikeUuid) {
+      const { data: byId, error: idReadError } = await supabase
         .from('abandoned_carts')
-        .delete()
-        .eq('id', cartKey)
-        .select('id, session_id');
+        .select('*')
+        .eq('id', cartKey);
 
-      if (idError) {
-        console.error('[admin/abandoned-carts/delete] id delete failed:', idError.message);
-        return NextResponse.json({ error: idError.message }, { status: 500 });
+      if (idReadError) {
+        console.error('[admin/abandoned-carts/delete] id read failed:', idReadError.message);
+        return NextResponse.json({ error: idReadError.message }, { status: 500 });
       }
-
-      if (Array.isArray(byId)) {
-        deletedIds.push(...byId.map((row) => row.id).filter(Boolean));
-      }
+      rows = Array.isArray(byId) ? byId : [];
     }
 
-    if (deletedIds.length === 0) {
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'Cart not found or already deleted' }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, deleted: deletedIds.length, cartKey });
+    const binned = await stashInBin(supabase, {
+      entityType: 'cart',
+      rows,
+      deletedBy: auth.user.email || auth.profile.email || null,
+    });
+    if (!binned.ok) {
+      return NextResponse.json({ error: binned.error?.message || 'Could not copy this cart to the Bin' }, { status: 500 });
+    }
+
+    const ids = rows.map((row) => row.id).filter(Boolean);
+    const { data: deleted, error: deleteError } = await supabase
+      .from('abandoned_carts')
+      .delete()
+      .in('id', ids)
+      .select('id');
+
+    if (deleteError) {
+      console.error('[admin/abandoned-carts/delete] delete failed:', deleteError.message);
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    if (!deleted?.length) {
+      return NextResponse.json({ error: 'Cart not found or already deleted' }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, deleted: deleted.length, cartKey });
   } catch (err) {
     console.error('[admin/abandoned-carts/delete]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });

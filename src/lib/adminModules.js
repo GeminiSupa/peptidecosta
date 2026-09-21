@@ -23,6 +23,7 @@ export const ADMIN_MODULES = [
   { id: 'customers', label: 'Customers', title: 'Customers', group: 'Core Operations' },
   { id: 'reorder_tracking', label: 'Reorder Tracking', title: 'Reorder Tracking', group: 'Core Operations' },
   { id: 'inquiries', label: 'Inquiries', title: 'Inquiries', group: 'Core Operations' },
+  { id: 'bin', label: 'Bin', title: 'Bin', group: 'Core Operations' },
   { id: 'share', label: 'Share Links', title: 'Share Links', group: 'Sales & Marketing' },
   { id: 'reviews', label: 'Reviews', title: 'Reviews', group: 'Sales & Marketing' },
   { id: 'facebook', label: 'FB Alerts', title: 'Facebook Alerts', group: 'Sales & Marketing', hiddenFromNav: true },
