@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { Zap } from 'lucide-react';
+import { Clock3, Gift, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
@@ -37,8 +37,24 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
       <Link className={styles.strip} href={href}>
         <span className={styles.stripIcon} aria-hidden="true"><Zap size={18} strokeWidth={2.5} fill="currentColor" /></span>
         <span className={styles.stripCopy}>
-          <strong>{compactHeadline}</strong>
-          <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>
+          <span className={styles.stripMeta}>
+            <strong>{en ? 'Deal of the Week' : 'Oferta de la Semana'}</strong>
+            <span>{en ? 'No code needed' : 'Sin código'}</span>
+          </span>
+          <span className={styles.stripOffers}>
+            {offersDeal
+              ? offerSummaries.map((summary) => {
+                const freeOffer = /\b(free|gratis)\b/i.test(summary);
+                return (
+                  <span className={`${styles.offerChip}${freeOffer ? ` ${styles.freeChip}` : ''}`} key={summary}>
+                    {freeOffer && <Gift size={13} aria-hidden="true" />}
+                    {summary}
+                  </span>
+                );
+              })
+              : <span className={styles.offerChip}>{compactHeadline}</span>}
+            <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>
+          </span>
         </span>
         {countdown && (
           <span
@@ -49,7 +65,7 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
               ? `${countdown.days} days, ${countdown.hours} hours, ${countdown.minutes} minutes and ${countdown.seconds} seconds remaining`
               : `Quedan ${countdown.days} días, ${countdown.hours} horas, ${countdown.minutes} minutos y ${countdown.seconds} segundos`}
           >
-            <small>{en ? 'Ends in' : 'Termina en'}</small>
+            <small><Clock3 size={13} aria-hidden="true" />{en ? 'Offer ends in' : 'La oferta termina en'}</small>
             <span className={styles.countdownUnits} aria-hidden="true">
               <span><b>{countdown.days}</b><em>d</em></span>
               <span><b>{String(countdown.hours).padStart(2, '0')}</b><em>h</em></span>
