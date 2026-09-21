@@ -6,13 +6,14 @@ import {
   preserveLiveDealFields,
 } from '@/lib/dealProductProtection.mjs';
 import {
-import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   checkSingleSave,
   isExistingProductId,
   planBulkSave,
   productFingerprint,
   productToDbRow,
 } from '@/lib/productSaveGuard.mjs';
+
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 

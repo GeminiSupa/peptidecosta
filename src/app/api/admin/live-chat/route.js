@@ -9,7 +9,6 @@ import {
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
-import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   buildLiveChatLeadNote,
   cleanLiveChatText,
   formatLiveChatConversation,
@@ -19,6 +18,8 @@ import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   normalizeLiveChatStatus,
   signLiveChatAttachmentUrls,
 } from '@/lib/liveChat';
+
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 

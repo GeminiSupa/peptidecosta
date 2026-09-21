@@ -26,12 +26,13 @@ import {
   summarizeChannelPermissions,
 } from '@/lib/prospectPermissions.mjs';
 import {
-import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   ANY_READY_FILTER,
   CLOSED_PROSPECT_STATUSES,
   applyProspectPipelineFilters,
   parseProspectPipelineParams,
 } from '@/lib/prospectPipeline.mjs';
+
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 

@@ -12,12 +12,13 @@ import {
 import { normalizeProspectOwnerEmail } from '@/lib/prospectOwnership.mjs';
 import { presentProspect } from '@/lib/prospectReadiness.mjs';
 import {
-import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   CHANNEL_PERMISSION_BASIS,
   PROSPECT_PERMISSION_CHANNELS,
   channelPermissionFields,
   prospectHasGlobalOptOut,
 } from '@/lib/prospectPermissions.mjs';
+
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 // A hundred saves is a hundred row writes plus the lookups that precede them.
