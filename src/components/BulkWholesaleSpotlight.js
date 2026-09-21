@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import { Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
@@ -34,7 +35,7 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
   if (compact) {
     return (
       <Link className={styles.strip} href={href}>
-        <span className={styles.stripIcon} aria-hidden="true">⚡</span>
+        <span className={styles.stripIcon} aria-hidden="true"><Zap size={18} strokeWidth={2.5} fill="currentColor" /></span>
         <span className={styles.stripCopy}>
           <strong>{compactHeadline}</strong>
           <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>

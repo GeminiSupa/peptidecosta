@@ -53,7 +53,8 @@
   text-align: center;
 }
 
-.stripIcon { font-size: 1.12rem; }
+/* A drawn icon, not the ⚡ emoji: Windows renders that emoji as a flat grey glyph. */
+.stripIcon { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; background: #c8530c; color: #fff; box-shadow: 0 4px 10px rgba(200, 83, 12, 0.3); flex-shrink: 0; }
 .stripCopy { display: grid; min-width: 0; gap: 1px; justify-items: center; }
 .strip strong { color: #c8530c; }
 .strip:hover { background: rgba(200, 83, 12, 0.14); }
@@ -104,7 +105,7 @@
 
 @media (max-width: 430px) {
   .strip { gap: 7px; padding-inline: 9px; font-size: 0.82rem; }
-  .stripIcon { font-size: 1rem; }
+  .stripIcon { width: 28px; height: 28px; }
   .countdown { min-width: 126px; padding: 8px 7px; }
   .countdownUnits { gap: 1px; }
   .countdownUnits b { font-size: 0.82rem; }
