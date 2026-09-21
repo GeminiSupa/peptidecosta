@@ -10,6 +10,7 @@ import {
 import { CHATWOOT_LEAD_SETTING_ID } from '@/lib/chatwootLead.mjs';
 import { LANDING_LEAD_SETTINGS_ID, normalizeLandingLeadSettings } from '@/lib/landingLeadSettings.mjs';
 import { eligibleRotationAgents } from '@/lib/leadRotation.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 
@@ -311,14 +312,17 @@ export async function DELETE(request) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase.from('notification_recipients').delete().eq('id', id);
+  const binned = await moveToBin(
+    { table: 'notification_recipients', ids: [id], actor: actorFrom(auth.profile) },
+    supabase,
+  );
 
-  if (error) {
-    if (isMissingRecipientsTable(error)) {
+  if (!binned.ok) {
+    if (isMissingRecipientsTable({ message: binned.error })) {
       return NextResponse.json({ error: MIGRATION_HINT }, { status: 503 });
     }
-    console.error('[notification-recipients] Delete failed:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error('[notification-recipients] Delete failed:', binned.error);
+    return NextResponse.json({ error: binned.error }, { status: 500 });
   }
 
   return NextResponse.json({ success: true });

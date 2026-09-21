@@ -12,6 +12,7 @@ import {
 import { normalizeProspectOwnerEmail } from '@/lib/prospectOwnership.mjs';
 import { presentProspect } from '@/lib/prospectReadiness.mjs';
 import {
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   CHANNEL_PERMISSION_BASIS,
   PROSPECT_PERMISSION_CHANNELS,
   channelPermissionFields,
@@ -351,16 +352,14 @@ export async function DELETE(request) {
     return NextResponse.json({ error: `Delete at most ${MAX_BATCH} prospects per batch` }, { status: 400 });
   }
 
-  const { data, error } = await getSupabaseAdmin()
-    .from('sales_prospects')
-    .delete()
-    .in('id', ids)
-    .select('id');
-  if (isProspectsTableMissing(error)) return setupRequired();
-  if (error) {
-    console.error('[Prospects] Bulk delete failed:', error.message);
+  const binned = await moveToBin({ table: 'sales_prospects', ids, actor: actorFrom(auth.profile) });
+  if (!binned.ok) {
+    if (isProspectsTableMissing({ message: binned.error })) return setupRequired();
+    console.error('[Prospects] Bulk delete failed:', binned.error);
     return NextResponse.json({ error: 'Unable to delete prospects' }, { status: 500 });
   }
-  const deleted = (data || []).map((row) => row.id);
+  // moveToBin only bins rows it actually read, so anything already gone is
+  // simply absent from the count rather than reported as deleted.
+  const deleted = ids.slice(0, binned.moved);
   return NextResponse.json({ success: true, deleted });
 }

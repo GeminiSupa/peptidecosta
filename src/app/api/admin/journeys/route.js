@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -210,7 +211,7 @@ export async function DELETE(request) {
   if (auth.error) return auth.error;
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Journey ID is required' }, { status: 400 });
-  const { error } = await getSupabaseAdmin().from('marketing_journeys').delete().eq('id', id);
-  if (error) return NextResponse.json({ error: 'Unable to delete journey' }, { status: 500 });
+  const binned = await moveToBin({ table: 'marketing_journeys', ids: [id], actor: actorFrom(auth.profile) });
+  if (!binned.ok) return NextResponse.json({ error: binned.error }, { status: 500 });
   return NextResponse.json({ success: true });
 }

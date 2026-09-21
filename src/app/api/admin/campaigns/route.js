@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { orderNetRevenueUsd } from '@/lib/orderRevenue.mjs';
 import { normalizeBehaviorFilter } from '@/lib/campaignBehavior.mjs';
 import { planScheduleUpdate } from '@/lib/campaignScheduleStatus.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -339,12 +340,11 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Campaign ID is required' }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
-      .from('email_campaigns')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    const binned = await moveToBin(
+      { table: 'email_campaigns', ids: [id], actor: actorFrom(auth.profile) },
+      supabaseAdmin,
+    );
+    if (!binned.ok) throw new Error(binned.error);
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 
@@ -81,36 +82,39 @@ export async function DELETE(request) {
     const supabase = getSupabaseAdmin();
     const deletedIds = [];
 
-    const { data: bySession, error: sessionError } = await supabase
-      .from('abandoned_carts')
-      .delete()
-      .eq('session_id', cartKey)
-      .select('id, session_id');
+    // The cart key is usually a session_id and sometimes the primary key, so
+    // this still tries both — it just goes through the Bin now, which snapshots
+    // whatever it matched before removing it.
+    const bySession = await moveToBin(
+      { table: 'abandoned_carts', ids: [cartKey], idColumn: 'session_id', actor: actorFrom(auth.profile) },
+      supabase,
+    );
 
-    if (sessionError) {
-      console.error('[admin/abandoned-carts/delete] session delete failed:', sessionError.message);
-      return NextResponse.json({ error: sessionError.message }, { status: 500 });
+    // No match on session_id is the ordinary case for a key that is really an
+    // id, and the id attempt below covers it. Only a real failure stops here.
+    if (!bySession.ok && !bySession.notFound) {
+      console.error('[admin/abandoned-carts/delete] session delete failed:', bySession.error);
+      return NextResponse.json({ error: bySession.error }, { status: 500 });
     }
 
-    if (Array.isArray(bySession)) {
-      deletedIds.push(...bySession.map((row) => row.id).filter(Boolean));
+    if (bySession.ok) {
+      deletedIds.push(...(bySession.rows || []).map((row) => row.id).filter(Boolean));
     }
 
     const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cartKey);
     if (deletedIds.length === 0 && looksLikeUuid) {
-      const { data: byId, error: idError } = await supabase
-        .from('abandoned_carts')
-        .delete()
-        .eq('id', cartKey)
-        .select('id, session_id');
+      const byId = await moveToBin(
+        { table: 'abandoned_carts', ids: [cartKey], actor: actorFrom(auth.profile) },
+        supabase,
+      );
 
-      if (idError) {
-        console.error('[admin/abandoned-carts/delete] id delete failed:', idError.message);
-        return NextResponse.json({ error: idError.message }, { status: 500 });
+      if (!byId.ok && !byId.notFound) {
+        console.error('[admin/abandoned-carts/delete] id delete failed:', byId.error);
+        return NextResponse.json({ error: byId.error }, { status: 500 });
       }
 
-      if (Array.isArray(byId)) {
-        deletedIds.push(...byId.map((row) => row.id).filter(Boolean));
+      if (byId.ok) {
+        deletedIds.push(...(byId.rows || []).map((row) => row.id).filter(Boolean));
       }
     }
 

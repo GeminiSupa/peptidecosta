@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
@@ -70,14 +71,13 @@ export async function DELETE(request) {
 
     const supabase = getSupabaseAdmin();
 
-    const { error } = await supabase
-      .from('customer_inquiries')
-      .delete()
-      .eq('id', inquiryId);
-
-    if (error) {
-      console.error('[Inquiry Delete] Error:', error);
-      return NextResponse.json({ error: 'Failed to delete inquiry' }, { status: 500 });
+    const binned = await moveToBin(
+      { table: 'customer_inquiries', ids: [inquiryId], actor: actorFrom(auth.profile) },
+      supabase,
+    );
+    if (!binned.ok) {
+      console.error('[Inquiry Delete] Error:', binned.error);
+      return NextResponse.json({ error: binned.error }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });

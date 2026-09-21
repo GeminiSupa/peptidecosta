@@ -11022,3 +11022,261 @@
         display: none !important;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Bin (deleted items)
+
+   The table itself rides on .responsive-table for the phone card layout, so
+   only the Bin-specific chrome lives here.
+   --------------------------------------------------------------------------- */
+
+.recycle-bin__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 18px;
+}
+
+.recycle-bin__head h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+    font-family: var(--font-montserrat);
+    color: var(--text-main);
+}
+
+.recycle-bin__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 46ch;
+}
+
+/* The retention control. Boxed and set apart from the list because it is the
+   one thing on this screen that destroys data rather than restoring it. */
+.recycle-bin__retention {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md, 10px);
+    background: var(--bg-secondary);
+}
+
+.recycle-bin__retention label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.recycle-bin__retention select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.88rem;
+}
+
+.recycle-bin__retention select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.recycle-bin__locked,
+.recycle-bin__meta {
+    flex-basis: 100%;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.recycle-bin__empty {
+    padding: 7px 12px;
+    border: 1px solid #b91c1c;
+    border-radius: 8px;
+    background: transparent;
+    color: #ef4444;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.recycle-bin__empty:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.recycle-bin__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.recycle-bin__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-muted);
+    flex: 1 1 220px;
+}
+
+.recycle-bin__search input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 0.88rem;
+    outline: none;
+    min-width: 0;
+}
+
+.recycle-bin__filters select {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.recycle-bin__toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.recycle-bin__error,
+.recycle-bin__notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.87rem;
+}
+
+.recycle-bin__error {
+    border: 1px solid #b91c1c;
+    background: rgba(185, 28, 28, 0.12);
+    color: #fca5a5;
+}
+
+.recycle-bin__notice {
+    border: 1px solid #15803d;
+    background: rgba(21, 128, 61, 0.12);
+    color: #86efac;
+}
+
+.recycle-bin__empty-state {
+    padding: 28px 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.recycle-bin__table-wrap {
+    overflow-x: auto;
+}
+
+.recycle-bin__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.87rem;
+}
+
+.recycle-bin__table th {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    text-align: left;
+}
+
+.recycle-bin__table td {
+    padding: 11px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+    vertical-align: top;
+}
+
+.recycle-bin__table tr.is-restored td {
+    opacity: 0.6;
+}
+
+.recycle-bin__reason {
+    display: block;
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+}
+
+/* Past its date and waiting on tonight's run: the one row state where doing
+   nothing loses the record for good. */
+.recycle-bin__urgent {
+    color: #fca5a5;
+    font-weight: 600;
+}
+
+.recycle-bin__restored {
+    color: #86efac;
+}
+
+.recycle-bin__actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.recycle-bin__actions button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg-card);
+    color: var(--text-main);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.recycle-bin__actions button:hover:not(:disabled) {
+    border-color: var(--primary);
+}
+
+.recycle-bin__actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.recycle-bin__actions .recycle-bin__erase {
+    border-color: rgba(185, 28, 28, 0.5);
+    color: #ef4444;
+}
+
+@media (max-width: 768px) {
+    .recycle-bin__head {
+        flex-direction: column;
+    }
+
+    .recycle-bin__retention {
+        width: 100%;
+    }
+}

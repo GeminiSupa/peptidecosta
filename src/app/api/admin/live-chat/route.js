@@ -9,6 +9,7 @@ import {
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
   buildLiveChatLeadNote,
   cleanLiveChatText,
   formatLiveChatConversation,
@@ -498,12 +499,14 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'Forbidden: this conversation belongs to another agent' }, { status: 403 });
     }
 
-    const { error } = await supabase
-      .from('live_chat_conversations')
-      .delete()
-      .eq('id', conversationId);
+    // The chat's messages travel with it — see live_chat_conversations in
+    // src/lib/recycleBin.mjs — so a restore brings back the whole thread.
+    const binned = await moveToBin(
+      { table: 'live_chat_conversations', ids: [conversationId], actor: actorFrom(auth.profile) },
+      supabase,
+    );
 
-    if (error) throw error;
+    if (!binned.ok) throw new Error(binned.error);
 
     return NextResponse.json({ success: true, conversationId });
   } catch (err) {

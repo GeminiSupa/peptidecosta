@@ -51,6 +51,10 @@
     {
       "path": "/api/cron/prospect-enrich",
       "schedule": "0,30 * * * *"
+    },
+    {
+      "path": "/api/cron/purge-recycle-bin",
+      "schedule": "0 8 * * *"
     }
   ]
 }
