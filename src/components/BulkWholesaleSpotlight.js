@@ -10,6 +10,13 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
 
   const en = lang === 'en';
   const href = `/deal-of-the-week?lang=${en ? 'en' : 'es'}`;
+  const offersDeal = campaign.pricingMode === 'offers';
+  const offerSummaries = en ? campaign.summariesEn : campaign.summariesEs;
+  const compactHeadline = offersDeal
+    ? offerSummaries.join(' • ')
+    : (en
+      ? `${campaign.discountPct}% off ${campaign.minUnits}+ selected vials`
+      : `${campaign.discountPct}% de descuento en ${campaign.minUnits}+ viales seleccionados`);
 
   // One slim line for the catalog, where the full card pushed the products
   // below the fold.
@@ -17,18 +24,22 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
     return (
       <Link className={styles.strip} href={href}>
         <span aria-hidden="true">⚡</span>
-        <strong>{en ? `${campaign.discountPct}% off ${campaign.minUnits}+ selected vials` : `${campaign.discountPct}% de descuento en ${campaign.minUnits}+ viales seleccionados`}</strong>
+        <strong>{compactHeadline}</strong>
         <span className={styles.stripMore}>{en ? 'See the offer →' : 'Ver la oferta →'}</span>
       </Link>
     );
   }
   return (
-    <section className={styles.spotlight} aria-label={en ? 'Bulk wholesale promotion' : 'Promoción mayorista'}>
+    <section className={styles.spotlight} aria-label={en ? 'Deal of the Week' : 'Oferta de la Semana'}>
       <div>
-        <p className={styles.eyebrow}>{en ? 'Limited inventory event' : 'Evento de inventario limitado'}</p>
-        <h2>{en ? `${campaign.discountPct}% off ${campaign.minUnits}+ selected vials` : `${campaign.discountPct}% de descuento en ${campaign.minUnits}+ viales seleccionados`}</h2>
+        <p className={styles.eyebrow}>{en ? 'Deal of the Week' : 'Oferta de la Semana'}</p>
+        <h2>{offersDeal
+          ? (en ? 'Two ways to save this week' : 'Dos formas de ahorrar esta semana')
+          : compactHeadline}</h2>
         <p>
-          {en
+          {offersDeal
+            ? offerSummaries.join(' • ')
+            : en
             ? `Mix and match across ${campaign.products.length} selected products. One bulk price—no discount stacking.`
             : `Combina entre ${campaign.products.length} productos seleccionados. Un solo precio mayorista, sin acumular descuentos.`}
         </p>
