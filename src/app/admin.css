@@ -1,263 +1,10 @@
 /* ADMIN PANEL STYLING */
 .admin-layout {
     min-height: 100vh;
-    background-color: var(--bg-main, #060b13);
-    color: var(--text-main, #e2e8f0);
+    background-color: #060b13;
+    color: #e2e8f0;
     font-family: var(--font-inter), sans-serif;
-    transition: background-color 0.3s ease, color 0.3s ease;
 }
-
-[data-theme="light"] .admin-layout {
-    background-color: #f4f6f9;
-    color: #0f172a;
-}
-
-[data-theme="dark"] .admin-layout {
-    background-color: #050b18;
-    color: #f8fafc;
-}
-
-/* Sidebar navigation buttons must stay high contrast against navy sidebar in BOTH themes */
-.admin-tab-btn,
-.admin-more-tab-btn {
-    color: #cbd5e1 !important;
-}
-
-.admin-tab-btn:hover,
-.admin-more-tab-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    color: #f8fafc !important;
-}
-
-.admin-tab-btn.active,
-.admin-more-tab-btn.active {
-    background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%) !important;
-    color: #00D4FF !important;
-    border-left: 3px solid #00D4FF !important;
-    font-weight: 800 !important;
-}
-
-[data-theme="light"] .admin-tab-btn,
-[data-theme="light"] .admin-more-tab-btn {
-    color: #cbd5e1 !important;
-}
-
-[data-theme="light"] .admin-tab-btn:hover,
-[data-theme="light"] .admin-more-tab-btn:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
-    color: #f8fafc !important;
-}
-
-[data-theme="light"] .admin-tab-btn.active,
-[data-theme="light"] .admin-more-tab-btn.active {
-    background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%) !important;
-    color: #00D4FF !important;
-    border-left: 3px solid #00D4FF !important;
-}
-
-/* Toolbar, Page Headings & Subtitles */
-[data-theme="light"] .admin-toolbar h3,
-[data-theme="light"] .admin-section-title,
-[data-theme="light"] .dashboard-section-title {
-    color: #0f172a;
-}
-
-[data-theme="dark"] .admin-toolbar h3,
-[data-theme="dark"] .admin-section-title,
-[data-theme="dark"] .dashboard-section-title {
-    color: #f8fafc;
-}
-
-[data-theme="light"] .admin-toolbar p,
-[data-theme="light"] .admin-page-subtitle,
-[data-theme="light"] .dashboard-section-count {
-    color: #475569 !important;
-}
-
-[data-theme="dark"] .admin-toolbar p,
-[data-theme="dark"] .admin-page-subtitle,
-[data-theme="dark"] .dashboard-section-count {
-    color: #94a3b8 !important;
-}
-
-/* Global Cards & Containers Across All Dashboard Tabs */
-[data-theme="light"] .admin-grid-card,
-[data-theme="light"] .dashboard-kpi-card,
-[data-theme="light"] .dashboard-health-card,
-[data-theme="light"] .dashboard-empty-card,
-[data-theme="light"] .dashboard-attention-item,
-[data-theme="light"] .order-card,
-[data-theme="light"] .fulfillment-card,
-[data-theme="light"] .review-card,
-[data-theme="light"] .review-mobile-card,
-[data-theme="light"] .cart-mobile-card,
-[data-theme="light"] .leads-kanban-card,
-[data-theme="light"] .weekly-deal-offer-card,
-[data-theme="light"] .weekly-deal-rules-card,
-[data-theme="light"] .commission-payout-card,
-[data-theme="light"] .admin-team-member-card,
-[data-theme="light"] .admin-ai-insight-card,
-[data-theme="light"] .campaign-preset-card,
-[data-theme="light"] .campaign-links-card,
-[data-theme="light"] .admin-more-account-card,
-[data-theme="light"] .admin-card,
-[data-theme="light"] .admin-panel,
-[data-theme="light"] .admin-box,
-[data-theme="light"] .admin-wa-approved-template-card,
-[data-theme="light"] .admin-wa-channel-card,
-[data-theme="light"] .admin-wa-sheet {
-    background: #ffffff;
-    border: 1px solid rgba(0, 39, 102, 0.1);
-    color: #0f172a;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-[data-theme="dark"] .admin-grid-card,
-[data-theme="dark"] .dashboard-kpi-card,
-[data-theme="dark"] .dashboard-health-card,
-[data-theme="dark"] .dashboard-empty-card,
-[data-theme="dark"] .dashboard-attention-item,
-[data-theme="dark"] .order-card,
-[data-theme="dark"] .fulfillment-card,
-[data-theme="dark"] .review-card,
-[data-theme="dark"] .review-mobile-card,
-[data-theme="dark"] .cart-mobile-card,
-[data-theme="dark"] .leads-kanban-card,
-[data-theme="dark"] .weekly-deal-offer-card,
-[data-theme="dark"] .weekly-deal-rules-card,
-[data-theme="dark"] .commission-payout-card,
-[data-theme="dark"] .admin-team-member-card,
-[data-theme="dark"] .admin-ai-insight-card,
-[data-theme="dark"] .campaign-preset-card,
-[data-theme="dark"] .campaign-links-card,
-[data-theme="dark"] .admin-more-account-card,
-[data-theme="dark"] .admin-card,
-[data-theme="dark"] .admin-panel,
-[data-theme="dark"] .admin-box,
-[data-theme="dark"] .admin-wa-approved-template-card,
-[data-theme="dark"] .admin-wa-channel-card,
-[data-theme="dark"] .admin-wa-sheet {
-    background: #0e1626;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    color: #f8fafc;
-}
-
-/* Card Titles, Values, Labels & Subtext */
-[data-theme="light"] .admin-grid-value,
-[data-theme="light"] .dashboard-kpi-value,
-[data-theme="light"] .dashboard-attention-title,
-[data-theme="light"] .dashboard-health-title,
-[data-theme="light"] .dashboard-empty-title,
-[data-theme="light"] .order-customer-info h4 {
-    color: #0f172a;
-}
-
-[data-theme="light"] .admin-grid-title,
-[data-theme="light"] .dashboard-kpi-label,
-[data-theme="light"] .dashboard-attention-sub,
-[data-theme="light"] .dashboard-health-copy,
-[data-theme="light"] .order-customer-info p,
-[data-theme="light"] .order-date,
-[data-theme="light"] .order-total-lbl {
-    color: #475569;
-}
-
-[data-theme="light"] .order-total-val {
-    color: #0072FF;
-}
-
-[data-theme="dark"] .admin-grid-value,
-[data-theme="dark"] .dashboard-kpi-value,
-[data-theme="dark"] .dashboard-attention-title,
-[data-theme="dark"] .dashboard-health-title,
-[data-theme="dark"] .dashboard-empty-title,
-[data-theme="dark"] .order-customer-info h4 {
-    color: #f8fafc;
-}
-
-[data-theme="dark"] .admin-grid-title,
-[data-theme="dark"] .dashboard-kpi-label,
-[data-theme="dark"] .dashboard-attention-sub,
-[data-theme="dark"] .dashboard-health-copy,
-[data-theme="dark"] .order-customer-info p,
-[data-theme="dark"] .order-date,
-[data-theme="dark"] .order-total-lbl {
-    color: #94a3b8;
-}
-
-[data-theme="dark"] .order-total-val {
-    color: #00D4FF;
-}
-
-/* Spreadsheet Container & Tables in Light / Dark Mode */
-[data-theme="light"] .spreadsheet-container {
-    background: #ffffff;
-    border: 1px solid rgba(0, 39, 102, 0.12);
-}
-
-[data-theme="light"] .spreadsheet-table th,
-[data-theme="light"] .order-items-table th,
-[data-theme="light"] .admin-table th {
-    background: #f1f5f9;
-    color: #0f172a;
-    border-bottom: 2px solid rgba(0, 39, 102, 0.1);
-}
-
-[data-theme="light"] .spreadsheet-table td,
-[data-theme="light"] .order-items-table td,
-[data-theme="light"] .admin-table td {
-    background: #ffffff;
-    color: #1e293b;
-    border-bottom: 1px solid rgba(0, 39, 102, 0.06);
-}
-
-[data-theme="light"] .spreadsheet-table tr:nth-child(even) td {
-    background: #f8fafc;
-}
-
-[data-theme="light"] .spreadsheet-table tr:hover td {
-    background: #eef6ff;
-}
-
-[data-theme="light"] .cell-select {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.16);
-    color: #0f172a;
-}
-
-[data-theme="dark"] .spreadsheet-container {
-    background: #0e1626;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-[data-theme="dark"] .spreadsheet-table th,
-[data-theme="dark"] .order-items-table th,
-[data-theme="dark"] .admin-table th {
-    background: #172237;
-    color: #cbd5e1;
-}
-
-[data-theme="dark"] .spreadsheet-table td,
-[data-theme="dark"] .order-items-table td,
-[data-theme="dark"] .admin-table td {
-    background: #0e1626;
-    color: #cbd5e1;
-}
-
-[data-theme="dark"] .spreadsheet-table tr:nth-child(even) td {
-    background: #111a2c;
-}
-
-[data-theme="dark"] .spreadsheet-table tr:hover td {
-    background: #1e293b;
-}
-
-[data-theme="dark"] .cell-select {
-    background: #172237;
-    border-color: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
-}
-
 
 .admin-login-container {
     min-height: 100vh;
@@ -724,16 +471,6 @@
     color: white;
 }
 
-[data-theme="light"] .admin-toolbar h3,
-[data-theme="light"] .admin-section-title {
-    color: #0f172a;
-}
-
-[data-theme="light"] .admin-toolbar p,
-[data-theme="light"] .admin-page-subtitle {
-    color: #475569 !important;
-}
-
 .admin-actions-row {
     display: flex;
     flex-direction: column;
@@ -775,24 +512,6 @@
 }
 
 .admin-input::placeholder {
-    color: #64748b;
-}
-
-[data-theme="light"] .admin-input,
-[data-theme="light"] .admin-select {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.16);
-    color: #0f172a;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
-
-[data-theme="light"] .admin-input:focus,
-[data-theme="light"] .admin-select:focus {
-    border-color: rgba(0, 114, 255, 0.5);
-    box-shadow: 0 0 0 3px rgba(0, 114, 255, 0.12);
-}
-
-[data-theme="light"] .admin-input::placeholder {
     color: #64748b;
 }
 
@@ -856,20 +575,6 @@
     pointer-events: none;
 }
 
-[data-theme="light"] .admin-btn {
-    background: #ffffff;
-    border-color: rgba(15, 23, 42, 0.14);
-    color: #334155;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-}
-
-[data-theme="light"] .admin-btn:hover {
-    background: #f8fafc;
-    border-color: rgba(0, 114, 255, 0.35);
-    color: #0052cc;
-    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
-}
-
 /* 2. Primary Action Button */
 .admin-btn-primary {
     background: linear-gradient(135deg, #00D4FF 0%, #0072FF 100%);
@@ -900,18 +605,6 @@
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.2);
     color: white;
-}
-
-[data-theme="light"] .admin-btn-secondary {
-    background: #f8fafc;
-    border-color: rgba(15, 23, 42, 0.14);
-    color: #334155;
-}
-
-[data-theme="light"] .admin-btn-secondary:hover {
-    background: #eef6ff;
-    border-color: rgba(0, 114, 255, 0.32);
-    color: #0052cc;
 }
 
 /* 4. Destructive / Danger Button */
@@ -948,18 +641,6 @@
 
 .admin-btn-success:active {
     transform: scale(0.97);
-}
-
-[data-theme="light"] .admin-btn-success {
-    background: rgba(22, 163, 74, 0.1) !important;
-    border-color: rgba(22, 163, 74, 0.26) !important;
-    color: #15803d !important;
-}
-
-[data-theme="light"] .admin-btn-success:hover {
-    background: rgba(22, 163, 74, 0.16) !important;
-    border-color: rgba(22, 163, 74, 0.42) !important;
-    color: #166534 !important;
 }
 
 /* Accent highlight button */
@@ -2471,25 +2152,6 @@
         color: #00D4FF !important;
         border-left: 3px solid #00D4FF !important;
         box-shadow: inset 1px 0 0 rgba(255,255,255,0.1) !important;
-        font-weight: 800 !important;
-    }
-
-    [data-theme="light"] .admin-tab-btn {
-        /* The sidebar stays navy in light mode, so slate text makes every
-           inactive tab disappear against it. Keep the navigation colors
-           matched to that surface instead of the page background. */
-        color: #cbd5e1 !important;
-    }
-
-    [data-theme="light"] .admin-tab-btn:hover {
-        background: rgba(255, 255, 255, 0.08) !important;
-        color: #f8fafc !important;
-    }
-
-    [data-theme="light"] .admin-tab-btn.active {
-        background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%) !important;
-        color: #00D4FF !important;
-        border-left: 3px solid #00D4FF !important;
         font-weight: 800 !important;
     }
 

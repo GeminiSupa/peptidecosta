@@ -37,22 +37,6 @@
     --danger-bg: rgba(220, 38, 38, 0.05);
 }
 
-[data-theme="light"] {
-    --bg-main: #F4F6F9;
-    --bg-card: #ffffff;
-    --bg-secondary: #E9EDF4;
-    --text-main: #0F172A;
-    --text-muted: #64748B;
-    --text-primary: #002766;
-    --border: rgba(0, 39, 102, 0.08);
-    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
-    --danger: #dc2626;
-    --danger-border: #dc2626;
-    --danger-ring: rgba(220, 38, 38, 0.16);
-    --danger-bg: rgba(220, 38, 38, 0.05);
-}
-
 [data-theme="dark"] {
     --bg-main: #050b18;
     --bg-card: #0e1626;
