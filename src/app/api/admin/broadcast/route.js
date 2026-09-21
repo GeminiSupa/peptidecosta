@@ -14,6 +14,7 @@ import { LIVE_SITE_URL } from '@/lib/publicUrl';
 import { buildTemplateParameters } from '@/lib/broadcastTemplateParam.mjs';
 import { marketingCopyHeader } from '@/lib/marketingEmailAddressing.mjs';
 import { getCustomerSegments } from '@/lib/customerSegmentation.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || LIVE_SITE_URL;
 
@@ -168,8 +169,12 @@ export async function DELETE(request) {
       .from('deals')
       .update({ announcement_status: 'cancelled', broadcast_id: null })
       .eq('broadcast_id', id);
-    const { error } = await supabase.from('scheduled_broadcasts').delete().eq('id', id);
-    if (error) throw error;
+    // Via the Bin, so a cancelled announcement can be brought back.
+    const binned = await moveToBin(
+      { table: 'scheduled_broadcasts', ids: [id], actor: actorFrom(auth.profile) },
+      supabase,
+    );
+    if (!binned.ok) throw new Error(binned.error);
     
     return NextResponse.json({ success: true });
   } catch (err) {

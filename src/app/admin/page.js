@@ -40,6 +40,8 @@ import CustomersCRM from '@/components/admin/CustomersCRM';
 import ReorderTrackingPanel from '@/components/admin/ReorderTrackingPanel';
 import ExportModal from '@/components/admin/ExportModal';
 import TeamManagement from '@/components/admin/TeamManagement';
+import RecycleBin from '@/components/admin/RecycleBin';
+import { deleteToBin } from '@/lib/adminApi';
 import TestPaymentPanel from '@/components/admin/TestPaymentPanel';
 import TeamChat from '@/components/admin/TeamChat';
 import AffiliatesManager from '@/components/admin/AffiliatesManager';
@@ -138,7 +140,6 @@ const ProspectorManager = dynamicTab(() => import('@/components/admin/Prospector
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
 const LiveChatInbox = dynamicTab(() => import('@/components/admin/LiveChatInbox'), 'Loading live chat…');
-const BinManager = dynamicTab(() => import('@/components/admin/BinManager'), 'Loading bin…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -208,10 +209,6 @@ function getAdminPageSubtitle(tabId, { orders, abandonedCarts, leads, reviews, i
       return 'Discover and qualify potential Costa Rica business partners';
     case 'live_chat':
       return 'Website chat inbox · reply without WhatsApp';
-    case 'inquiries':
-      return 'Contact form messages';
-    case 'bin':
-      return 'Deleted orders, leads, carts, and inquiries — restore or remove forever';
     case 'reviews':
       return pendingReviews
         ? `${pendingReviews} awaiting approval`
@@ -1751,10 +1748,6 @@ Core Rules:
       icon: <Inbox size={iconSize} />,
       badge: inquiryCount,
     },
-    bin: {
-      label: 'Bin',
-      icon: <Trash2 size={iconSize} />,
-    },
     live_chat: {
       label: 'Live Chat',
       icon: <MessageCircle size={iconSize} />,
@@ -1838,6 +1831,10 @@ Core Rules:
       label: 'Team',
       icon: <Shield size={iconSize} />,
     },
+    recycle_bin: {
+      label: 'Bin',
+      icon: <Trash2 size={iconSize} />,
+    },
     payment_test: {
       label: 'Payment Test',
       icon: <FlaskConical size={iconSize} style={{ color: activeTab === 'payment_test' ? 'inherit' : '#34d399' }} />,
@@ -1864,9 +1861,9 @@ Core Rules:
       : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
-    { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'bin', 'prospects'] },
+    { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
     { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
-    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'team_chat', 'payment_test'] },
+    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'recycle_bin', 'team_chat', 'payment_test'] },
   ].map((group) => ({
     ...group,
     tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),
@@ -3699,7 +3696,7 @@ Core Rules:
       // so a delete that the database refused looked like it had worked, right
       // up until the next refresh brought the order back.
       setOrders(prev => prev.filter(o => o.id !== orderId));
-      setToastMessage(`Order ${order?.order_number ? `#${order.order_number}` : ''} moved to the Bin.`.replace('  ', ' '));
+      setToastMessage(`Order ${order?.order_number ? `#${order.order_number}` : ''} deleted.`.replace('  ', ' '));
       setTimeout(() => setToastMessage(''), 3000);
     } catch(err) {
       console.error('Order delete error:', err);
@@ -3939,13 +3936,12 @@ Core Rules:
     try {
       setAbandonedCarts(prev => prev.filter(c => !selectedCartIds.includes(c.session_id)));
       if (isSupabaseConfigured && supabase) {
-        const { error } = await supabase
-          .from('abandoned_carts')
-          .delete()
-          .in('session_id', selectedCartIds);
-        if (error) throw error;
+        // Via the Bin rather than a direct delete, so these are recoverable.
+        // The Carts tab tracks selection by session_id, which is why the match
+        // column is named here.
+        await deleteToBin('abandoned_carts', selectedCartIds, { idColumn: 'session_id' });
       }
-      alert(`🗑️ Deleted ${selectedCartIds.length} carts successfully!`);
+      alert(`Moved ${selectedCartIds.length} carts to the Bin. Restore them from the Bin tab if needed.`);
     } catch (err) {
       console.error('Bulk delete error:', err);
       alert(`Failed to delete carts: ${err.message}`);
@@ -4332,14 +4328,30 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
   // Clear ALL active abandoned carts
   const handleClearAllCarts = async () => {
-    if (!confirm('Clear ALL active cart data? This cannot be undone.')) return;
+    if (!confirm('Clear ALL active cart data? They go to the Bin and can be restored from there.')) return;
     setAbandonedCarts([]);
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('abandoned_carts').delete().eq('status', 'active');
+        // The ids are read first so each cart can be snapshotted individually.
+        // A blanket `.delete().eq('status','active')` would be one statement
+        // with nothing to put in the Bin.
+        const { data, error } = await supabase
+          .from('abandoned_carts')
+          .select('id')
+          .eq('status', 'active');
+        if (error) throw error;
+
+        const ids = (data || []).map((row) => row.id);
+        // Chunked: a shop left alone over a holiday can hold thousands of
+        // active carts, and one request with all of them times out.
+        for (let i = 0; i < ids.length; i += 200) {
+          await deleteToBin('abandoned_carts', ids.slice(i, i + 200));
+        }
       } catch(err) {
         console.error('Clear carts error:', err);
+        alert(`Could not clear the carts: ${err.message}`);
       }
+      loadAdminData();
     }
   };
 
@@ -4469,23 +4481,19 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       lead?.phone || lead?.email,
       lead?.status && `Status: ${lead.status}`,
     ], { recoverable: true })) return;
-
-    try {
-      const res = await adminFetch('/api/admin/leads', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) {
-        throw new Error(data.error || `Delete failed with status ${res.status}`);
+    
+    setLeads(prev => prev.filter(l => l.id !== id));
+    
+    if (isSupabaseConfigured) {
+      try {
+        await deleteToBin('catalog_leads', id);
+      } catch (err) {
+        console.error("Failed to delete lead:", err);
+        // The row was taken out of the list optimistically above, so a failed
+        // delete has to put it back or the lead silently disappears.
+        setLeads(prev => (prev.some(l => l.id === id) ? prev : [lead, ...prev].filter(Boolean)));
+        alert(`Could not delete that lead: ${err.message}`);
       }
-      setLeads(prev => prev.filter(l => l.id !== id));
-      setToastMessage('Lead moved to the Bin.');
-      setTimeout(() => setToastMessage(''), 3000);
-    } catch (err) {
-      console.error('Failed to delete lead:', err);
-      alert(`Could not delete this lead: ${err.message}`);
     }
   };
 
@@ -4640,24 +4648,18 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     if (selectedLeads.length === 0) return;
     if (!confirmBulkDelete(selectedLeads.length, 'lead', 'leads', { recoverable: true })) return;
 
-    try {
-      const res = await adminFetch('/api/admin/leads', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedLeads }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error) {
-        throw new Error(data.error || `Delete failed with status ${res.status}`);
+    setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
+    
+    if (isSupabaseConfigured) {
+      try {
+        await deleteToBin('catalog_leads', selectedLeads);
+      } catch (err) {
+        console.error("Failed to bulk delete leads:", err);
+        alert(`Could not delete those leads: ${err.message}`);
+        loadAdminData();
       }
-      setLeads(prev => prev.filter(l => !selectedLeads.includes(l.id)));
-      setSelectedLeads([]);
-      setToastMessage(`${data.deleted || selectedLeads.length} lead${(data.deleted || selectedLeads.length) === 1 ? '' : 's'} moved to the Bin.`);
-      setTimeout(() => setToastMessage(''), 3000);
-    } catch (err) {
-      console.error('Failed to bulk delete leads:', err);
-      alert(`Could not delete those leads: ${err.message}`);
     }
+    setSelectedLeads([]);
   };
 
   // Save changes batch
@@ -4841,11 +4843,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       reason ? `Reason: ${reason}` : 'No moderation reason entered.',
     ])) return;
     try {
-      const { error } = await supabase.from('product_reviews').delete().eq('id', id);
-      if (!error) {
-        setReviews(reviews.filter(r => r.id !== id));
-      }
-    } catch (err) { console.error(err); }
+      // The moderation note travels with it, so the Bin says why it went.
+      await deleteToBin('product_reviews', id, { reason });
+      setReviews(reviews.filter(r => r.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert(`Could not delete that review: ${err.message}`);
+    }
   };
 
   const reviewProducts = useMemo(
@@ -4901,14 +4905,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
       note?.content && `"${String(note.content).slice(0, 80)}"`,
     ])) return;
     try {
-      const { error } = await supabase
-        .from('facebook_notifications')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await deleteToBin('facebook_notifications', id);
       setFacebookNotifications(prev => prev.filter(n => n.id !== id));
     } catch (err) {
       console.error("Failed to delete notification:", err);
+      alert(`Could not delete that alert: ${err.message}`);
     }
   };
 
@@ -5286,10 +5287,11 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
     if (!confirmDelete('blog post', [post?.title, post?.slug && `/${post.slug}`])) return;
     if (isSupabaseConfigured && supabase) {
       try {
-        await supabase.from('blogs').delete().eq('id', id);
+        await deleteToBin('blogs', id);
         setBlogs(blogs.filter(b => b.id !== id));
       } catch (err) {
         console.error("Failed to delete blog:", err);
+        alert(`Could not delete that post: ${err.message}`);
       }
     }
   };
@@ -7170,6 +7172,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           </div>
         )}
 
+        {activeTab === 'recycle_bin' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <RecycleBin />
+          </div>
+        )}
+
         {activeTab === 'payment_test' && (
           <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px' }}>
             <ErrorBoundary>
@@ -7293,14 +7301,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               onNavigate={navigateToTab}
               onWhatsAppClick={openWhatsAppComposer}
             />
-          </div>
-        )}
-
-        {activeTab === 'bin' && (
-          <div className="admin-orders-tab admin-tab-panel">
-            <ErrorBoundary>
-              <BinManager isSuperadmin={Boolean(adminProfile?.is_superadmin)} />
-            </ErrorBoundary>
           </div>
         )}
 

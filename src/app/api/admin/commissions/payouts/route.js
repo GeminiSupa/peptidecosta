@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -123,13 +124,14 @@ export async function DELETE(request) {
     }
 
     if (hardDelete) {
-      const { error: deleteError } = await supabaseAdmin
-        .from('commission_payouts')
-        .delete()
-        .eq('id', payoutId);
-
-      if (deleteError) {
-        return NextResponse.json({ error: deleteError.message }, { status: 500 });
+      // A hard-deleted payout is a money record, so it goes to the Bin like
+      // everything else rather than leaving the database outright.
+      const binned = await moveToBin(
+        { table: 'commission_payouts', ids: [payoutId], actor: actorFrom(auth.profile) },
+        supabaseAdmin,
+      );
+      if (!binned.ok) {
+        return NextResponse.json({ error: binned.error }, { status: 500 });
       }
       return NextResponse.json({ success: true, deleted: true });
     }

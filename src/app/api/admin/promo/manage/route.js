@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { parseUnitLimit, validateUnitRange } from '@/lib/promoEligibility.mjs';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 
@@ -112,9 +113,12 @@ export async function POST(request) {
 
     if (action === 'delete') {
       if (!body.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
-      const { error } = await supabase.from('promo_codes').delete().eq('id', body.id);
+      const binned = await moveToBin(
+        { table: 'promo_codes', ids: [body.id], actor: actorFrom(auth.profile) },
+        supabase,
+      );
 
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      if (!binned.ok) return NextResponse.json({ error: binned.error }, { status: 500 });
       return NextResponse.json({ ok: true, deleted: body.id });
     }
 

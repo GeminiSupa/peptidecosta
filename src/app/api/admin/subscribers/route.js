@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { emailFromLead, leadSubscriberCandidates } from '@/lib/campaignAudience.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -168,12 +169,11 @@ export async function DELETE(request) {
       return NextResponse.json({ error: 'ID is required' }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
-      .from('email_subscribers')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    const binned = await moveToBin(
+      { table: 'email_subscribers', ids: [id], actor: actorFrom(auth.profile) },
+      supabaseAdmin,
+    );
+    if (!binned.ok) throw new Error(binned.error);
 
     return NextResponse.json({ success: true });
   } catch (err) {

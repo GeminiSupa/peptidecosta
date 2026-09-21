@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { resolveLeadOwner } from '@/lib/leadOwner';
-import { stashInBin } from '@/lib/adminBin.mjs';
 import { isActiveProfile, isSubUser } from '@/lib/subUserTier.mjs';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import {
@@ -404,65 +403,5 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Lead claiming is not enabled in the database yet. Run add-lead-claiming.sql first.' }, { status: 503 });
     }
     return NextResponse.json({ error: error.message || 'Could not update lead ownership' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request) {
-  const auth = await verifyAdminSession(request);
-  if (auth.error) return auth.error;
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Malformed request' }, { status: 400 });
-  }
-
-  const ids = [
-    ...(Array.isArray(body?.ids) ? body.ids : []),
-    body?.id,
-  ].map((id) => String(id || '').trim()).filter(Boolean);
-
-  if (ids.length === 0) {
-    return NextResponse.json({ error: 'id is required' }, { status: 400 });
-  }
-
-  const supabase = getSupabaseAdmin();
-
-  try {
-    const { data: rows, error: readError } = await supabase
-      .from('catalog_leads')
-      .select('*')
-      .in('id', ids);
-
-    if (readError) throw readError;
-    if (!rows?.length) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
-    }
-
-    const binned = await stashInBin(supabase, {
-      entityType: 'lead',
-      rows,
-      deletedBy: auth.user.email || auth.profile.email || null,
-    });
-    if (!binned.ok) {
-      return NextResponse.json({ error: binned.error?.message || 'Could not copy these leads to the Bin' }, { status: 500 });
-    }
-
-    const { data: deleted, error: deleteError } = await supabase
-      .from('catalog_leads')
-      .delete()
-      .in('id', rows.map((row) => row.id))
-      .select('id');
-
-    if (deleteError) throw deleteError;
-    if (!deleted?.length) {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ ok: true, deleted: deleted.length });
-  } catch (error) {
-    console.error('[admin/leads DELETE]', error);
-    return NextResponse.json({ error: error.message || 'Could not delete lead' }, { status: 500 });
   }
 }

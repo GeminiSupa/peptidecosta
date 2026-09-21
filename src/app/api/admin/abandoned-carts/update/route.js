@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { stashInBin } from '@/lib/adminBin.mjs';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
 
@@ -34,20 +34,6 @@ export async function PATCH(request) {
 
     if (patch.cart_data !== undefined && !cartHasItems(patch.cart_data)) {
       const supabase = getSupabaseAdmin();
-      const { data: existing } = await supabase
-        .from('abandoned_carts')
-        .select('*')
-        .eq('session_id', sessionId);
-      if (existing?.length) {
-        const binned = await stashInBin(supabase, {
-          entityType: 'cart',
-          rows: existing,
-          deletedBy: auth.user.email || auth.profile.email || null,
-        });
-        if (!binned.ok) {
-          return NextResponse.json({ error: binned.error?.message || 'Could not copy this cart to the Bin' }, { status: 500 });
-        }
-      }
       const { error } = await supabase
         .from('abandoned_carts')
         .delete()
@@ -94,62 +80,49 @@ export async function DELETE(request) {
     }
 
     const supabase = getSupabaseAdmin();
-    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(cartKey));
+    const deletedIds = [];
 
-    const { data: bySession, error: sessionReadError } = await supabase
-      .from('abandoned_carts')
-      .select('*')
-      .eq('session_id', cartKey);
+    // The cart key is usually a session_id and sometimes the primary key, so
+    // this still tries both — it just goes through the Bin now, which snapshots
+    // whatever it matched before removing it.
+    const bySession = await moveToBin(
+      { table: 'abandoned_carts', ids: [cartKey], idColumn: 'session_id', actor: actorFrom(auth.profile) },
+      supabase,
+    );
 
-    if (sessionReadError) {
-      console.error('[admin/abandoned-carts/delete] session read failed:', sessionReadError.message);
-      return NextResponse.json({ error: sessionReadError.message }, { status: 500 });
+    // No match on session_id is the ordinary case for a key that is really an
+    // id, and the id attempt below covers it. Only a real failure stops here.
+    if (!bySession.ok && !bySession.notFound) {
+      console.error('[admin/abandoned-carts/delete] session delete failed:', bySession.error);
+      return NextResponse.json({ error: bySession.error }, { status: 500 });
     }
 
-    let rows = Array.isArray(bySession) ? bySession : [];
-    if (rows.length === 0 && looksLikeUuid) {
-      const { data: byId, error: idReadError } = await supabase
-        .from('abandoned_carts')
-        .select('*')
-        .eq('id', cartKey);
+    if (bySession.ok) {
+      deletedIds.push(...(bySession.rows || []).map((row) => row.id).filter(Boolean));
+    }
 
-      if (idReadError) {
-        console.error('[admin/abandoned-carts/delete] id read failed:', idReadError.message);
-        return NextResponse.json({ error: idReadError.message }, { status: 500 });
+    const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cartKey);
+    if (deletedIds.length === 0 && looksLikeUuid) {
+      const byId = await moveToBin(
+        { table: 'abandoned_carts', ids: [cartKey], actor: actorFrom(auth.profile) },
+        supabase,
+      );
+
+      if (!byId.ok && !byId.notFound) {
+        console.error('[admin/abandoned-carts/delete] id delete failed:', byId.error);
+        return NextResponse.json({ error: byId.error }, { status: 500 });
       }
-      rows = Array.isArray(byId) ? byId : [];
+
+      if (byId.ok) {
+        deletedIds.push(...(byId.rows || []).map((row) => row.id).filter(Boolean));
+      }
     }
 
-    if (rows.length === 0) {
+    if (deletedIds.length === 0) {
       return NextResponse.json({ error: 'Cart not found or already deleted' }, { status: 404 });
     }
 
-    const binned = await stashInBin(supabase, {
-      entityType: 'cart',
-      rows,
-      deletedBy: auth.user.email || auth.profile.email || null,
-    });
-    if (!binned.ok) {
-      return NextResponse.json({ error: binned.error?.message || 'Could not copy this cart to the Bin' }, { status: 500 });
-    }
-
-    const ids = rows.map((row) => row.id).filter(Boolean);
-    const { data: deleted, error: deleteError } = await supabase
-      .from('abandoned_carts')
-      .delete()
-      .in('id', ids)
-      .select('id');
-
-    if (deleteError) {
-      console.error('[admin/abandoned-carts/delete] delete failed:', deleteError.message);
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
-    }
-
-    if (!deleted?.length) {
-      return NextResponse.json({ error: 'Cart not found or already deleted' }, { status: 404 });
-    }
-
-    return NextResponse.json({ ok: true, deleted: deleted.length, cartKey });
+    return NextResponse.json({ ok: true, deleted: deletedIds.length, cartKey });
   } catch (err) {
     console.error('[admin/abandoned-carts/delete]', err);
     return NextResponse.json({ error: err.message || 'Internal error' }, { status: 500 });

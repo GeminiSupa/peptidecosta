@@ -13,6 +13,8 @@ import {
   productToDbRow,
 } from '@/lib/productSaveGuard.mjs';
 
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
+
 export const runtime = 'nodejs';
 
 const REFRESH_HINT = 'Refresh the page, then make your change again.';
@@ -137,8 +139,14 @@ export async function PUT(request) {
     }
 
     if (plan.toDelete.length > 0) {
-      const { error } = await supabase.from('products').delete().in('id', plan.toDelete);
-      if (error) throw error;
+      // A row dropped from the products sheet is a delete like any other —
+      // and the easiest one to do by accident, which is exactly why it goes
+      // to the Bin rather than straight out of the table.
+      const binned = await moveToBin(
+        { table: 'products', ids: plan.toDelete, actor: actorFrom(auth.profile), reason: 'Removed from the products sheet' },
+        supabase,
+      );
+      if (!binned.ok) throw new Error(binned.error);
     }
 
     if (toUpdate.length > 0) {

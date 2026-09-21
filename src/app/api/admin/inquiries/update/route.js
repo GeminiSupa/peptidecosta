@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
-import { stashInBin } from '@/lib/adminBin.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export async function PATCH(request) {
   const auth = await verifyAdminSession(request);
@@ -71,37 +71,13 @@ export async function DELETE(request) {
 
     const supabase = getSupabaseAdmin();
 
-    const { data: inquiry, error: readError } = await supabase
-      .from('customer_inquiries')
-      .select('*')
-      .eq('id', inquiryId)
-      .maybeSingle();
-
-    if (readError) {
-      console.error('[Inquiry Delete] Read error:', readError);
-      return NextResponse.json({ error: 'Failed to read inquiry' }, { status: 500 });
-    }
-    if (!inquiry) {
-      return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
-    }
-
-    const binned = await stashInBin(supabase, {
-      entityType: 'inquiry',
-      rows: [inquiry],
-      deletedBy: auth.user.email || auth.profile.email || null,
-    });
+    const binned = await moveToBin(
+      { table: 'customer_inquiries', ids: [inquiryId], actor: actorFrom(auth.profile) },
+      supabase,
+    );
     if (!binned.ok) {
-      return NextResponse.json({ error: binned.error?.message || 'Could not copy this inquiry to the Bin' }, { status: 500 });
-    }
-
-    const { error } = await supabase
-      .from('customer_inquiries')
-      .delete()
-      .eq('id', inquiryId);
-
-    if (error) {
-      console.error('[Inquiry Delete] Error:', error);
-      return NextResponse.json({ error: 'Failed to delete inquiry' }, { status: 500 });
+      console.error('[Inquiry Delete] Error:', binned.error);
+      return NextResponse.json({ error: binned.error }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
