@@ -115,6 +115,25 @@ test('product names and summaries cover both offers', () => {
   assert.equal(normalizeDealOffers(null).mix.enabled, false);
 });
 
+test('an admin can configure, name, and price any number of offers', () => {
+  const flexible = {
+    items: [
+      { id: 'starter', type: 'mix', enabled: true, name_en: 'Starter Saver', name_es: 'Ahorro Inicial', product_names: ['BPC-157 10mg'], min_units: 2, discount_pct: 0.10 },
+      { id: 'case', type: 'bundle', enabled: true, name_en: 'Case Bonus', name_es: 'Bono de Caja', product_names: ['Retatrutide 12mg'], buy_qty: 4, free_qty: 1 },
+      { id: 'bulk', type: 'mix', enabled: true, name_en: 'Big Cart', name_es: 'Pedido Grande', product_names: ['BPC-157 10mg'], min_units: 6, discount_pct: 0.25 },
+    ],
+  };
+
+  assert.equal(dealOffersError(flexible), '');
+  assert.equal(normalizeDealOffers(flexible).items.length, 3);
+  assert.equal(dealOfferSummaries(flexible, 'en').length, 3);
+  assert.match(dealOfferSummaries(flexible, 'en')[2], /Big Cart.*25%/);
+  const choice = chooseDealOffer(flexible, [line('BPC-157 10mg', 6, 100)]);
+  assert.equal(choice.offerId, 'bulk');
+  assert.equal(choice.savings, 150);
+  assert.equal(choice.offer.name_en, 'Big Cart');
+});
+
 test('shared rule copy includes every enforced rule and follows admin quantities', () => {
   const rules = dealOfferRuleSummaries(OFFERS, 'en');
   assert.match(rules[0], /2 or more.*10% off your entire order/);
@@ -195,6 +214,6 @@ test('the cart message says which offer applied, or how to reach one', () => {
   const deal = { offers: OFFERS };
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 2, 100)]), deal, 'en'), /10% off your whole order is applied/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('Retatrutide 12mg', 4, 150)]), deal, 'en'), /1 × Retatrutide 12mg FREE/);
-  assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 1, 100)]), deal, 'en'), /add 1 more deal vial for 10%.*or buy 4 of the same/);
+  assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 1, 100)]), deal, 'en'), /add 1 more qualifying vial for 10%.*or buy 4 of the same qualifying/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 5, 100)], { volumePct: 15 }), deal, 'es'), /descuento por volumen/);
 });

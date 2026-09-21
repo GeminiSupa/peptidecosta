@@ -206,7 +206,7 @@ export function authoritativeCheckout({
       ? effectiveVolumeDiscountPct(promo, overridePct)
       : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount)));
 
-  // Two-offer deal: exactly one of Mix & Match, Buy X Get Y, or the ordinary
+  // Flexible weekly offers: exactly one configured offer or the ordinary
   // volume tier applies — whichever saves the customer most.
   const dealOffer = dealOffers && !promo
     ? chooseDealOffer(dealOffers, requested, {
@@ -220,7 +220,7 @@ export function authoritativeCheckout({
   const promoDiscount = dealOffer?.kind === 'mix'
     // "10% off your entire order": totals.subtotal is the merchandise plus the
     // paid BAC water, so the water is discounted too.
-    ? roundCurrency(totals.subtotal * dealOffer.mix.discountPct, currency)
+    ? roundCurrency(totals.subtotal * (Number(dealOffer.offer?.discount_pct ?? dealOffer.mix.discountPct) || 0), currency)
     : promoDiscountAmount(requested, totals, promo, currency);
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);
 

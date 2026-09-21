@@ -62,18 +62,18 @@
 
 .countdown {
   display: grid;
-  gap: 4px;
-  min-width: 114px;
-  padding: 7px 8px;
-  border: 1px solid rgba(200, 83, 12, 0.2);
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 4px 12px rgba(120, 53, 15, 0.06);
+  gap: 7px;
+  min-width: 176px;
+  padding: 10px 12px;
+  border: 2px solid rgba(200, 83, 12, 0.32);
+  border-radius: 11px;
+  background: #fffaf7;
+  box-shadow: 0 6px 16px rgba(120, 53, 15, 0.12);
 }
 
 .countdown small {
   color: #9a3412;
-  font-size: 0.58rem;
+  font-size: 0.7rem;
   font-weight: 900;
   letter-spacing: 0.08em;
   line-height: 1;
@@ -94,8 +94,8 @@
   color: #7c2d12;
 }
 
-.countdownUnits b { font-size: 0.74rem; line-height: 1; font-variant-numeric: tabular-nums; }
-.countdownUnits em { color: #c2410c; font-size: 0.53rem; font-style: normal; font-weight: 800; }
+.countdownUnits b { color: #431407; font-size: 1rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.countdownUnits em { color: #9a3412; font-size: 0.66rem; font-style: normal; font-weight: 900; }
 
 @media (max-width: 700px) {
   .spotlight { grid-template-columns: 1fr; padding: 21px; }
@@ -105,9 +105,10 @@
 @media (max-width: 430px) {
   .strip { gap: 7px; padding-inline: 9px; font-size: 0.82rem; }
   .stripIcon { font-size: 1rem; }
-  .countdown { min-width: 100px; padding-inline: 5px; }
+  .countdown { min-width: 126px; padding: 8px 7px; }
   .countdownUnits { gap: 1px; }
-  .countdownUnits b { font-size: 0.68rem; }
+  .countdownUnits b { font-size: 0.82rem; }
+  .countdownUnits em { font-size: 0.57rem; }
 }
 
 @media (max-width: 350px) {

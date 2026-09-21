@@ -10,7 +10,7 @@ import { useDealPageExperiment } from '@/hooks/useDealPageExperiment';
 import { useSharedCart } from '@/hooks/useSharedCart';
 import { PRODUCT_SELECT } from '@/lib/catalogProducts';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
-import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferRuleSummaries, normalizeDealOffers } from '@/lib/dealOffers.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferRuleSummaries, dealOfferSummaries, normalizeDealOffers } from '@/lib/dealOffers.mjs';
 import { isBacWater } from '@/lib/bacWater.mjs';
 import { getVolumeDiscountPct } from '@/lib/pricing';
 import { StorefrontFooter, StorefrontHeader } from '@/components/StorefrontChrome';
@@ -118,12 +118,18 @@ export default function DealOfTheWeekPage() {
   const ready = Boolean(variant) && deal !== undefined && (!deal || productsReady) && (en || rateReady);
   const pct = deal ? Math.round(Number(deal.discount_pct || 0) * 100) : 0;
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
-  // Two-offer deal: Mix & Match (% off the whole order) and Buy X Get Y free.
+  // A flexible list of percentage and Buy/Get-Free offers. Checkout compares
+  // every qualifying entry and applies only the one that saves the most.
   const offersDeal = dealPricingMode(deal) === OFFERS_PRICING_MODE;
   const offers = normalizeDealOffers(deal?.offers);
-  const mixPct = Math.round(offers.mix.discount_pct * 100);
-  const mixKeys = new Set(offers.mix.enabled ? offers.mix.product_names.map(nameKey) : []);
-  const bundleKeys = new Set(offers.bundle.enabled ? offers.bundle.product_names.map(nameKey) : []);
+  const activeOffers = offers.items.filter((offer) => offer.enabled);
+  const offerSummaries = offersDeal ? dealOfferSummaries(deal?.offers, lang) : [];
+  const bundleKeys = new Set(activeOffers
+    .filter((offer) => offer.type === 'bundle')
+    .flatMap((offer) => offer.product_names.map(nameKey)));
+  const offersForProduct = (productName) => activeOffers.filter((offer) => (
+    offer.product_names.some((name) => nameKey(name) === nameKey(productName))
+  ));
   const minUnits = dealMinUnits(deal);
   const maxUnits = dealMaxUnits(deal);
   const productCount = (deal?.product_names || []).length;
@@ -246,15 +252,15 @@ export default function DealOfTheWeekPage() {
     bundleKeys.has(nameKey(product.product)) ? Math.max(best, priceNumber(product.price_usd)) : best
   ), 0);
   const offerHeadline = () => {
-    if (variant === 'b') return en ? 'Two ways to save this week' : 'Dos formas de ahorrar esta semana';
-    const parts = [];
-    if (offers.bundle.enabled) {
-      parts.push(maxFreeVial > 0
-        ? (en ? `Free vials worth up to ${money(maxFreeVial)}` : `Viales gratis de hasta ${money(maxFreeVial)}`)
-        : (en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty} y llévate ${offers.bundle.free_qty} gratis`));
+    if (variant === 'b') {
+      return en
+        ? `${activeOffers.length} ${activeOffers.length === 1 ? 'way' : 'ways'} to save this week`
+        : `${activeOffers.length} ${activeOffers.length === 1 ? 'forma' : 'formas'} de ahorrar esta semana`;
     }
-    if (offers.mix.enabled) parts.push(en ? `${mixPct}% off your whole order` : `${mixPct}% de descuento en todo tu pedido`);
-    return parts.join(en ? ' or ' : ' o ');
+    if (maxFreeVial > 0 && activeOffers.length === 1 && activeOffers[0].type === 'bundle') {
+      return en ? `Free vials worth up to ${money(maxFreeVial)}` : `Viales gratis de hasta ${money(maxFreeVial)}`;
+    }
+    return offerSummaries.join(en ? ' or ' : ' o ');
   };
 
   const headline = !deal ? '' : offersDeal ? offerHeadline() : variant === 'b'
@@ -294,12 +300,10 @@ export default function DealOfTheWeekPage() {
                 )}
                 {savingLabel(price) && <span className={styles.saving}>{savingLabel(price)}</span>}
                 {bulk && price && <span className={styles.priceNote}>{en ? `each, at ${minUnits}+ vials` : `c/u, con ${minUnits}+ viales`}</span>}
-                {offersDeal && bundleKeys.has(nameKey(product.product)) && (
-                  <span className={styles.saving}>{en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty}, llévate ${offers.bundle.free_qty} gratis`}</span>
-                )}
-                {offersDeal && mixKeys.has(nameKey(product.product)) && (
-                  <span className={styles.priceNote}>{en ? `Counts toward ${mixPct}% off with ${offers.mix.min_units}+ vials` : `Cuenta para el ${mixPct}% con ${offers.mix.min_units}+ viales`}</span>
-                )}
+                {offersDeal && offersForProduct(product.product).map((offer) => {
+                  const summary = dealOfferSummaries({ items: [offer] }, lang)[0];
+                  return <span key={offer.id} className={offer.type === 'bundle' ? styles.saving : styles.priceNote}>{summary}</span>;
+                })}
                 {soldOut
                   ? <span className={styles.soldOut}>{en ? 'Sold out' : 'Agotado'}</span>
                   : qtyOf(product.product) > 0
@@ -362,18 +366,15 @@ export default function DealOfTheWeekPage() {
               <p className={styles.lead}>
                 {offersDeal
                   ? (en
-                    ? 'Two offers this week, applied automatically at checkout. If your order qualifies for both, you get whichever saves you more.'
-                    : 'Dos ofertas esta semana, aplicadas automáticamente al pagar. Si tu pedido califica para ambas, recibes la que más te ahorra.')
+                    ? `${activeOffers.length} ${activeOffers.length === 1 ? 'offer' : 'offers'} this week, applied automatically at checkout. If your order qualifies for more than one, you get whichever saves you most.`
+                    : `${activeOffers.length} ${activeOffers.length === 1 ? 'oferta' : 'ofertas'} esta semana, aplicadas automáticamente al pagar. Si tu pedido califica para más de una, recibes la que más te ahorra.`)
                   : bulk
                   ? (en ? `Mix and match any ${minUnits} or more vials from the ${productCount} products below. The discount applies automatically at checkout.` : `Combina ${minUnits} o más viales de los ${productCount} productos de abajo. El descuento se aplica automáticamente al pagar.`)
                   : (en ? 'The prices below are already marked down. No code needed.' : 'Los precios de abajo ya tienen el descuento. Sin código.')}
               </p>
               <div className={styles.facts}>
                 {offersDeal ? (
-                  <>
-                    {offers.mix.enabled && <span><strong>{mixPct}%</strong>{en ? `off everything, ${offers.mix.min_units}+ vials` : `en todo, ${offers.mix.min_units}+ viales`}</span>}
-                    {offers.bundle.enabled && <span><strong>{offers.bundle.buy_qty}+{offers.bundle.free_qty}</strong>{en ? 'free vial, same product' : 'vial gratis, mismo producto'}</span>}
-                  </>
+                  offerSummaries.map((summary, index) => <span key={`${summary}-${index}`}><strong>{index + 1}</strong>{summary}</span>)
                 ) : maxSaving > 0
                   ? <span><strong>{money(maxSaving)}</strong>{en ? 'max. saved per vial' : 'máx. de ahorro por vial'}</span>
                   : <span><strong>{pct}%</strong>{en ? 'off' : 'de descuento'}</span>}
@@ -395,8 +396,7 @@ export default function DealOfTheWeekPage() {
               {eyebrow}
               <h1>{headline}</h1>
               <p className={styles.summaryLine}>
-                {offersDeal && offers.mix.enabled && <span><Tag aria-hidden="true" />{en ? `${mixPct}% off with ${offers.mix.min_units}+ vials` : `${mixPct}% desc. con ${offers.mix.min_units}+ viales`}</span>}
-                {offersDeal && offers.bundle.enabled && <span><Tag aria-hidden="true" />{en ? `Buy ${offers.bundle.buy_qty}, get ${offers.bundle.free_qty} free` : `Compra ${offers.bundle.buy_qty}, llévate ${offers.bundle.free_qty} gratis`}</span>}
+                {offersDeal && offerSummaries.map((summary, index) => <span key={`${summary}-${index}`}><Tag aria-hidden="true" />{summary}</span>)}
                 {!offersDeal && <span><Tag aria-hidden="true" />{bulk ? (en ? `${pct}% off ${minUnits}+ vials` : `${pct}% desc. en ${minUnits}+ viales`) : (en ? `${pct}% off` : `${pct}% de descuento`)}</span>}
                 <span><PackageCheck aria-hidden="true" />{en ? 'Limited stock' : 'Inventario limitado'}</span>
               </p>

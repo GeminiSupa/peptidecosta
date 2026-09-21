@@ -55,9 +55,14 @@ function dealTerms({ discountPct, pricingMode, minUnits, maxUnits, offers }) {
     const problem = dealOffersError(offers);
     if (problem) throw new Error(problem);
     const clean = normalizeDealOffers(offers);
-    const mixPct = clean.mix.enabled ? clean.mix.discount_pct : 0;
-    const bundlePct = clean.bundle.enabled ? clean.bundle.free_qty / (clean.bundle.buy_qty + clean.bundle.free_qty) : 0;
-    return { pct: Math.max(mixPct, bundlePct), mode: OFFERS_PRICING_MODE, minimum: 0, maximum: 0, offers: clean };
+    const maximumEffectivePct = clean.items.reduce((maximum, item) => {
+      if (!item.enabled) return maximum;
+      const pct = item.type === 'bundle'
+        ? item.free_qty / (item.buy_qty + item.free_qty)
+        : item.discount_pct;
+      return Math.max(maximum, pct);
+    }, 0);
+    return { pct: maximumEffectivePct, mode: OFFERS_PRICING_MODE, minimum: 0, maximum: 0, offers: clean };
   }
   const pct = Number(discountPct);
   const mode = pricingMode === 'bulk_threshold' ? 'bulk_threshold' : 'shelf';

@@ -1,5 +1,6 @@
 /**
- * Two-offer Deal of the Week: "Mix & Match" and "Buy X, Get Y Free".
+ * Flexible Deal of the Week offers. Admins can add any number of two proven
+ * pricing mechanics: "Mix & Match" and "Buy X, Get Y Free".
  *
  *   Mix & Match — N or more vials from the chosen products takes a percentage
  *   off the WHOLE order, BAC water included. BAC water never counts toward N.
@@ -22,6 +23,8 @@
 import { isBacWater } from './bacWater.mjs';
 
 export const OFFERS_PRICING_MODE = 'offers';
+export const MIX_OFFER_TYPE = 'mix';
+export const BUNDLE_OFFER_TYPE = 'bundle';
 
 const nameKey = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -36,52 +39,74 @@ function names(list) {
     .filter(Boolean))];
 }
 
-/** A stored or posted offers object, cleaned into one fixed shape. */
+function offerId(value, index, type) {
+  const clean = String(value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+  return clean || `${type}-${index + 1}`;
+}
+
+function rawOfferItems(raw) {
+  if (Array.isArray(raw?.items)) return raw.items;
+  const items = [];
+  if (raw?.mix) items.push({ ...raw.mix, type: MIX_OFFER_TYPE, id: raw.mix.id || 'mix-1' });
+  if (raw?.bundle) items.push({ ...raw.bundle, type: BUNDLE_OFFER_TYPE, id: raw.bundle.id || 'bundle-1' });
+  return items;
+}
+
+function normalizeOffer(raw, index) {
+  const type = raw?.type === BUNDLE_OFFER_TYPE ? BUNDLE_OFFER_TYPE : MIX_OFFER_TYPE;
+  const base = {
+    id: offerId(raw?.id, index, type),
+    type,
+    enabled: raw?.enabled === true,
+    product_names: names(raw?.product_names),
+    name_en: String(raw?.name_en || '').trim().slice(0, 100),
+    name_es: String(raw?.name_es || '').trim().slice(0, 100),
+  };
+  return type === BUNDLE_OFFER_TYPE
+    ? { ...base, buy_qty: Math.max(1, toInt(raw?.buy_qty, 4)), free_qty: Math.max(1, toInt(raw?.free_qty, 1)) }
+    : { ...base, min_units: Math.max(1, toInt(raw?.min_units, 2)), discount_pct: Number(raw?.discount_pct) || 0 };
+}
+
+const disabledMix = () => ({ id: 'mix-1', type: MIX_OFFER_TYPE, enabled: false, product_names: [], name_en: '', name_es: '', min_units: 2, discount_pct: 0 });
+const disabledBundle = () => ({ id: 'bundle-1', type: BUNDLE_OFFER_TYPE, enabled: false, product_names: [], name_en: '', name_es: '', buy_qty: 4, free_qty: 1 });
+
+/** A stored or posted offers object, cleaned into one extensible shape. */
 export function normalizeDealOffers(raw) {
-  const mix = raw?.mix || {};
-  const bundle = raw?.bundle || {};
+  const items = rawOfferItems(raw).map(normalizeOffer);
   return {
-    mix: {
-      enabled: mix.enabled === true,
-      product_names: names(mix.product_names),
-      min_units: Math.max(1, toInt(mix.min_units, 2)),
-      discount_pct: Number(mix.discount_pct) || 0,
-    },
-    bundle: {
-      enabled: bundle.enabled === true,
-      product_names: names(bundle.product_names),
-      buy_qty: Math.max(1, toInt(bundle.buy_qty, 4)),
-      free_qty: Math.max(1, toInt(bundle.free_qty, 1)),
-    },
+    items,
+    // Compatibility fields keep old deals and older callers working while the
+    // flexible builder stores any number of offers in `items`.
+    mix: items.find((item) => item.type === MIX_OFFER_TYPE) || disabledMix(),
+    bundle: items.find((item) => item.type === BUNDLE_OFFER_TYPE) || disabledBundle(),
   };
 }
 
 /** Every product either offer covers, for matching, attribution and the page. */
 export function dealOfferProductNames(offers) {
   const clean = normalizeDealOffers(offers);
-  return names([
-    ...(clean.mix.enabled ? clean.mix.product_names : []),
-    ...(clean.bundle.enabled ? clean.bundle.product_names : []),
-  ]);
+  return names(clean.items.filter((item) => item.enabled).flatMap((item) => item.product_names));
 }
 
 /** '' when the offers can be launched, otherwise what the admin must fix. */
 export function dealOffersError(offers) {
-  const mix = offers?.mix || {};
-  const bundle = offers?.bundle || {};
-  if (mix.enabled !== true && bundle.enabled !== true) return 'Turn on at least one offer.';
-  if (mix.enabled === true) {
-    if (names(mix.product_names).length === 0) return 'Mix & Match: choose which products qualify.';
-    if (!Number.isInteger(Number(mix.min_units)) || Number(mix.min_units) < 1) return 'Mix & Match: the vial minimum must be a whole number of 1 or more.';
-    if (!(Number(mix.discount_pct) > 0 && Number(mix.discount_pct) < 1)) return 'Mix & Match: the discount must be between 1% and 99%.';
-    if (names(mix.product_names).some(isBacWater)) return 'Mix & Match: BAC Water cannot be an offer product.';
-  }
-  if (bundle.enabled === true) {
-    if (names(bundle.product_names).length === 0) return 'Buy & Get Free: choose which products qualify.';
-    if (!Number.isInteger(Number(bundle.buy_qty)) || Number(bundle.buy_qty) < 1) return 'Buy & Get Free: the buy quantity must be a whole number of 1 or more.';
-    if (!Number.isInteger(Number(bundle.free_qty)) || Number(bundle.free_qty) < 1) return 'Buy & Get Free: the free quantity must be a whole number of 1 or more.';
-    if (Number(bundle.free_qty) > Number(bundle.buy_qty)) return 'Buy & Get Free: the free vials cannot outnumber the vials bought.';
-    if (names(bundle.product_names).some(isBacWater)) return 'Buy & Get Free: BAC Water cannot be an offer product.';
+  const items = rawOfferItems(offers);
+  if (!items.some((item) => item?.enabled === true)) return 'Turn on at least one offer.';
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index] || {};
+    if (item.enabled !== true) continue;
+    const label = `Offer #${index + 1}`;
+    if (![MIX_OFFER_TYPE, BUNDLE_OFFER_TYPE].includes(item.type)) return `${label}: choose a supported offer type.`;
+    if (names(item.product_names).length === 0) return `${label}: choose which products qualify.`;
+    if (names(item.product_names).some(isBacWater)) return `${label}: BAC Water cannot be an offer product.`;
+    if (item.type === MIX_OFFER_TYPE) {
+      if (!Number.isInteger(Number(item.min_units)) || Number(item.min_units) < 1) return `${label}: the vial minimum must be a whole number of 1 or more.`;
+      if (!(Number(item.discount_pct) > 0 && Number(item.discount_pct) < 1)) return `${label}: the discount must be between 1% and 99%.`;
+    } else {
+      if (!Number.isInteger(Number(item.buy_qty)) || Number(item.buy_qty) < 1) return `${label}: the buy quantity must be a whole number of 1 or more.`;
+      if (!Number.isInteger(Number(item.free_qty)) || Number(item.free_qty) < 1) return `${label}: the free quantity must be a whole number of 1 or more.`;
+      if (Number(item.free_qty) > Number(item.buy_qty)) return `${label}: the free vials cannot outnumber the vials bought.`;
+    }
   }
   return '';
 }
@@ -105,78 +130,89 @@ export function dealOffersError(offers) {
  */
 export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge = 0 } = {}) {
   const clean = normalizeDealOffers(offers);
-  const mixKeys = new Set(clean.mix.product_names.map(nameKey));
-  const bundleKeys = new Set(clean.bundle.product_names.map(nameKey));
-
   let merchSubtotal = 0;
-  let mixUnits = 0;
-  const bundleQty = new Map();
-
+  const paidLines = [];
   for (const line of lines || []) {
     const qty = Math.max(0, toInt(line?.qty, 0));
     if (!qty || isBacWater(line?.product)) continue;
     const unitPrice = Number(line?.unitPrice) || 0;
     merchSubtotal += unitPrice * qty;
-    const key = nameKey(line.product);
-    if (clean.mix.enabled && mixKeys.has(key)) mixUnits += qty;
-    if (clean.bundle.enabled && bundleKeys.has(key)) {
+    paidLines.push({ ...line, qty, unitPrice, key: nameKey(line.product) });
+  }
+
+  const offerResults = clean.items.filter((item) => item.enabled).map((item) => {
+    const eligibleKeys = new Set(item.product_names.map(nameKey));
+    if (item.type === MIX_OFFER_TYPE) {
+      const units = paidLines.reduce((sum, line) => sum + (eligibleKeys.has(line.key) ? line.qty : 0), 0);
+      const qualifies = units >= item.min_units;
+      const savings = qualifies ? item.discount_pct * (merchSubtotal + (Number(bacCharge) || 0)) : 0;
+      return { id: item.id, type: item.type, config: item, qualifies, savings, units, minUnits: item.min_units };
+    }
+
+    const quantities = new Map();
+    for (const line of paidLines) {
+      if (!eligibleKeys.has(line.key)) continue;
       // One product can arrive on two lines; the vials still count together.
-      const entry = bundleQty.get(key) || { product: line.product, qty: 0, unitPrice, inventoryCount: line.inventoryCount };
-      entry.qty += qty;
-      bundleQty.set(key, entry);
+      const entry = quantities.get(line.key) || { product: line.product, qty: 0, unitPrice: line.unitPrice, inventoryCount: line.inventoryCount };
+      entry.qty += line.qty;
+      quantities.set(line.key, entry);
     }
-  }
-
-  const mixQualifies = clean.mix.enabled && mixUnits >= clean.mix.min_units;
-  const mixSavings = mixQualifies ? clean.mix.discount_pct * (merchSubtotal + (Number(bacCharge) || 0)) : 0;
-
-  const freeLines = [];
-  const shortByStock = [];
-  for (const entry of bundleQty.values()) {
-    let free = Math.floor(entry.qty / clean.bundle.buy_qty) * clean.bundle.free_qty;
-    if (free <= 0) continue;
-    const tracked = entry.inventoryCount !== null && entry.inventoryCount !== undefined && entry.inventoryCount !== '';
-    if (tracked) {
-      // A free vial has to exist to be given; the paid ones take stock first.
-      const spare = Math.max(0, toInt(entry.inventoryCount, 0) - entry.qty);
-      if (spare < free) {
-        shortByStock.push(entry.product);
-        free = spare;
+    const freeLines = [];
+    const shortByStock = [];
+    for (const entry of quantities.values()) {
+      let free = Math.floor(entry.qty / item.buy_qty) * item.free_qty;
+      if (free <= 0) continue;
+      const tracked = entry.inventoryCount !== null && entry.inventoryCount !== undefined && entry.inventoryCount !== '';
+      if (tracked) {
+        // A free vial has to exist to be given; the paid ones take stock first.
+        const spare = Math.max(0, toInt(entry.inventoryCount, 0) - entry.qty);
+        if (spare < free) {
+          shortByStock.push(entry.product);
+          free = spare;
+        }
       }
+      if (free > 0) freeLines.push({ product: entry.product, qty: free, unitPrice: entry.unitPrice });
     }
-    if (free > 0) freeLines.push({ product: entry.product, qty: free, unitPrice: entry.unitPrice });
-  }
-  const bundleSavings = freeLines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
-  const bundleQualifies = clean.bundle.enabled && freeLines.length > 0;
+    const savings = freeLines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
+    return { id: item.id, type: item.type, config: item, qualifies: freeLines.length > 0, savings, freeLines, shortByStock };
+  });
 
   const volumeSavings = Math.max(0, Number(volumePct) || 0) / 100 * merchSubtotal;
 
-  // Strictly greater wins, checked offer-first, so an exact tie goes to the
-  // deal the customer came for rather than the everyday tier.
-  let kind = 'none';
-  let savings = 0;
-  if (mixQualifies && mixSavings > savings) { kind = 'mix'; savings = mixSavings; }
-  if (bundleQualifies && bundleSavings > savings) { kind = 'bundle'; savings = bundleSavings; }
-  if (volumeSavings > savings) { kind = 'volume'; savings = volumeSavings; }
+  // Strictly greater wins, in the admin's displayed order. An exact tie stays
+  // with the first weekly offer rather than silently switching to another one.
+  let winner = null;
+  for (const result of offerResults) {
+    if (result.qualifies && result.savings > (winner?.savings || 0)) winner = result;
+  }
+  let kind = winner?.type || 'none';
+  let savings = winner?.savings || 0;
+  if (volumeSavings > savings) { kind = 'volume'; savings = volumeSavings; winner = null; }
+
+  const firstMix = offerResults.find((item) => item.type === MIX_OFFER_TYPE);
+  const firstBundle = offerResults.find((item) => item.type === BUNDLE_OFFER_TYPE);
 
   return {
     kind,
     savings,
+    offerId: winner?.id || null,
+    offer: winner?.config || null,
+    offers: offerResults,
     mix: {
-      enabled: clean.mix.enabled,
-      units: mixUnits,
-      minUnits: clean.mix.min_units,
-      qualifies: mixQualifies,
-      discountPct: clean.mix.discount_pct,
-      savings: mixSavings,
+      enabled: Boolean(firstMix),
+      units: firstMix?.units || 0,
+      minUnits: firstMix?.config.min_units || 0,
+      qualifies: firstMix?.qualifies || false,
+      discountPct: firstMix?.config.discount_pct || 0,
+      savings: firstMix?.savings || 0,
     },
     bundle: {
-      enabled: clean.bundle.enabled,
-      qualifies: bundleQualifies,
-      freeLines: kind === 'bundle' ? freeLines : [],
-      possibleFreeLines: freeLines,
-      savings: bundleSavings,
-      shortByStock,
+      enabled: Boolean(firstBundle),
+      qualifies: firstBundle?.qualifies || false,
+      freeLines: kind === BUNDLE_OFFER_TYPE ? (winner?.freeLines || []) : [],
+      possibleFreeLines: firstBundle?.freeLines || [],
+      savings: firstBundle?.savings || 0,
+      shortByStock: firstBundle?.shortByStock || [],
     },
     volumeSavings,
   };
@@ -188,26 +224,46 @@ export function freeVialLine(product, qty, lang = 'es') {
   return { product: `${product} ${isEn ? '(Free Gift)' : '(Regalo)'}`, qty, price: 0 };
 }
 
+function offerDisplayName(item, lang) {
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  return String(isEn ? item?.name_en : item?.name_es).trim();
+}
+
+function offerSummary(item, lang = 'en') {
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  const customName = offerDisplayName(item, lang);
+  const terms = item.type === BUNDLE_OFFER_TYPE
+    ? (isEn
+      ? `Buy ${item.buy_qty} of the same vial, get ${item.free_qty} free`
+      : `Compra ${item.buy_qty} del mismo vial y llévate ${item.free_qty} gratis`)
+    : (isEn
+      ? `Buy ${item.min_units}+ vials, get ${Math.round(item.discount_pct * 100)}% off your whole order`
+      : `Compra ${item.min_units}+ viales y obtén ${Math.round(item.discount_pct * 100)}% de descuento en todo tu pedido`);
+  return customName ? `${customName}: ${terms}` : terms;
+}
+
 /** One line for the cart: which offer applied, or how to reach one. */
 export function dealOfferCartMessage(choice, deal, lang = 'en') {
   if (!choice) return '';
   const isEn = String(lang).toLowerCase().startsWith('en');
   const clean = normalizeDealOffers(deal?.offers);
-  const pct = Math.round(clean.mix.discount_pct * 100);
+  const winning = choice.offer || clean.items.find((item) => item.id === choice.offerId);
+  const winningResult = choice.offers?.find((item) => item.id === choice.offerId);
 
-  if (choice.kind === 'mix') {
+  if (choice.kind === MIX_OFFER_TYPE && winning) {
+    const pct = Math.round(winning.discount_pct * 100);
     return isEn
-      ? `Deal of the Week: ${pct}% off your whole order is applied. Offers do not stack.`
-      : `Oferta de la Semana: ${pct}% de descuento en todo tu pedido aplicado. Las ofertas no se acumulan.`;
+      ? `Deal of the Week — ${offerDisplayName(winning, lang) || 'Mix & Match'}: ${pct}% off your whole order is applied. Offers do not stack.`
+      : `Oferta de la Semana — ${offerDisplayName(winning, lang) || 'Combina'}: ${pct}% de descuento en todo tu pedido aplicado. Las ofertas no se acumulan.`;
   }
-  if (choice.kind === 'bundle') {
-    const free = choice.bundle.freeLines.map((line) => `${line.qty} × ${line.product}`).join(', ');
-    const short = choice.bundle.shortByStock.length
+  if (choice.kind === BUNDLE_OFFER_TYPE && winning) {
+    const free = (winningResult?.freeLines || []).map((line) => `${line.qty} × ${line.product}`).join(', ');
+    const short = winningResult?.shortByStock?.length
       ? (isEn ? ' (limited by stock)' : ' (limitado por inventario)')
       : '';
     return isEn
-      ? `Deal of the Week: ${free} FREE added to your order${short}. Offers do not stack.`
-      : `Oferta de la Semana: ${free} GRATIS en tu pedido${short}. Las ofertas no se acumulan.`;
+      ? `Deal of the Week — ${offerDisplayName(winning, lang) || 'Buy & Get Free'}: ${free} FREE added to your order${short}. Offers do not stack.`
+      : `Oferta de la Semana — ${offerDisplayName(winning, lang) || 'Compra y recibe gratis'}: ${free} GRATIS en tu pedido${short}. Las ofertas no se acumulan.`;
   }
   if (choice.kind === 'volume') {
     return isEn
@@ -215,18 +271,19 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       : 'Tu descuento por volumen ahorra más que las ofertas de esta semana, así que se aplica ese.';
   }
 
-  const hints = [];
-  if (clean.mix.enabled) {
-    const toGo = Math.max(0, clean.mix.min_units - choice.mix.units);
-    hints.push(isEn
-      ? `add ${toGo} more deal ${toGo === 1 ? 'vial' : 'vials'} for ${pct}% off your whole order`
-      : `agrega ${toGo} ${toGo === 1 ? 'vial' : 'viales'} más de la oferta para ${pct}% de descuento en todo tu pedido`);
-  }
-  if (clean.bundle.enabled) {
-    hints.push(isEn
-      ? `buy ${clean.bundle.buy_qty} of the same deal vial to get ${clean.bundle.free_qty} free`
-      : `compra ${clean.bundle.buy_qty} del mismo vial de la oferta y llévate ${clean.bundle.free_qty} gratis`);
-  }
+  const hints = clean.items.filter((item) => item.enabled).map((item) => {
+    const result = choice.offers?.find((candidate) => candidate.id === item.id);
+    if (item.type === MIX_OFFER_TYPE) {
+      const toGo = Math.max(0, item.min_units - (result?.units || 0));
+      const pct = Math.round(item.discount_pct * 100);
+      return isEn
+        ? `add ${toGo} more qualifying ${toGo === 1 ? 'vial' : 'vials'} for ${pct}% off your whole order`
+        : `agrega ${toGo} ${toGo === 1 ? 'vial participante' : 'viales participantes'} para ${pct}% de descuento en todo tu pedido`;
+    }
+    return isEn
+      ? `buy ${item.buy_qty} of the same qualifying vial to get ${item.free_qty} free`
+      : `compra ${item.buy_qty} del mismo vial participante y llévate ${item.free_qty} gratis`;
+  });
   const joined = hints.join(isEn ? ', or ' : ', o ');
   return isEn
     ? `Deal of the Week: ${joined}.`
@@ -236,21 +293,7 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
 /** Short offer summaries for banners, the bot and broadcasts. */
 export function dealOfferSummaries(offers, lang = 'en') {
   const clean = normalizeDealOffers(offers);
-  const isEn = String(lang).toLowerCase().startsWith('en');
-  const out = [];
-  if (clean.mix.enabled) {
-    const pct = Math.round(clean.mix.discount_pct * 100);
-    out.push(isEn
-      ? `Buy ${clean.mix.min_units}+ vials, get ${pct}% off your whole order`
-      : `Compra ${clean.mix.min_units}+ viales y obtén ${pct}% de descuento en todo tu pedido`);
-  }
-  if (clean.bundle.enabled) {
-    const { buy_qty: buy, free_qty: free } = clean.bundle;
-    out.push(isEn
-      ? `Buy ${buy} of the same vial, get ${free} free`
-      : `Compra ${buy} del mismo vial y llévate ${free} gratis`);
-  }
-  return out;
+  return clean.items.filter((item) => item.enabled).map((item) => offerSummary(item, lang));
 }
 
 /**
@@ -265,27 +308,34 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
   const isEn = String(lang).toLowerCase().startsWith('en');
   const rules = [];
 
-  if (clean.mix.enabled) {
-    const pct = Math.round(clean.mix.discount_pct * 100);
-    rules.push(isEn
-      ? `Mix & Match: buy ${clean.mix.min_units} or more qualifying peptide vials in any combination and get ${pct}% off your entire order.`
-      : `Combina: compra ${clean.mix.min_units} o más viales de péptidos participantes en cualquier combinación y obtén ${pct}% de descuento en todo tu pedido.`);
-  }
-  if (clean.bundle.enabled) {
-    const { buy_qty: buy, free_qty: free } = clean.bundle;
-    rules.push(isEn
-      ? `Buy & Get Free: every ${buy} paid vials of the exact same product and size add ${free} more of that same item free (${buy * 2} → ${free * 2} free, ${buy * 3} → ${free * 3} free).`
-      : `Compra y recibe gratis: cada ${buy} viales pagados del mismo producto y tamaño agregan ${free} más del mismo artículo gratis (${buy * 2} → ${free * 2} gratis, ${buy * 3} → ${free * 3} gratis).`);
+  for (const item of clean.items.filter((offer) => offer.enabled)) {
+    const customName = offerDisplayName(item, lang);
+    const prefix = customName || (item.type === MIX_OFFER_TYPE
+      ? (isEn ? 'Mix & Match' : 'Combina')
+      : (isEn ? 'Buy & Get Free' : 'Compra y recibe gratis'));
+    if (item.type === MIX_OFFER_TYPE) {
+      const pct = Math.round(item.discount_pct * 100);
+      rules.push(isEn
+        ? `${prefix}: buy ${item.min_units} or more qualifying peptide vials in any combination and get ${pct}% off your entire order.`
+        : `${prefix}: compra ${item.min_units} o más viales de péptidos participantes en cualquier combinación y obtén ${pct}% de descuento en todo tu pedido.`);
+    } else {
+      const { buy_qty: buy, free_qty: free } = item;
+      rules.push(isEn
+        ? `${prefix}: every ${buy} paid vials of the exact same product and size add ${free} more of that same item free (${buy * 2} → ${free * 2} free, ${buy * 3} → ${free * 3} free).`
+        : `${prefix}: cada ${buy} viales pagados del mismo producto y tamaño agregan ${free} más del mismo artículo gratis (${buy * 2} → ${free * 2} gratis, ${buy * 3} → ${free * 3} gratis).`);
+    }
   }
 
   rules.push(isEn
     ? 'If more than one deal or the normal volume discount qualifies, checkout automatically applies only the option that saves the customer the most. Promo codes and promotions never stack.'
     : 'Si califica más de una oferta o el descuento normal por volumen, el pago aplica automáticamente solo la opción que más ahorra al cliente. Los códigos y promociones nunca se acumulan.');
-  if (clean.mix.enabled && clean.bundle.enabled) {
+  const hasMix = clean.items.some((item) => item.enabled && item.type === MIX_OFFER_TYPE);
+  const hasBundle = clean.items.some((item) => item.enabled && item.type === BUNDLE_OFFER_TYPE);
+  if (hasMix && hasBundle) {
     rules.push(isEn
       ? 'BAC Water does not count toward the Mix & Match minimum and cannot earn a free vial. Once Mix & Match is unlocked, its whole-order discount still includes BAC Water.'
       : 'El agua bacteriostática no cuenta para el mínimo de Combina y no puede generar un vial gratis. Cuando se activa Combina, su descuento para todo el pedido sí incluye el agua bacteriostática.');
-  } else if (clean.mix.enabled) {
+  } else if (hasMix) {
     rules.push(isEn
       ? 'BAC Water does not count toward the Mix & Match minimum. Once the offer is unlocked, its whole-order discount still includes BAC Water.'
       : 'El agua bacteriostática no cuenta para el mínimo de Combina. Cuando se activa la oferta, su descuento para todo el pedido sí incluye el agua bacteriostática.');

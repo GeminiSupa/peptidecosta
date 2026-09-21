@@ -5002,6 +5002,123 @@
   margin: 0 0 18px;
 }
 
+/* Flexible Deal of the Week offer builder */
+.weekly-deal-offer-builder {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.weekly-deal-offer-card {
+    padding: 14px;
+    border: 1px solid color-mix(in srgb, var(--offer-accent) 48%, #334155);
+    border-radius: 11px;
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.weekly-deal-offer-card.is-disabled {
+    opacity: 0.62;
+}
+
+.weekly-deal-offer-head,
+.weekly-deal-offer-actions,
+.weekly-deal-add-offer-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+}
+
+.weekly-deal-offer-head {
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.weekly-deal-offer-head > label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--offer-accent);
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.weekly-deal-offer-actions button {
+    padding: 4px 8px;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #111c30;
+    color: #cbd5e1;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.weekly-deal-offer-actions button:hover:not(:disabled) {
+    border-color: var(--offer-accent);
+    color: #fff;
+}
+
+.weekly-deal-offer-actions button.is-danger {
+    border-color: rgba(248, 113, 113, 0.45);
+    color: #fca5a5;
+}
+
+.weekly-deal-offer-actions button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+.weekly-deal-offer-type-row,
+.weekly-deal-offer-names,
+.weekly-deal-offer-terms {
+    display: grid;
+    gap: 10px;
+}
+
+.weekly-deal-offer-type-row {
+    margin-bottom: 10px;
+}
+
+.weekly-deal-offer-names,
+.weekly-deal-offer-terms {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.weekly-deal-offer-card .admin-input {
+    width: 100%;
+}
+
+.weekly-deal-offer-explanation {
+    margin: 8px 0 10px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.weekly-deal-add-offer-row {
+    margin-bottom: 14px;
+}
+
+.weekly-deal-add-offer-row > span {
+    margin-left: auto;
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
+@media (max-width: 640px) {
+    .weekly-deal-offer-names,
+    .weekly-deal-offer-terms {
+        grid-template-columns: 1fr;
+    }
+
+    .weekly-deal-add-offer-row > span {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
 .weekly-deal-setup-progress > div {
   display: flex;
   align-items: center;

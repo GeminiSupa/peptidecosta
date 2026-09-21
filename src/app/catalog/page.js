@@ -2393,7 +2393,8 @@ export default function CatalogPage() {
       if (offer.kind !== 'mix') return 0;
       // "10% off your entire order": paid BAC water included. Rounded exactly
       // as authoritativeCheckout rounds it.
-      const base = (getDiscountableSubtotal() + getBacSummary().charge) * offer.mix.discountPct;
+      const winningPct = Number(offer.offer?.discount_pct ?? offer.mix.discountPct) || 0;
+      const base = (getDiscountableSubtotal() + getBacSummary().charge) * winningPct;
       return currency === 'USD' ? Math.round(base * 100) / 100 : Math.round(base);
     }
 
@@ -4826,8 +4827,8 @@ export default function CatalogPage() {
                 {getBacSummary().freeUnits > 0 && (
                   <div style={bacBreakdownRowStyle}>
                     <span style={bacBreakdownLabelStyle}>🎁 {lang === 'en'
-                      ? `Free bacteriostatic water: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`
-                      : `Agua bacteriostática gratis: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`}</span>
+                      ? `Standard peptide benefit — free BAC water: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`
+                      : `Beneficio estándar del péptido — agua BAC gratis: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`}</span>
                     <span style={{ ...bacBreakdownAmountStyle, color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: 800 }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
                   </div>
                 )}

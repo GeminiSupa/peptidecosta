@@ -81,14 +81,13 @@ export function buildWhatsAppSalesSnapshot({
     const namesEs = readableNames(liveDeal.product_names, 'es');
     if (dealPricingMode(liveDeal) === OFFERS_PRICING_MODE) {
       const clean = normalizeDealOffers(liveDeal.offers);
-      const offerLines = (lang) => [
-        clean.mix.enabled && `${dealOfferSummaries({ mix: clean.mix }, lang)[0]} (${readableNames(clean.mix.product_names, lang)})`,
-        clean.bundle.enabled && `${dealOfferSummaries({ bundle: clean.bundle }, lang)[0]} (${readableNames(clean.bundle.product_names, lang)})`,
-      ].filter(Boolean).join(lang === 'en' ? '; or ' : '; o ');
+      const offerLines = (lang) => clean.items.filter((item) => item.enabled).map((item) => (
+        `${dealOfferSummaries({ items: [item] }, lang)[0]} (${readableNames(item.product_names, lang)})`
+      )).join(lang === 'en' ? '; or ' : '; o ');
       offers.push({
         kind: 'weekly_deal',
-        en: `Deal of the Week: ${offerLines('en')}. Applied automatically at checkout, no code. If an order qualifies for both, it gets whichever saves more; they never stack. BAC Water does not count. Stock is limited.`,
-        es: `Oferta de la semana: ${offerLines('es')}. Se aplica automáticamente al pagar, sin código. Si un pedido califica para ambas, recibe la que más ahorra; nunca se acumulan. El agua bacteriostática no cuenta. Inventario limitado.`,
+        en: `Deal of the Week: ${offerLines('en')}. Applied automatically at checkout, no code. If an order qualifies for more than one offer, it gets whichever saves more; they never stack. BAC Water does not count. Stock is limited.`,
+        es: `Oferta de la semana: ${offerLines('es')}. Se aplica automáticamente al pagar, sin código. Si un pedido califica para más de una oferta, recibe la que más ahorra; nunca se acumulan. El agua bacteriostática no cuenta. Inventario limitado.`,
       });
     } else offers.push({
       kind: 'weekly_deal',

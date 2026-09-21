@@ -53,63 +53,62 @@ function dealHealthProblems(live) {
 
 const TIME_FIELDS = { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
 
-/**
- * A deal time in Costa Rica AND on the reader's own clock. The business runs on
- * Costa Rica time, but the team schedules from Pakistan (11 hours ahead), so a
- * start typed as "Monday 00:00" has to show that it is Monday 11:00 for them.
- */
+/** Every deal time is shown only in the business timezone: Costa Rica. */
 function DealTime({ iso }) {
   if (!iso || !Number.isFinite(Date.parse(iso))) return null;
-  let zone = '';
-  let viewer = '';
-  try {
-    zone = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-    viewer = new Intl.DateTimeFormat('en-US', TIME_FIELDS).format(new Date(iso));
-  } catch {}
   return (
     <span>
       <strong>{formatCrDate(iso, TIME_FIELDS)}</strong> Costa Rica
-      {viewer && zone !== 'America/Costa_Rica' && (
-        <span style={{ color: '#94a3b8' }}> · {viewer} your time{zone ? ` (${zone})` : ''}</span>
-      )}
     </span>
   );
 }
 
-/** "40% OFF" for a one-discount deal; both offers, in words, for a two-offer deal. */
+/** "40% OFF" for a one-discount deal; every configured offer otherwise. */
 function dealHeadline(deal) {
   if (deal?.pricing_mode === OFFERS_PRICING_MODE) return dealOfferSummaries(deal.offers, 'en').join('  ·  OR  ·  ').toUpperCase();
   return `${toPercent(deal?.discount_pct)}% OFF`;
 }
 
 function dealModeLine(deal) {
-  if (deal?.pricing_mode === OFFERS_PRICING_MODE) return 'Two offers · each order gets whichever saves more';
+  if (deal?.pricing_mode === OFFERS_PRICING_MODE) {
+    const count = normalizeDealOffers(deal.offers).items.filter((offer) => offer.enabled).length;
+    return `${count} active offer${count === 1 ? '' : 's'} · each order gets whichever saves more`;
+  }
   if (deal?.pricing_mode === 'bulk_threshold') {
     return `Automatic mix-and-match · ${deal.min_units}+ selected units${deal.max_units ? ` · maximum ${deal.max_units}` : ''}`;
   }
   return 'Automatic instant product sale';
 }
 
-/** The deal's products; for a two-offer deal, each offer's own list. */
+/** The deal's products; for a multi-offer deal, each offer's own list. */
 function DealProductsLine({ deal }) {
   if (deal?.pricing_mode !== OFFERS_PRICING_MODE) return <>{(deal?.product_names || []).join(', ')}</>;
   const offers = normalizeDealOffers(deal.offers);
   return (
     <>
-      {offers.mix.enabled && <span style={{ display: 'block' }}>Mix &amp; Match: {offers.mix.product_names.join(', ')}</span>}
-      {offers.bundle.enabled && <span style={{ display: 'block' }}>Buy {offers.bundle.buy_qty} Get {offers.bundle.free_qty}: {offers.bundle.product_names.join(', ')}</span>}
+      {offers.items.filter((offer) => offer.enabled).map((offer, index) => (
+        <span key={offer.id} style={{ display: 'block' }}>
+          {offer.name_en || `Offer #${index + 1}`}: {offer.product_names.join(', ')}
+        </span>
+      ))}
     </>
   );
 }
 
 /**
  * A product checklist with search and the three bulk buttons. Each offer in a
- * two-offer deal has its own, because the owner may want Buy-4-Get-1 on only
+ * multi-offer deal has its own, because the owner may want Buy-4-Get-1 on only
  * some of the Mix & Match products.
  */
 const OFFER_SCOPE_AVAILABLE = 'available';
 const OFFER_SCOPE_CUSTOM = 'custom';
-const OFFER_SCOPE_SAME_AS_MIX = 'same_as_mix';
+const OFFER_SCOPE_PREVIOUS = 'same_as_previous';
+
+function newOffer(type = 'mix', id = `${type}-${Date.now()}`) {
+  return type === 'bundle'
+    ? { id, type, enabled: true, scope: OFFER_SCOPE_PREVIOUS, selected: [], name_en: '', name_es: '', buy_qty: 4, free_qty: 1 }
+    : { id, type: 'mix', enabled: true, scope: OFFER_SCOPE_AVAILABLE, selected: [], name_en: '', name_es: '', min_units: 2, discount_pct: 10 };
+}
 
 function availableOfferProductNames(products) {
   return products
@@ -125,7 +124,7 @@ function OfferProductPicker({
   customSelected,
   onCustomChange,
   accent,
-  allowSameAsMix = false,
+  allowSameAsPrevious = false,
 }) {
   const [query, setQuery] = useState('');
   const visible = useMemo(() => {
@@ -146,10 +145,10 @@ function OfferProductPicker({
       title: 'All available peptide products',
       help: 'Recommended · automatically excludes BAC Water and unavailable products.',
     },
-    ...(allowSameAsMix ? [{
-      value: OFFER_SCOPE_SAME_AS_MIX,
-      title: 'Same products as Mix & Match',
-      help: 'Keeps both offers aligned automatically.',
+    ...(allowSameAsPrevious ? [{
+      value: OFFER_SCOPE_PREVIOUS,
+      title: 'Same products as offer above',
+      help: 'Keeps this offer aligned automatically when the previous one changes.',
     }] : []),
     {
       value: OFFER_SCOPE_CUSTOM,
@@ -240,19 +239,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const [titleEn, setTitleEn] = useState('');
   const [titleEs, setTitleEs] = useState('');
 
-  // 'single' is the one-discount deal; 'offers' runs Mix & Match and
-  // Buy X Get Y side by side, each on its own products.
+  // 'single' is one percentage deal. 'offers' is a flexible ordered list: the
+  // admin may add, remove, rename, reorder and independently scope each offer.
   const [dealType, setDealType] = useState('single');
-  const [mixEnabled, setMixEnabled] = useState(true);
-  const [mixScope, setMixScope] = useState(OFFER_SCOPE_AVAILABLE);
-  const [mixSelected, setMixSelected] = useState([]);
-  const [mixMin, setMixMin] = useState(2);
-  const [mixPct, setMixPct] = useState(10);
-  const [bundleEnabled, setBundleEnabled] = useState(true);
-  const [bundleScope, setBundleScope] = useState(OFFER_SCOPE_SAME_AS_MIX);
-  const [bundleSelected, setBundleSelected] = useState([]);
-  const [bundleBuy, setBundleBuy] = useState(4);
-  const [bundleFree, setBundleFree] = useState(1);
+  const [offerDrafts, setOfferDrafts] = useState(() => [newOffer('mix', 'mix-1'), newOffer('bundle', 'bundle-1')]);
 
   const [preview, setPreview] = useState(null);
   const [previewError, setPreviewError] = useState('');
@@ -282,21 +272,57 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       : '');
 
   const availableProducts = useMemo(() => availableOfferProductNames(products), [products]);
-  const resolvedMixProducts = mixScope === OFFER_SCOPE_AVAILABLE ? availableProducts : mixSelected;
-  const resolvedBundleProducts = bundleScope === OFFER_SCOPE_SAME_AS_MIX
-    ? resolvedMixProducts
-    : (bundleScope === OFFER_SCOPE_AVAILABLE ? availableProducts : bundleSelected);
-  const offersPayload = useMemo(() => ({
-    mix: { enabled: mixEnabled, product_names: resolvedMixProducts, min_units: Number(mixMin), discount_pct: Number(mixPct) / 100 },
-    bundle: { enabled: bundleEnabled, product_names: resolvedBundleProducts, buy_qty: Number(bundleBuy), free_qty: Number(bundleFree) },
-  }), [mixEnabled, resolvedMixProducts, mixMin, mixPct, bundleEnabled, resolvedBundleProducts, bundleBuy, bundleFree]);
+  const resolvedOffers = useMemo(() => {
+    let previousProducts = [];
+    return offerDrafts.map((offer) => {
+      const productNames = offer.scope === OFFER_SCOPE_AVAILABLE
+        ? availableProducts
+        : (offer.scope === OFFER_SCOPE_PREVIOUS ? previousProducts : offer.selected);
+      previousProducts = productNames;
+      const shared = {
+        id: offer.id,
+        type: offer.type,
+        enabled: offer.enabled,
+        product_names: productNames,
+        name_en: offer.name_en,
+        name_es: offer.name_es,
+      };
+      return offer.type === 'bundle'
+        ? { ...shared, buy_qty: Number(offer.buy_qty), free_qty: Number(offer.free_qty) }
+        : { ...shared, min_units: Number(offer.min_units), discount_pct: Number(offer.discount_pct) / 100 };
+    });
+  }, [offerDrafts, availableProducts]);
+  const offersPayload = useMemo(() => ({ items: resolvedOffers }), [resolvedOffers]);
   const offersError = isOffers ? dealOffersError(offersPayload) : '';
   // Every product the deal touches, whichever type it is.
   const dealProducts = useMemo(() => (
     isOffers
-      ? [...new Set([...(mixEnabled ? resolvedMixProducts : []), ...(bundleEnabled ? resolvedBundleProducts : [])])]
+      ? [...new Set(resolvedOffers.filter((offer) => offer.enabled).flatMap((offer) => offer.product_names))]
       : selected
-  ), [isOffers, mixEnabled, resolvedMixProducts, bundleEnabled, resolvedBundleProducts, selected]);
+  ), [isOffers, resolvedOffers, selected]);
+
+  const updateOffer = (id, changes) => setOfferDrafts((current) => current.map((offer) => (
+    offer.id === id ? { ...offer, ...changes } : offer
+  )));
+  const addOffer = (type = 'mix') => setOfferDrafts((current) => [
+    ...current,
+    { ...newOffer(type, `${type}-${Date.now()}-${current.length + 1}`), scope: current.length ? OFFER_SCOPE_PREVIOUS : OFFER_SCOPE_AVAILABLE },
+  ]);
+  const removeOffer = (id) => setOfferDrafts((current) => current.filter((offer) => offer.id !== id));
+  const duplicateOffer = (id) => setOfferDrafts((current) => {
+    const sourceIndex = current.findIndex((offer) => offer.id === id);
+    if (sourceIndex < 0) return current;
+    const copy = { ...current[sourceIndex], id: `${current[sourceIndex].type}-${Date.now()}-${current.length + 1}`, name_en: `${current[sourceIndex].name_en || 'Offer'} copy` };
+    return [...current.slice(0, sourceIndex + 1), copy, ...current.slice(sourceIndex + 1)];
+  });
+  const moveOffer = (id, direction) => setOfferDrafts((current) => {
+    const index = current.findIndex((offer) => offer.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return current;
+    const next = [...current];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
 
   const outOfStockSelected = useMemo(() => (
     dealProducts.filter((name) => {
@@ -357,20 +383,26 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (typeof saved.titleEn === 'string') setTitleEn(saved.titleEn);
       if (typeof saved.titleEs === 'string') setTitleEs(saved.titleEs);
       if (saved.dealType === 'offers') setDealType('offers');
-      if (saved.offers) {
-        const { mix = {}, bundle = {} } = saved.offers;
-        if (typeof mix.enabled === 'boolean') setMixEnabled(mix.enabled);
-        if ([OFFER_SCOPE_AVAILABLE, OFFER_SCOPE_CUSTOM].includes(saved.mixScope)) setMixScope(saved.mixScope);
-        else if (Array.isArray(mix.product_names) && mix.product_names.length) setMixScope(OFFER_SCOPE_CUSTOM);
-        if (Array.isArray(mix.product_names)) setMixSelected(mix.product_names);
-        if (mix.min_units) setMixMin(mix.min_units);
-        if (mix.discount_pct) setMixPct(Math.round(mix.discount_pct * 100));
-        if (typeof bundle.enabled === 'boolean') setBundleEnabled(bundle.enabled);
-        if ([OFFER_SCOPE_AVAILABLE, OFFER_SCOPE_CUSTOM, OFFER_SCOPE_SAME_AS_MIX].includes(saved.bundleScope)) setBundleScope(saved.bundleScope);
-        else if (Array.isArray(bundle.product_names) && bundle.product_names.length) setBundleScope(OFFER_SCOPE_CUSTOM);
-        if (Array.isArray(bundle.product_names)) setBundleSelected(bundle.product_names);
-        if (bundle.buy_qty) setBundleBuy(bundle.buy_qty);
-        if (bundle.free_qty) setBundleFree(bundle.free_qty);
+      if (Array.isArray(saved.offerDrafts) && saved.offerDrafts.length) {
+        setOfferDrafts(saved.offerDrafts.map((offer, index) => ({
+          ...newOffer(offer.type, offer.id || `${offer.type || 'mix'}-${index + 1}`),
+          ...offer,
+          selected: Array.isArray(offer.selected) ? offer.selected : [],
+          scope: [OFFER_SCOPE_AVAILABLE, OFFER_SCOPE_CUSTOM, OFFER_SCOPE_PREVIOUS].includes(offer.scope)
+            ? offer.scope
+            : OFFER_SCOPE_CUSTOM,
+        })));
+      } else if (saved.offers) {
+        const legacy = normalizeDealOffers(saved.offers).items;
+        setOfferDrafts(legacy.map((offer, index) => ({
+          ...newOffer(offer.type, offer.id),
+          ...offer,
+          selected: offer.product_names,
+          discount_pct: offer.type === 'mix' ? Math.round(offer.discount_pct * 100) : undefined,
+          scope: index === 0
+            ? (saved.mixScope === OFFER_SCOPE_AVAILABLE ? OFFER_SCOPE_AVAILABLE : OFFER_SCOPE_CUSTOM)
+            : (saved.bundleScope === 'same_as_mix' ? OFFER_SCOPE_PREVIOUS : (saved.bundleScope || OFFER_SCOPE_CUSTOM)),
+        })));
       }
     } catch {}
   }, []);
@@ -379,10 +411,10 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
     try {
       localStorage.setItem('weekly_deal_draft_v2', JSON.stringify({
         selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs, dealType,
-        offers: offersPayload, mixScope, bundleScope,
+        offers: offersPayload, offerDrafts,
       }));
     } catch {}
-  }, [selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs, dealType, offersPayload, mixScope, bundleScope]);
+  }, [selected, percent, pricingMode, minUnits, maxUnits, titleEn, titleEs, dealType, offersPayload, offerDrafts]);
 
   // The preview is the only place the resolved Sunday and the real before/after
   // prices appear, so it refreshes whenever the inputs change rather than
@@ -472,10 +504,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       if (!isScheduling) setLaunched(data);
       setStartWall('');
       setSelected([]);
-      setMixScope(OFFER_SCOPE_AVAILABLE);
-      setMixSelected([]);
-      setBundleScope(OFFER_SCOPE_SAME_AS_MIX);
-      setBundleSelected([]);
+      setOfferDrafts([newOffer('mix', 'mix-1'), newOffer('bundle', 'bundle-1')]);
       setTitleEn('');
       setTitleEs('');
       setPreview(null);
@@ -857,92 +886,139 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                 One discount
               </button>
               <button type="button" className={`admin-btn${isOffers ? ' primary' : ''}`} onClick={() => setDealType('offers')}>
-                Two offers (Mix &amp; Match + Buy &amp; Get Free)
+                Flexible offers
               </button>
             </div>
             {isOffers && (
               <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '6px' }}>
-                Offers never stack. If an order qualifies for both — or its normal volume discount is bigger — the customer
-                automatically gets whichever one saves the most. BAC Water never counts toward an offer.
+                Add as many percentage or Buy/Get-Free offers as you need. They never stack: checkout compares every
+                qualifying offer and the normal volume discount, then automatically gives the customer the greatest savings.
+                BAC Water never counts toward an offer.
               </div>
             )}
           </div>
 
           {isOffers && (
             <>
-              <div style={{ display: 'grid', gap: '14px', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', marginBottom: '14px' }}>
-                <div style={{ border: `1px solid ${mixEnabled ? 'rgba(251,191,36,0.45)' : '#334155'}`, borderRadius: '10px', padding: '14px', opacity: mixEnabled ? 1 : 0.6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#fbbf24', fontWeight: 800, fontSize: '0.88rem', marginBottom: '10px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={mixEnabled}
-                      onChange={(event) => {
-                        const enabled = event.target.checked;
-                        setMixEnabled(enabled);
-                        if (!enabled && bundleScope === OFFER_SCOPE_SAME_AS_MIX) setBundleScope(OFFER_SCOPE_AVAILABLE);
-                      }}
-                      style={{ accentColor: '#fbbf24' }}
-                    />
-                    Offer #1: Mix &amp; Match
-                  </label>
-                  <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr', marginBottom: '8px' }}>
-                    <div>
-                      <label style={labelStyle}>Buy at least (vials)</label>
-                      <input className="admin-input" type="number" min="1" value={mixMin} onChange={(e) => setMixMin(e.target.value)} style={{ width: '100%' }} disabled={!mixEnabled} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Discount on whole order (%)</label>
-                      <input className="admin-input" type="number" min="1" max="99" value={mixPct} onChange={(e) => setMixPct(e.target.value)} style={{ width: '100%' }} disabled={!mixEnabled} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px' }}>
-                    {mixMin || '?'}+ qualifying vials in any mix unlocks {mixPct || '?'}% off the entire order. BAC Water receives the discount but does not count toward the minimum.
-                  </div>
-                  {mixEnabled && (
-                    <OfferProductPicker
-                      products={products}
-                      scope={mixScope}
-                      onScopeChange={setMixScope}
-                      selected={resolvedMixProducts}
-                      customSelected={mixSelected}
-                      onCustomChange={setMixSelected}
-                      accent="#fbbf24"
-                    />
-                  )}
-                </div>
+              <div className="weekly-deal-offer-builder">
+                {offerDrafts.map((offer, index) => {
+                  const accent = offer.type === 'bundle' ? '#34d399' : '#fbbf24';
+                  const resolved = resolvedOffers[index];
+                  const defaultName = offer.type === 'bundle' ? 'Buy & Get Free' : 'Mix & Match Savings';
+                  return (
+                    <section
+                      key={offer.id}
+                      className={`weekly-deal-offer-card${offer.enabled ? '' : ' is-disabled'}`}
+                      style={{ '--offer-accent': accent }}
+                    >
+                      <div className="weekly-deal-offer-head">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={offer.enabled}
+                            onChange={(event) => updateOffer(offer.id, { enabled: event.target.checked })}
+                            style={{ accentColor: accent }}
+                          />
+                          <span>Offer #{index + 1}</span>
+                        </label>
+                        <div className="weekly-deal-offer-actions">
+                          <button type="button" onClick={() => moveOffer(offer.id, -1)} disabled={index === 0} aria-label={`Move offer ${index + 1} up`} title="Move up">↑</button>
+                          <button type="button" onClick={() => moveOffer(offer.id, 1)} disabled={index === offerDrafts.length - 1} aria-label={`Move offer ${index + 1} down`} title="Move down">↓</button>
+                          <button type="button" onClick={() => duplicateOffer(offer.id)}>Duplicate</button>
+                          <button type="button" className="is-danger" onClick={() => removeOffer(offer.id)}>Remove</button>
+                        </div>
+                      </div>
 
-                <div style={{ border: `1px solid ${bundleEnabled ? 'rgba(52,211,153,0.45)' : '#334155'}`, borderRadius: '10px', padding: '14px', opacity: bundleEnabled ? 1 : 0.6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#34d399', fontWeight: 800, fontSize: '0.88rem', marginBottom: '10px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={bundleEnabled} onChange={(e) => setBundleEnabled(e.target.checked)} style={{ accentColor: '#34d399' }} />
-                    Offer #2: Buy &amp; Get Free
-                  </label>
-                  <div style={{ display: 'grid', gap: '10px', gridTemplateColumns: '1fr 1fr', marginBottom: '8px' }}>
-                    <div>
-                      <label style={labelStyle}>Buy (same product)</label>
-                      <input className="admin-input" type="number" min="1" value={bundleBuy} onChange={(e) => setBundleBuy(e.target.value)} style={{ width: '100%' }} disabled={!bundleEnabled} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Get free</label>
-                      <input className="admin-input" type="number" min="1" value={bundleFree} onChange={(e) => setBundleFree(e.target.value)} style={{ width: '100%' }} disabled={!bundleEnabled} />
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px' }}>
-                    Every {bundleBuy || '?'} of one product adds {bundleFree || '?'} more of that same product free, automatically
-                    ({Number(bundleBuy) * 2 || '?'} → {Number(bundleFree) * 2 || '?'} free). Free vials come out of stock like any other.
-                  </div>
-                  {bundleEnabled && (
-                    <OfferProductPicker
-                      products={products}
-                      scope={bundleScope}
-                      onScopeChange={setBundleScope}
-                      selected={resolvedBundleProducts}
-                      customSelected={bundleSelected}
-                      onCustomChange={setBundleSelected}
-                      accent="#34d399"
-                      allowSameAsMix={mixEnabled}
-                    />
-                  )}
-                </div>
+                      <div className="weekly-deal-offer-type-row">
+                        <div>
+                          <label style={labelStyle}>How this offer works</label>
+                          <select
+                            className="admin-input"
+                            value={offer.type}
+                            onChange={(event) => {
+                              const defaults = newOffer(event.target.value, offer.id);
+                              updateOffer(offer.id, {
+                                ...defaults,
+                                enabled: offer.enabled,
+                                scope: offer.scope,
+                                selected: offer.selected,
+                                name_en: offer.name_en,
+                                name_es: offer.name_es,
+                              });
+                            }}
+                          >
+                            <option value="mix">Minimum quantity → percentage off</option>
+                            <option value="bundle">Buy a quantity → get free vials</option>
+                          </select>
+                        </div>
+                        <div className="weekly-deal-offer-names">
+                          <div>
+                            <label style={labelStyle}>Customer name — English (optional)</label>
+                            <input className="admin-input" value={offer.name_en} onChange={(event) => updateOffer(offer.id, { name_en: event.target.value })} placeholder={defaultName} />
+                          </div>
+                          <div>
+                            <label style={labelStyle}>Customer name — Spanish (optional)</label>
+                            <input className="admin-input" value={offer.name_es} onChange={(event) => updateOffer(offer.id, { name_es: event.target.value })} placeholder={offer.type === 'bundle' ? 'Compra y recibe gratis' : 'Ahorros combinados'} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {offer.type === 'bundle' ? (
+                        <>
+                          <div className="weekly-deal-offer-terms">
+                            <div>
+                              <label style={labelStyle}>Buy (same product)</label>
+                              <input className="admin-input" type="number" min="1" value={offer.buy_qty} onChange={(event) => updateOffer(offer.id, { buy_qty: event.target.value })} disabled={!offer.enabled} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Get free</label>
+                              <input className="admin-input" type="number" min="1" value={offer.free_qty} onChange={(event) => updateOffer(offer.id, { free_qty: event.target.value })} disabled={!offer.enabled} />
+                            </div>
+                          </div>
+                          <p className="weekly-deal-offer-explanation">
+                            Every {offer.buy_qty || '?'} paid vials of one qualifying product adds {offer.free_qty || '?'} of that same product free.
+                            The pattern repeats automatically ({Number(offer.buy_qty) * 2 || '?'} paid → {Number(offer.free_qty) * 2 || '?'} free).
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="weekly-deal-offer-terms">
+                            <div>
+                              <label style={labelStyle}>Buy at least (vials)</label>
+                              <input className="admin-input" type="number" min="1" value={offer.min_units} onChange={(event) => updateOffer(offer.id, { min_units: event.target.value })} disabled={!offer.enabled} />
+                            </div>
+                            <div>
+                              <label style={labelStyle}>Discount on whole order (%)</label>
+                              <input className="admin-input" type="number" min="1" max="99" value={offer.discount_pct} onChange={(event) => updateOffer(offer.id, { discount_pct: event.target.value })} disabled={!offer.enabled} />
+                            </div>
+                          </div>
+                          <p className="weekly-deal-offer-explanation">
+                            {offer.min_units || '?'}+ qualifying peptide vials in any mix unlocks {offer.discount_pct || '?'}% off the entire order.
+                            BAC Water receives the discount but never counts toward the minimum.
+                          </p>
+                        </>
+                      )}
+
+                      {offer.enabled && (
+                        <OfferProductPicker
+                          products={products}
+                          scope={offer.scope}
+                          onScopeChange={(scope) => updateOffer(offer.id, { scope })}
+                          selected={resolved?.product_names || []}
+                          customSelected={offer.selected}
+                          onCustomChange={(selectedProducts) => updateOffer(offer.id, { selected: selectedProducts })}
+                          accent={accent}
+                          allowSameAsPrevious={index > 0}
+                        />
+                      )}
+                    </section>
+                  );
+                })}
+              </div>
+              <div className="weekly-deal-add-offer-row">
+                <button type="button" className="admin-btn" onClick={() => addOffer('mix')}>+ Add percentage offer</button>
+                <button type="button" className="admin-btn" onClick={() => addOffer('bundle')}>+ Add Buy/Get-Free offer</button>
+                <span>{offerDrafts.length} offer{offerDrafts.length === 1 ? '' : 's'} in this deal</span>
               </div>
               <section className="weekly-deal-rules-card" aria-labelledby="weekly-deal-rules-title">
                 <div>
