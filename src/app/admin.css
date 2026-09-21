@@ -2162,18 +2162,21 @@
     }
 
     [data-theme="light"] .admin-tab-btn {
-        color: #475569 !important;
+        /* The sidebar stays navy in light mode, so slate text makes every
+           inactive tab disappear against it. Keep the navigation colors
+           matched to that surface instead of the page background. */
+        color: #cbd5e1 !important;
     }
 
     [data-theme="light"] .admin-tab-btn:hover {
-        background: rgba(0, 39, 102, 0.06) !important;
-        color: #0f172a !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        color: #f8fafc !important;
     }
 
     [data-theme="light"] .admin-tab-btn.active {
-        background: rgba(0, 114, 255, 0.08) !important;
-        color: #0072FF !important;
-        border-left: 3px solid #0072FF !important;
+        background: linear-gradient(90deg, rgba(0, 212, 255, 0.15) 0%, rgba(0, 114, 255, 0.05) 100%) !important;
+        color: #00D4FF !important;
+        border-left: 3px solid #00D4FF !important;
         font-weight: 800 !important;
     }
 
