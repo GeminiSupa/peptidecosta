@@ -74,6 +74,7 @@ import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@
 import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, freeVialLine } from '@/lib/dealOffers.mjs';
+import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { readDealPageOrderTag } from '@/hooks/useDealPageExperiment';
@@ -111,6 +112,11 @@ const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
+const percentLabel = (value) => {
+  const number = Number(value) || 0;
+  const percent = number > 0 && number <= 1 ? number * 100 : number;
+  return Number.isInteger(percent) ? String(percent) : percent.toFixed(1).replace(/\.0$/, '');
+};
 // The stored value is the wording's version, not a bare "true", so that
 // revising the sentence re-asks everyone who agreed to the old one.
 const RESEARCH_ACK_STORAGE_KEY = 'research_ack';
@@ -2281,6 +2287,15 @@ export default function CatalogPage() {
       bacCharge: getBacSummary().charge,
     });
   };
+  const getCheckoutBreakdown = () => buildCheckoutBreakdown({
+    lines: cart.map((item) => ({
+      product: item.product,
+      qty: item.qty,
+      unitPrice: getPriceAsNumber(item, currency),
+    })),
+    dealChoice: getDealOfferChoice(),
+    bacFreeLines: getBacSummary().freeLines,
+  });
   const getAppliedPromoData = () => (!getMatchedWeeklyDeal() && promoData?.valid ? promoData : null);
   const getWeeklyDealLimitError = () => {
     const deal = getMatchedWeeklyDeal();
@@ -3412,9 +3427,19 @@ export default function CatalogPage() {
   const renderOrderSummary = ({ showHeading = false, compact = false } = {}) => {
     const shipFee = getShippingFee();
     const isFreeShip = qualifiesForFreeShipping();
-    const hasVolumeDiscount = getEffectiveVolumePct() > 0;
-    const hasPromoDiscount = Boolean(getAppliedPromoData());
-    const hasWeeklyDealDiscount = Boolean(getAutomaticDealDiscount()) || getDealOfferChoice()?.kind === 'mix';
+    const volumePct = getEffectiveVolumePct();
+    const appliedPromo = getAppliedPromoData();
+    const automaticDeal = getAutomaticDealDiscount();
+    const dealChoice = getDealOfferChoice();
+    const breakdown = getCheckoutBreakdown();
+    const hasVolumeDiscount = volumePct > 0;
+    const hasPromoDiscount = Boolean(appliedPromo);
+    const hasWeeklyDealDiscount = Boolean(automaticDeal) || dealChoice?.kind === 'mix';
+    const hasWeeklyBundle = dealChoice?.kind === 'bundle' && breakdown.weeklyGiftLines.length > 0;
+    const weeklyPct = dealChoice?.kind === 'mix'
+      ? breakdown.discountPct
+      : Number(automaticDeal?.discount_pct) || 0;
+    const hasAmountDiscount = hasVolumeDiscount || hasPromoDiscount || hasWeeklyDealDiscount;
     const itemsBeforeShipping = getItemsTotalBeforeShipping();
 
     return (
@@ -3425,11 +3450,79 @@ export default function CatalogPage() {
           </h4>
         )}
 
-        <div className="cart-total-row" style={{ opacity: hasVolumeDiscount ? 0.6 : 1, marginBottom: compact ? '8px' : undefined }}>
-          <span className="cart-total-label">{lang === 'en' ? 'SUBTOTAL' : 'SUBTOTAL'}</span>
+        <div className="checkout-included-items" aria-label={lang === 'en' ? 'Items included in this order' : 'Artículos incluidos en este pedido'}>
+          <div className="checkout-included-items-title">
+            {lang === 'en' ? 'Items included' : 'Artículos incluidos'}
+          </div>
+          {breakdown.paidLines.map((line) => (
+            <div className="checkout-included-line" key={`paid-${line.product}`}>
+              <div>
+                <strong>{line.qty} × {line.product}</strong>
+                <span>{formatPriceVal(line.unitPrice, currency)} {lang === 'en' ? 'each' : 'c/u'}</span>
+              </div>
+              <b>{formatPriceVal(line.lineTotal, currency)}</b>
+            </div>
+          ))}
+          {breakdown.weeklyGiftLines.map((line) => (
+            <div className="checkout-included-line checkout-included-line--gift" key={`weekly-${line.product}`}>
+              <div>
+                <strong>🎁 {line.qty} × {line.product}</strong>
+                <span>
+                  {lang === 'en' ? 'Weekly Deal free vial' : 'Vial gratis de la Oferta Semanal'}
+                  {' · '}{lang === 'en' ? 'value' : 'valor'} {formatPriceVal(line.value, currency)}
+                </span>
+              </div>
+              <b>{lang === 'en' ? 'FREE' : 'GRATIS'}</b>
+            </div>
+          ))}
+          {breakdown.bacGiftLines.map((line) => (
+            <div className="checkout-included-line checkout-included-line--gift" key={`bac-${line.sizeMl}`}>
+              <div>
+                <strong>🎁 {line.qty} × {lang === 'en' ? 'Bacteriostatic Water' : 'Agua Bacteriostática'} {line.sizeMl}ml</strong>
+                <span>{lang === 'en' ? 'Standard peptide benefit' : 'Beneficio estándar del péptido'}</span>
+              </div>
+              <b>{lang === 'en' ? 'FREE' : 'GRATIS'}</b>
+            </div>
+          ))}
+          <div className="checkout-shipment-count">
+            <strong>{lang === 'en' ? `${breakdown.totalUnits} total units included` : `${breakdown.totalUnits} unidades incluidas en total`}</strong>
+            <span>
+              {lang === 'en'
+                ? `${breakdown.paidUnits} paid + ${breakdown.weeklyGiftUnits + breakdown.bacGiftUnits} free`
+                : `${breakdown.paidUnits} pagadas + ${breakdown.weeklyGiftUnits + breakdown.bacGiftUnits} gratis`}
+            </span>
+          </div>
+        </div>
+
+        {hasWeeklyBundle && (
+          <div className="checkout-deal-value" role="status">
+            <div>
+              <span>{lang === 'en' ? 'WEEKLY DEAL SAVINGS' : 'AHORRO DE OFERTA SEMANAL'}</span>
+              <strong>{lang === 'en' ? 'Buy & Get Free' : 'Compra y recibe gratis'}</strong>
+            </div>
+            <b>{formatPriceVal(breakdown.weeklyGiftValue, currency)} {lang === 'en' ? 'value' : 'de valor'}</b>
+            {breakdown.comparedMixSavings > 0 && (
+              <p>
+                {lang === 'en'
+                  ? `Best offer selected: the free vial saves ${formatPriceVal(breakdown.weeklyGiftValue, currency)}, more than ${percentLabel(breakdown.comparedMixPct)}% off (${formatPriceVal(breakdown.comparedMixSavings, currency)}).`
+                  : `Se eligió la mejor oferta: el vial gratis ahorra ${formatPriceVal(breakdown.weeklyGiftValue, currency)}, más que ${percentLabel(breakdown.comparedMixPct)}% de descuento (${formatPriceVal(breakdown.comparedMixSavings, currency)}).`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {hasWeeklyBundle && (
+          <div className="cart-total-row checkout-value-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
+            <span className="cart-total-label">{lang === 'en' ? 'PRODUCT VALUE' : 'VALOR DE PRODUCTOS'}</span>
+            <span className="cart-total-val">{formatPriceVal(breakdown.totalProductValue, currency)}</span>
+          </div>
+        )}
+
+        <div className="cart-total-row" style={{ marginBottom: compact ? '8px' : undefined }}>
+          <span className="cart-total-label">{hasWeeklyBundle ? (lang === 'en' ? 'PAID MERCHANDISE' : 'PRODUCTOS PAGADOS') : (lang === 'en' ? 'SUBTOTAL' : 'SUBTOTAL')}</span>
           <span
             className="cart-total-val"
-            style={hasVolumeDiscount ? { textDecoration: 'line-through', fontSize: '0.9rem' } : { fontSize: compact ? '1rem' : undefined }}
+            style={{ fontSize: compact ? '1rem' : undefined }}
           >
             {formatPriceVal(getCartTotal(), currency)}
           </span>
@@ -3438,7 +3531,7 @@ export default function CatalogPage() {
         {hasVolumeDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
             <span className="cart-total-label" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d' }}>
-              {lang === 'en' ? 'VOLUME DISCOUNT' : 'DESC. VOLUMEN'}
+              {lang === 'en' ? `VOLUME DISCOUNT (${percentLabel(volumePct)}%)` : `DESC. VOLUMEN (${percentLabel(volumePct)}%)`}
             </span>
             <span className="cart-total-val" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontSize: compact ? '1rem' : undefined }}>
               -{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}
@@ -3449,7 +3542,9 @@ export default function CatalogPage() {
         {hasPromoDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
             <span className="cart-total-label" style={{ color: '#38bdf8' }}>
-              {lang === 'en' ? 'PROMO DISCOUNT' : 'DESCUENTO PROMO'}
+              {lang === 'en'
+                ? `PROMO DISCOUNT (${percentLabel(appliedPromo?.discount_pct)}%)`
+                : `DESCUENTO PROMO (${percentLabel(appliedPromo?.discount_pct)}%)`}
             </span>
             <span className="cart-total-val" style={{ color: '#38bdf8', fontSize: compact ? '1rem' : undefined }}>
               -{formatPriceVal(getPromoDiscountAmount(), currency)}
@@ -3458,12 +3553,16 @@ export default function CatalogPage() {
         )}
         {hasWeeklyDealDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
-            <span className="cart-total-label" style={{ color: '#f97316' }}>{lang === 'en' ? 'DEAL OF THE WEEK' : 'OFERTA DE LA SEMANA'}</span>
+            <span className="cart-total-label" style={{ color: '#f97316' }}>
+              {lang === 'en'
+                ? `WEEKLY DEAL (${percentLabel(weeklyPct)}% OFF)`
+                : `OFERTA SEMANAL (${percentLabel(weeklyPct)}% DESC.)`}
+            </span>
             <span className="cart-total-val" style={{ color: '#f97316' }}>-{formatPriceVal(getPromoDiscountAmount(), currency)}</span>
           </div>
         )}
 
-        {(hasVolumeDiscount || hasPromoDiscount) && (
+        {hasAmountDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
             <span className="cart-total-label">{lang === 'en' ? 'ITEMS TOTAL' : 'TOTAL ARTÍCULOS'}</span>
             <span className="cart-total-val" style={{ fontSize: compact ? '1rem' : undefined }}>
@@ -4700,7 +4799,8 @@ export default function CatalogPage() {
                 <div className="cart-item-details">
                   <h4 className="cart-item-name">{item.product}</h4>
                   <div className="cart-item-price">
-                    {formatPriceVal(getPriceAsNumber(item, currency) * item.qty, currency)}
+                    <span>{item.qty} × {formatPriceVal(getPriceAsNumber(item, currency), currency)} {lang === 'en' ? 'each' : 'c/u'}</span>
+                    <strong>{formatPriceVal(getPriceAsNumber(item, currency) * item.qty, currency)}</strong>
                   </div>
                   <div className="cart-item-qty">
                     <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, -1)}><Minus size={12} /></button>

@@ -10,6 +10,7 @@ import {
   normalizeDealOffers,
 } from '../src/lib/dealOffers.mjs';
 import { isGiftLine, stripGiftSuffix } from '../src/lib/bacWater.mjs';
+import { buildCheckoutBreakdown } from '../src/lib/checkoutBreakdown.mjs';
 
 // The two offers as the owner wrote them: 2+ vials = 10% off the whole order,
 // and buy 4 of the same vial = 1 free.
@@ -216,4 +217,42 @@ test('the cart message says which offer applied, or how to reach one', () => {
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('Retatrutide 12mg', 4, 150)]), deal, 'en'), /1 × Retatrutide 12mg FREE/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 1, 100)]), deal, 'en'), /add 1 more qualifying vial for 10%.*or buy 4 of the same qualifying/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 5, 100)], { volumePct: 15 }), deal, 'es'), /descuento por volumen/);
+});
+
+test('checkout breakdown itemizes paid vials, weekly gifts, BAC gifts, and value saved', () => {
+  const choice = chooseDealOffer(OFFERS, [line('Retatrutide 12mg', 4, 150)]);
+  const breakdown = buildCheckoutBreakdown({
+    lines: [line('Retatrutide 12mg', 4, 150)],
+    dealChoice: choice,
+    bacFreeLines: [{ sizeMl: 3, qty: 4 }],
+  });
+
+  assert.deepEqual(breakdown.paidLines, [{
+    product: 'Retatrutide 12mg', qty: 4, unitPrice: 150, lineTotal: 600,
+  }]);
+  assert.deepEqual(breakdown.weeklyGiftLines, [{
+    product: 'Retatrutide 12mg', qty: 1, unitPrice: 150, value: 150,
+  }]);
+  assert.equal(breakdown.weeklyGiftValue, 150);
+  assert.equal(breakdown.totalProductValue, 750);
+  assert.equal(breakdown.paidUnits, 4);
+  assert.equal(breakdown.weeklyGiftUnits, 1);
+  assert.equal(breakdown.bacGiftUnits, 4);
+  assert.equal(breakdown.totalUnits, 9);
+  assert.equal(breakdown.comparedMixPct, 0.10);
+  assert.equal(breakdown.comparedMixSavings, 60);
+});
+
+test('checkout breakdown records the exact percentage and amount when Mix & Match wins', () => {
+  const choice = chooseDealOffer(OFFERS, [line('BPC-157 10mg', 2, 100)]);
+  const breakdown = buildCheckoutBreakdown({
+    lines: [line('BPC-157 10mg', 2, 100)],
+    dealChoice: choice,
+    bacFreeLines: [{ sizeMl: 3, qty: 2 }],
+  });
+
+  assert.equal(breakdown.discountPct, 0.10);
+  assert.equal(breakdown.discountAmount, 20);
+  assert.equal(breakdown.weeklyGiftValue, 0);
+  assert.equal(breakdown.totalUnits, 4);
 });
