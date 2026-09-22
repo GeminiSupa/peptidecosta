@@ -84,8 +84,10 @@ test('active admin conversions use the selected rate instead of the emergency fa
   const orderDetail = readFileSync(new URL('../src/components/admin/OrderDetailPanel.js', import.meta.url), 'utf8');
 
   assert.match(analytics, /potentialAbandonedRevenueUsd \* exchangeRate/);
-  assert.match(orderDetail, /total \/ exchangeRate/);
-  assert.match(orderDetail, /total \* exchangeRate/);
+  // The panel no longer converts the saved total itself — the update route
+  // reprices the order and writes both currencies — but its shipping pair
+  // must still use the selected rate.
+  assert.match(orderDetail, /getAdminShippingCosts\(ship, orderCurrency, exchangeRate\)/);
   assert.doesNotMatch(orderDetail, /total \/ ADMIN_FALLBACK_EXCHANGE_RATE/);
   assert.doesNotMatch(orderDetail, /total \* ADMIN_FALLBACK_EXCHANGE_RATE/);
 });

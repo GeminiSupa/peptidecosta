@@ -148,7 +148,6 @@ export default function OrderDetailPanel({
   onClose,
   onUpdated,
   onStatusChange,
-  onTrackingChange,
   onResendCompletion,
   onResendAccounting,
   onResendReceipt,
@@ -163,13 +162,14 @@ export default function OrderDetailPanel({
   const initialShipping = order ? inferShippingCosts(order, exchangeRate) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
   const [notes, setNotes] = useState(order.internal_notes || '');
-  const [savingNotes, setSavingNotes] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [shippingAmount, setShippingAmount] = useState(
     (initialCurrency === 'USD' ? initialShipping.usd : initialShipping.crc) || ''
   );
-  const [savingShipping, setSavingShipping] = useState(false);
-  const shippingSaveInFlightRef = useRef(false);
+  const [trackingNumber, setTrackingNumber] = useState(order.tracking_number || '');
+  const [savingAll, setSavingAll] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const saveInFlightRef = useRef(false);
 
   const [customerName, setCustomerName] = useState(order.customer_name || '');
   const [customerPhone, setCustomerPhone] = useState(order.customer_phone || '');
@@ -177,12 +177,10 @@ export default function OrderDetailPanel({
   const [shippingAddress, setShippingAddress] = useState(order.shipping_address || '');
   const [editItems, setEditItems] = useState([]);
   const [addProduct, setAddProduct] = useState('');
-  const [savingOrder, setSavingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [manualDiscountType, setManualDiscountType] = useState(order.manual_discount_type || 'none');
   const [manualDiscountValue, setManualDiscountValue] = useState(order.manual_discount_value || '');
   const [manualDiscountReason, setManualDiscountReason] = useState(order.manual_discount_reason || '');
-  const [savingDiscount, setSavingDiscount] = useState(false);
   const [discountError, setDiscountError] = useState('');
   const [phoneCopied, setPhoneCopied] = useState(false);
   const [changingPaymentMethod, setChangingPaymentMethod] = useState(false);
@@ -195,7 +193,6 @@ export default function OrderDetailPanel({
   const [attributionAffiliateId, setAttributionAffiliateId] = useState(order.affiliate_id || '');
   const [commissionMode, setCommissionMode] = useState(order.agent_commission_rate_override ? 'custom' : 'default');
   const [commissionOverridePct, setCommissionOverridePct] = useState(order.agent_commission_rate_override || 20);
-  const [savingAttribution, setSavingAttribution] = useState(false);
   const [ownerReason, setOwnerReason] = useState('');
   const [ownerRequestOpen, setOwnerRequestOpen] = useState(false);
   const [attributionError, setAttributionError] = useState('');
@@ -210,6 +207,8 @@ export default function OrderDetailPanel({
     const nextShipping = inferShippingCosts(order);
     const nextCurrency = normalizeAdminOrderCurrency(order.currency);
     setNotes(order.internal_notes || '');
+    setTrackingNumber(order.tracking_number || '');
+    setSaveError('');
     setShippingAmount((nextCurrency === 'USD' ? nextShipping.usd : nextShipping.crc) || '');
     setCustomerName(order.customer_name || '');
     setCustomerPhone(order.customer_phone || '');
@@ -237,7 +236,8 @@ export default function OrderDetailPanel({
     setAttributionError('');
   }, [order]);
 
-  if (!order) return null;
+  // No early return for a missing order: the state above already reads
+  // order.* directly, and a return here would put the hooks below out of order.
 
   const orderCurrency = normalizeAdminOrderCurrency(order.currency);
 
@@ -403,33 +403,6 @@ export default function OrderDetailPanel({
     };
   };
 
-  const saveManualDiscount = async () => {
-    const value = Number(manualDiscountValue || 0);
-    if (manualDiscountType !== 'none' && (!Number.isFinite(value) || value <= 0)) {
-      setDiscountError('Enter a discount greater than zero.');
-      return;
-    }
-    if (manualDiscountType === 'percentage' && value > 100) {
-      setDiscountError('Percentage discount cannot exceed 100%.');
-      return;
-    }
-    if (!confirmPaidOrderDiscount()) return;
-
-    setSavingDiscount(true);
-    setDiscountError('');
-    try {
-      await patchOrder(
-        getManualDiscountUpdates(),
-        { type: 'manual_discount', message: 'Order discount updated by admin' },
-        { acknowledgePaidOrderDiscount: isSettledOrder && hasManualDiscountChanged }
-      );
-    } catch (err) {
-      setDiscountError(err.message);
-    } finally {
-      setSavingDiscount(false);
-    }
-  };
-
   const agentOptions = (() => {
     const current = String(creditedAgent || '').trim();
     if (!current || agents.some((agent) => String(agent).trim() === current)) return agents;
@@ -451,76 +424,168 @@ export default function OrderDetailPanel({
   const replacingOwner = Boolean(String(order.sales_agent || '').trim())
     && !sameOwner(order.sales_agent, creditedAgent);
 
-  const saveAttribution = async () => {
-    if (commissionMode !== 'default' && !creditedAgent.trim()) {
-      setAttributionError('Choose a credited agent before setting a commission override.');
-      return;
-    }
-    if (replacingOwner && ownerReason.trim().length < OWNER_REASON_MIN) {
-      setAttributionError(`Type a short reason for moving this order away from ${order.sales_agent}. It is saved in the timeline.`);
-      return;
-    }
+  // What differs from the saved order, group by group. The one Save button
+  // sends only these. Sending everything used to break the common case: the
+  // items went along with an email fix, and the server refuses any item change
+  // on a paid order — so a paid order's contact details could not be saved.
+  const normalizeItemsForCompare = (items) => JSON.stringify(
+    (Array.isArray(items) ? items : []).map((i) => [i.product, Number(i.qty) || 1, Number(i.price) || 0])
+  );
+  const savedShippingCosts = inferShippingCosts(order, exchangeRate);
+  const savedShipping = Number((orderCurrency === 'USD' ? savedShippingCosts.usd : savedShippingCosts.crc) || 0);
+  const savedCommissionMode = isAgentReferralSource(order.agent_commission_source)
+    ? 'agent_referral'
+    : (order.agent_commission_rate_override ? 'custom' : 'default');
 
-    setSavingAttribution(true);
+  const contactChanged =
+    customerName.trim() !== String(order.customer_name || '').trim() ||
+    customerPhone.trim() !== String(order.customer_phone || '').trim() ||
+    customerEmail.trim() !== String(order.customer_email || '').trim() ||
+    shippingAddress.trim() !== String(order.shipping_address || '').trim();
+  const itemsChanged = normalizeItemsForCompare(editItems) !== normalizeItemsForCompare(order.items);
+  const shippingChanged = Math.abs((Number(shippingAmount) || 0) - savedShipping) > 0.004;
+  const pricingChanged = itemsChanged || shippingChanged || hasManualDiscountChanged;
+  const notesChanged = notes !== (order.internal_notes || '');
+  const trackingChanged = trackingNumber.trim() !== String(order.tracking_number || '').trim();
+  const attributionChanged = isSuperadmin && (
+    !sameOwner(order.sales_agent || '', creditedAgent) ||
+    (attributionAffiliateId || '') !== (order.affiliate_id || '') ||
+    commissionMode !== savedCommissionMode ||
+    (commissionMode !== 'default' &&
+      Number(commissionOverridePct || 0) !== Number(order.agent_commission_rate_override || 20))
+  );
+  const hasUnsavedChanges = contactChanged || pricingChanged || notesChanged || trackingChanged || attributionChanged;
+
+  // Reloading or closing the browser tab would drop the edits without a word.
+  // The browser shows its own "Leave site?" box; the text is not ours to set.
+  useEffect(() => {
+    if (!hasUnsavedChanges) return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [hasUnsavedChanges]);
+
+  const closePanel = () => {
+    if (hasUnsavedChanges && !window.confirm('You have changes that are not saved. Close without saving?')) return;
+    onClose();
+  };
+
+  const saveAll = async () => {
+    if (saveInFlightRef.current || !hasUnsavedChanges) return;
+    setSaveError('');
+    setOrderError('');
+    setDiscountError('');
     setAttributionError('');
-    try {
+
+    if (contactChanged && (!customerName.trim() || !customerPhone.trim())) {
+      setSaveError('Name and phone are required.');
+      return;
+    }
+    if (itemsChanged && editItems.length === 0) {
+      setSaveError('Order must have at least one item.');
+      return;
+    }
+    if (hasManualDiscountChanged) {
+      const value = Number(manualDiscountValue || 0);
+      if (manualDiscountType !== 'none' && (!Number.isFinite(value) || value <= 0)) {
+        setSaveError('Enter a discount greater than zero.');
+        return;
+      }
+      if (manualDiscountType === 'percentage' && value > 100) {
+        setSaveError('Percentage discount cannot exceed 100%.');
+        return;
+      }
+    }
+    if (attributionChanged) {
+      if (commissionMode !== 'default' && !creditedAgent.trim()) {
+        setSaveError('Choose a credited agent before setting a commission override.');
+        return;
+      }
+      if (replacingOwner && ownerReason.trim().length < OWNER_REASON_MIN) {
+        setSaveError(`Type a short reason for moving this order away from ${order.sales_agent}. It is saved in the timeline.`);
+        return;
+      }
+    }
+    if (pricingChanged && !confirmPaidOrderDiscount()) return;
+
+    const updates = {};
+    const changedParts = [];
+    if (contactChanged) {
+      updates.customer_name = customerName.trim();
+      updates.customer_phone = customerPhone.trim();
+      updates.customer_email = customerEmail.trim() || null;
+      updates.shipping_address = shippingAddress.trim() || null;
+      changedParts.push('contact details');
+    }
+    if (pricingChanged) {
+      // The server reprices from these and writes the totals itself.
+      const ship = Number(shippingAmount) || 0;
+      const shippingPair = getAdminShippingCosts(ship, orderCurrency, exchangeRate);
+      updates.items = editItems.map((i) => ({
+        product: i.product,
+        qty: Number(i.qty) || 1,
+        price: Number(i.price) || 0,
+      }));
+      updates.shipping_cost_crc = shippingPair.crc;
+      updates.shipping_cost_usd = shippingPair.usd;
+      if (canPersistManualDiscount || hasManualDiscountChanged) Object.assign(updates, getManualDiscountUpdates());
+      if (itemsChanged) changedParts.push('items');
+      if (shippingChanged) changedParts.push('shipping');
+      if (hasManualDiscountChanged) changedParts.push('discount');
+    }
+    if (notesChanged) {
+      updates.internal_notes = notes;
+      changedParts.push('internal notes');
+    }
+    if (attributionChanged) {
       const overrideRate = commissionMode === 'default' ? null : Math.max(0, Number(commissionOverridePct) || 0);
-      const source = commissionMode === 'default'
+      updates.sales_agent = creditedAgent.trim() || null;
+      updates.affiliate_id = attributionAffiliateId || null;
+      updates.agent_commission_rate_override = overrideRate;
+      updates.agent_commission_source = commissionMode === 'default'
         ? null
         : (commissionMode === 'agent_referral' ? 'agent_referral' : 'custom_override');
+      changedParts.push(
+        `attribution (${creditedAgent.trim() || 'unassigned'} / ${selectedAffiliate?.name || 'no affiliate'} / ${overrideRate ? `${overrideRate}%` : 'profile rate'})`
+      );
+    }
+    const tracking = trackingNumber.trim();
+    if (trackingChanged) {
+      updates.tracking_number = tracking || null;
+      changedParts.push(tracking ? `tracking ${tracking}` : 'tracking removed');
+    }
 
-      await patchOrder(
+    saveInFlightRef.current = true;
+    setSavingAll(true);
+    try {
+      const saved = await patchOrder(
+        updates,
         {
-          sales_agent: creditedAgent.trim() || null,
-          affiliate_id: attributionAffiliateId || null,
-          agent_commission_rate_override: overrideRate,
-          agent_commission_source: source,
+          type: changedParts.length === 1 && notesChanged ? 'note'
+            : changedParts.length === 1 && trackingChanged ? 'tracking_update'
+              : 'items_updated',
+          message: `Updated by admin: ${changedParts.join(', ')}`,
         },
         {
-          type: 'attribution_updated',
-          message: `Attribution updated: ${creditedAgent.trim() || 'unassigned'} / ${selectedAffiliate?.name || 'no affiliate'} / ${overrideRate ? `${overrideRate}%` : 'profile rate'}`,
-        },
-        replacingOwner ? { ownerChangeReason: ownerReason.trim() } : {}
+          acknowledgePaidOrderDiscount: isSettledOrder && hasManualDiscountChanged,
+          ...(attributionChanged && replacingOwner ? { ownerChangeReason: ownerReason.trim() } : {}),
+        }
       );
       setOwnerReason('');
+      alert('Changes saved.');
+      // Same as the tracking field always did: a tracking number added to a
+      // completed order sends the customer the completion email with it.
+      if (trackingChanged && tracking && ['Completed', 'Order Complete'].includes(saved?.status)) {
+        await onResendCompletion?.(saved);
+      }
     } catch (err) {
-      setAttributionError(err.message);
+      setSaveError(err.message);
     } finally {
-      setSavingAttribution(false);
-    }
-  };
-
-  const saveNotes = async () => {
-    setSavingNotes(true);
-    try {
-      await patchOrder({ internal_notes: notes }, { type: 'note', message: 'Internal notes updated' });
-    } catch (err) {
-      alert(err.message);
-    }
-    setSavingNotes(false);
-  };
-
-  const saveShipping = async () => {
-    if (shippingSaveInFlightRef.current) return;
-    shippingSaveInFlightRef.current = true;
-    setSavingShipping(true);
-
-    const nextShipping = Number(shippingAmount) || 0;
-    const nextShippingCosts = getAdminShippingCosts(nextShipping, orderCurrency, exchangeRate);
-
-    try {
-      await patchOrder({
-        shipping_cost_crc: nextShippingCosts.crc,
-        shipping_cost_usd: nextShippingCosts.usd,
-      }, {
-        type: 'shipping_cost',
-        message: `Shipping: ₡${nextShippingCosts.crc} / $${nextShippingCosts.usd.toFixed(2)}`,
-      });
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      shippingSaveInFlightRef.current = false;
-      setSavingShipping(false);
+      saveInFlightRef.current = false;
+      setSavingAll(false);
     }
   };
 
@@ -560,62 +625,6 @@ export default function OrderDetailPanel({
     setOrderError('');
   };
 
-  const saveOrderEdits = async () => {
-    if (!customerName.trim() || !customerPhone.trim()) {
-      setOrderError('Name and phone are required.');
-      return;
-    }
-    if (editItems.length === 0) {
-      setOrderError('Order must have at least one item.');
-      return;
-    }
-    if (!confirmPaidOrderDiscount()) return;
-
-    setSavingOrder(true);
-    setOrderError('');
-
-    const normalizedItems = editItems.map((i) => ({
-      product: i.product,
-      qty: Number(i.qty) || 1,
-      price: Number(i.price) || 0,
-    }));
-
-    const ship = Number(shippingAmount) || 0;
-    const normalizedShippingCosts = getAdminShippingCosts(ship, orderCurrency, exchangeRate);
-    const total = calculateAdminOrderTotals(normalizedItems, ship, {
-      promoDiscountAmount: promoDiscount,
-      manualDiscountType,
-      manualDiscountValue,
-    }).total;
-    const totalUsd = orderCurrency === 'USD' ? Number(total.toFixed(2)) : Number((total / exchangeRate).toFixed(2));
-    const totalCrc = orderCurrency === 'CRC' ? Math.round(total) : Math.round(total * exchangeRate);
-
-    try {
-      await patchOrder(
-        {
-          customer_name: customerName.trim(),
-          customer_phone: customerPhone.trim(),
-          customer_email: customerEmail.trim() || null,
-          shipping_address: shippingAddress.trim() || null,
-          items: normalizedItems,
-          shipping_cost_crc: normalizedShippingCosts.crc,
-          shipping_cost_usd: normalizedShippingCosts.usd,
-          total_usd: totalUsd,
-          total_crc: totalCrc,
-          ...(canPersistManualDiscount || hasManualDiscountChanged ? getManualDiscountUpdates() : {}),
-        },
-        {
-          type: 'items_updated',
-          message: 'Customer contact and/or order items updated by admin',
-        },
-        { acknowledgePaidOrderDiscount: isSettledOrder && hasManualDiscountChanged }
-      );
-    } catch (err) {
-      setOrderError(err.message);
-    }
-    setSavingOrder(false);
-  };
-
   const uploadProof = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -636,7 +645,7 @@ export default function OrderDetailPanel({
   };
 
   return (
-    <div className="modal active" onClick={onClose} style={{ zIndex: 210 }}>
+    <div className="modal active" onClick={closePanel} style={{ zIndex: 210 }}>
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes alert-pulse {
           0% {
@@ -654,7 +663,7 @@ export default function OrderDetailPanel({
         }
       `}} />
       <div className="modal-content order-detail-panel" onClick={(e) => e.stopPropagation()}>
-        <button type="button" className="close-modal" onClick={onClose}>&times;</button>
+        <button type="button" className="close-modal" onClick={closePanel}>&times;</button>
 
         <div className="order-detail-header">
           <div style={{ padding: '10px', background: 'rgba(251, 191, 36, 0.1)', borderRadius: '12px', fontSize: '1.5rem' }}>📦</div>
@@ -856,9 +865,9 @@ export default function OrderDetailPanel({
               <label>Tracking</label>
               <input
                 className="admin-input"
-                defaultValue={order.tracking_number || ''}
+                value={trackingNumber}
                 placeholder="Correos tracking #"
-                onBlur={(e) => onTrackingChange(order.id, e.target.value)}
+                onChange={(e) => setTrackingNumber(e.target.value)}
               />
             </div>
             <div>
@@ -1250,18 +1259,6 @@ export default function OrderDetailPanel({
             </p>
           )}
           {attributionError && <p style={{ color: '#f87171', fontSize: '0.85rem', marginTop: '8px' }}>{attributionError}</p>}
-          {isSuperadmin && (
-            <button
-              type="button"
-              className="admin-btn admin-btn-primary"
-              onClick={saveAttribution}
-              disabled={savingAttribution}
-              style={{ marginTop: '12px', width: '100%' }}
-            >
-              <BadgePercent size={14} />
-              {savingAttribution ? 'Saving...' : 'Save attribution'}
-            </button>
-          )}
         </div>
 
         <div className="order-detail-section">
@@ -1385,16 +1382,6 @@ export default function OrderDetailPanel({
               </p>
             )}
             {discountError && <p style={{ color: '#f87171', fontSize: '0.8rem', margin: '8px 0 0' }}>{discountError}</p>}
-            <button
-              type="button"
-              className="admin-btn admin-btn-secondary"
-              onClick={saveManualDiscount}
-              disabled={savingDiscount || !hasManualDiscountChanged}
-              style={{ marginTop: '10px', width: '100%' }}
-            >
-              <BadgePercent size={14} />
-              {savingDiscount ? 'Saving discount…' : manualDiscountType === 'none' ? 'Remove discount' : 'Apply discount'}
-            </button>
           </div>
 
           <div className="order-detail-totals">
@@ -1457,14 +1444,6 @@ export default function OrderDetailPanel({
                   style={{ width: '100%', paddingLeft: '30px' }}
                 />
               </div>
-              <button
-                type="button"
-                className="admin-btn admin-btn-secondary"
-                onClick={saveShipping}
-                disabled={savingShipping}
-              >
-                {savingShipping ? 'Saving…' : 'Save shipping'}
-              </button>
             </div>
             <div style={{ marginTop: '6px', color: '#94a3b8', fontSize: '0.75rem' }}>
               {orderCurrency === 'USD'
@@ -1474,10 +1453,6 @@ export default function OrderDetailPanel({
           </div>
 
           {orderError && <p style={{ color: '#f87171', fontSize: '0.85rem', marginTop: '8px' }}>{orderError}</p>}
-
-          <button type="button" className="admin-btn admin-btn-primary" onClick={saveOrderEdits} disabled={savingOrder} style={{ width: '100%', marginTop: '12px' }}>
-            {savingOrder ? 'Saving…' : 'Save contact & items'}
-          </button>
         </div>
 
         <div className="order-detail-section">
@@ -1504,9 +1479,6 @@ export default function OrderDetailPanel({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Private notes for your team…"
           />
-          <button type="button" className="admin-btn admin-btn-primary" onClick={saveNotes} disabled={savingNotes} style={{ marginTop: '8px' }}>
-            {savingNotes ? 'Saving…' : 'Save notes'}
-          </button>
         </div>
 
         <div className="order-detail-section">
@@ -1527,6 +1499,34 @@ export default function OrderDetailPanel({
               ))}
             </ul>
           )}
+        </div>
+
+        {/* The one Save for everything typed into this panel. Pinned to the
+            bottom so it is on screen wherever the edit was made. Actions
+            that do something straight away (status, emails, fulfillment,
+            proof upload, refunds) keep their own buttons. */}
+        <div style={{
+          position: 'sticky',
+          bottom: '-18px',
+          margin: '16px -16px -18px',
+          padding: '12px 16px 14px',
+          background: '#0e1626',
+          borderTop: '1px solid rgba(148, 163, 184, 0.2)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          zIndex: 2,
+        }}>
+          {saveError && <p style={{ color: '#f87171', fontSize: '0.85rem', margin: 0 }}>{saveError}</p>}
+          <button
+            type="button"
+            className="admin-btn admin-btn-primary"
+            onClick={saveAll}
+            disabled={savingAll || !hasUnsavedChanges}
+            style={{ width: '100%', opacity: hasUnsavedChanges || savingAll ? 1 : 0.5 }}
+          >
+            {savingAll ? 'Saving…' : hasUnsavedChanges ? 'Save changes' : 'No changes to save'}
+          </button>
         </div>
       </div>
     </div>
