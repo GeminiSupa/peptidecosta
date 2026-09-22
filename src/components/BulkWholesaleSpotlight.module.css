@@ -177,12 +177,21 @@
 }
 
 @media (max-width: 430px) {
-  .strip { grid-template-columns: minmax(0, 1fr); gap: 11px; padding: 12px; }
-  .stripBrand { justify-content: flex-start; }
-  .stripCopy { grid-column: auto; order: initial; }
-  .stripActions { width: 100%; grid-template-columns: auto minmax(150px, 1fr); align-items: center; justify-items: stretch; }
-  .stripMore { text-align: left; }
-  .countdown { min-width: 0; }
-  .countdownUnits b { font-size: 0.82rem; }
-  .countdownUnits em { font-size: 0.57rem; }
+  .strip { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 10px; margin: 6px auto; padding: 10px; min-height: 0; }
+  .stripBrand { grid-column: 1; gap: 7px; min-width: 0; }
+  .stripIcon { width: 28px; height: 28px; border-radius: 8px; }
+  .stripIcon svg { width: 14px; height: 14px; }
+  .stripBrand strong { font-size: 0.62rem; white-space: normal; }
+  .stripBrand small { font-size: 0.6rem; }
+  .stripCopy { grid-column: 1 / -1; grid-row: 2; order: initial; gap: 4px; }
+  .offerLine { gap: 5px; }
+  .offerLine strong { font-size: 0.69rem; line-height: 1.25; }
+  .offerLine > svg { width: 13px; height: 13px; }
+  .stripActions { grid-column: 2; grid-row: 1; width: auto; justify-items: end; }
+  .stripMore { display: none; }
+  .countdown { min-width: 0; gap: 3px; padding: 4px 6px; border-radius: 8px; }
+  .countdown small { font-size: 0.52rem; letter-spacing: 0; }
+  .countdown small svg { width: 10px; height: 10px; }
+  .countdownUnits b { font-size: 0.68rem; }
+  .countdownUnits em { font-size: 0.5rem; }
 }

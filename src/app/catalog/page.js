@@ -3819,7 +3819,7 @@ export default function CatalogPage() {
               <input 
                 type="text" 
                 id="searchInput" 
-                placeholder={lang === 'en' ? "Search products..." : "Buscar productos..."}
+                placeholder={lang === 'en' ? "Search..." : "Buscar..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setSearchFocused(true)}

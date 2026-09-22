@@ -6774,13 +6774,14 @@ body:has(.product-grid.grid-view) {
     .catalog-press-band .press-band-quote {
         display: none;
     }
-    /* The empty balancing column costs width a phone does not have, and the
-       band is narrow enough that centring the whole row reads as centred
-       anyway. Wrapping beats a logo pushed off the edge. */
+    /* Keep the press row short on phones while its contents fit side by side. */
     .press-band--multi.catalog-press-band {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         justify-content: center;
+        gap: 6px;
+        min-height: 38px;
+        padding: 5px 8px;
     }
     .press-band--multi.catalog-press-band .press-band-label {
         justify-self: auto;
@@ -7657,7 +7658,7 @@ body:has(.cart-drawer.active) .lcw-prompt {
   }
 
   .catalog-proof-section .header-content {
-    padding: 9px 14px 11px;
+    padding: 5px 14px 6px;
   }
 }
 
