@@ -940,12 +940,15 @@ export default function OrderDetailPanel({
                     setResendingReceipt(true);
                     setReceiptResendNotice('');
                     const result = await onResendReceipt?.(order);
-                    setReceiptResendNotice(
-                      result?.sent
-                        ? `Corrected receipt sent to ${result.to}.`
-                        : `Could not send: ${result?.error || 'unknown error'}`
-                    );
+                    const notice = result?.sent
+                      ? `Corrected receipt sent to ${result.to}.`
+                      : `Could not send: ${result?.error || 'unknown error'}`;
+                    setReceiptResendNotice(notice);
                     setResendingReceipt(false);
+                    // Same popup as the completion and accounting buttons. The
+                    // inline line alone was easy to miss: the order refresh that
+                    // follows a send can re-render the panel and clear it.
+                    alert(notice);
                   }}
                   style={{ fontSize: '.74rem', padding: '6px 9px' }}
                 >
