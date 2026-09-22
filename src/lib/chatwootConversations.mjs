@@ -1,7 +1,7 @@
-// Reads a lead's Chatwoot conversations and posts agent replies for the
-// Chatwoot tab in the Lead Profile. Deliberately separate from
-// chatwootLead.mjs, which opens the conversation when a lead arrives and is
-// left untouched: both files use the same CHATWOOT_* variables and token.
+// Reads the account's Chatwoot conversations and posts agent replies for the
+// Chatwoot inbox tab. Deliberately separate from chatwootLead.mjs, which opens
+// a conversation when a lead arrives and is left untouched: both files use the
+// same CHATWOOT_* variables and token.
 
 const TIMEOUT_MS = 8000;
 // Chatwoot returns 20 messages per page; 50 pages is 1,000 messages, far past
@@ -12,9 +12,8 @@ export const CHATWOOT_STATUSES = ['open', 'pending', 'snoozed', 'resolved'];
 
 const clean = (value) => String(value ?? '').trim();
 
-// Same variables chatwootLead.mjs reads. The inbox ID is not needed here: a
-// lead's conversations are listed through the contact, whatever inbox they
-// are in.
+// Same variables chatwootLead.mjs reads. The inbox ID is not needed here: the
+// tab lists the account's conversations, whatever inbox they are in.
 export function readChatwootApiConfig(env = process.env) {
   const baseUrl = clean(env.CHATWOOT_BASE_URL).replace(/\/+$/, '');
   const accountId = clean(env.CHATWOOT_ACCOUNT_ID);
@@ -25,11 +24,6 @@ export function readChatwootApiConfig(env = process.env) {
     accessToken,
     configured: Boolean(baseUrl && accountId && accessToken),
   };
-}
-
-/** The contact identifier chatwootLead.mjs gives every lead it sends over. */
-export function chatwootLeadIdentifier(leadId) {
-  return `google-ads-lead-${clean(leadId)}`;
 }
 
 async function chatwootGet(config, path, fetchImpl) {
@@ -52,24 +46,6 @@ async function chatwootCall(config, path, { fetchImpl, method = 'GET', body } = 
     throw error;
   }
   return payload;
-}
-
-/**
- * Finds the lead's Chatwoot contact by the identifier the lead was sent with.
- * Falls back to the contact ID the CRM already stored for the lead (the
- * webhook records it), so a chat linked some other way still shows up.
- */
-export async function findLeadChatwootContactId({ config, lead, fetchImpl = fetch }) {
-  const identifier = chatwootLeadIdentifier(lead?.id);
-  const result = await chatwootGet(
-    config,
-    `/contacts/search?q=${encodeURIComponent(identifier)}`,
-    fetchImpl,
-  );
-  const contacts = Array.isArray(result?.payload) ? result.payload : [];
-  const match = contacts.find((contact) => clean(contact?.identifier) === identifier);
-  if (match?.id) return match.id;
-  return lead?.chatwoot_contact_id || null;
 }
 
 export function normalizeChatwootStatus(status) {
@@ -127,10 +103,50 @@ export function normalizeChatwootConversation(conversation, config) {
   };
 }
 
-async function listContactConversations({ config, contactId, fetchImpl }) {
-  const result = await chatwootGet(config, `/contacts/${encodeURIComponent(contactId)}/conversations`, fetchImpl);
-  const list = Array.isArray(result?.payload) ? result.payload : [];
-  return list.filter((conversation) => conversation?.id);
+// The account conversation list nests its payload under `data`, unlike the
+// per-contact list, so both shapes are accepted.
+function conversationPayload(result) {
+  if (Array.isArray(result?.data?.payload)) return result.data.payload;
+  if (Array.isArray(result?.payload)) return result.payload;
+  return [];
+}
+
+/**
+ * One page of the account's conversations for the Chatwoot inbox tab.
+ * `status` may be one of CHATWOOT_STATUSES, or empty for all of them.
+ */
+export async function listAccountConversations({
+  status = '',
+  page = 1,
+  env = process.env,
+  fetchImpl = fetch,
+} = {}) {
+  const config = readChatwootApiConfig(env);
+  if (!config.configured) return { configured: false, conversations: [] };
+
+  const wanted = clean(status).toLowerCase();
+  const query = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
+  if (CHATWOOT_STATUSES.includes(wanted)) query.set('status', wanted);
+  const result = await chatwootGet(config, `/conversations?${query.toString()}`, fetchImpl);
+
+  const conversations = conversationPayload(result)
+    .filter((conversation) => conversation?.id)
+    .map((conversation) => ({
+      ...normalizeChatwootConversation(conversation, config),
+      contactName: clean(conversation?.meta?.sender?.name),
+      contactIdentifier: clean(conversation?.meta?.sender?.identifier),
+      unreadCount: Number(conversation?.unread_count) || 0,
+      lastMessage: clean(
+        [...(Array.isArray(conversation?.messages) ? conversation.messages : [])].pop()?.content,
+      ),
+    }));
+  return { configured: true, conversations };
+}
+
+/** The lead this conversation came from, when it was opened by the CRM. */
+export function leadIdFromChatwootIdentifier(identifier) {
+  const match = clean(identifier).match(/^google-ads-lead-([0-9a-f-]{36})$/i);
+  return match ? match[1] : '';
 }
 
 /** Every message in one conversation, oldest first. */
@@ -156,64 +172,41 @@ export async function listConversationMessages({ config, conversationId, fetchIm
     .map(normalizeChatwootMessage);
 }
 
-/**
- * Everything the Chatwoot tab shows for one lead: its conversations, newest
- * activity first, each with its full message history.
- */
-export async function loadLeadChatwootConversations({ lead, env = process.env, fetchImpl = fetch }) {
-  const config = readChatwootApiConfig(env);
-  if (!config.configured) return { configured: false, contactId: null, conversations: [] };
-
-  const contactId = await findLeadChatwootContactId({ config, lead, fetchImpl });
-  if (!contactId) return { configured: true, contactId: null, conversations: [] };
-
-  const raw = await listContactConversations({ config, contactId, fetchImpl });
-  const conversations = await Promise.all(raw.map(async (conversation) => ({
-    ...normalizeChatwootConversation(conversation, config),
-    messages: await listConversationMessages({ config, conversationId: conversation.id, fetchImpl }),
-  })));
-  conversations.sort((a, b) => String(b.lastActivityAt || '').localeCompare(String(a.lastActivityAt || '')));
-  return { configured: true, contactId, conversations };
+function replyValidationError(text) {
+  if (!text) return 'Type a message before sending';
+  if (text.length > CHATWOOT_REPLY_MAX_LENGTH) {
+    return `Messages can be at most ${CHATWOOT_REPLY_MAX_LENGTH} characters`;
+  }
+  return '';
 }
 
-/**
- * Posts an agent reply. The conversation must belong to this lead's contact,
- * so the endpoint can't be pointed at some other customer's chat.
- */
-export async function sendLeadChatwootReply({
-  lead,
+function fail(message, status) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+/** The full history of one conversation, for the Chatwoot inbox tab. */
+export async function loadConversationMessages({ conversationId, env = process.env, fetchImpl = fetch }) {
+  const config = readChatwootApiConfig(env);
+  if (!config.configured) return { configured: false, messages: [] };
+  const messages = await listConversationMessages({ config, conversationId, fetchImpl });
+  return { configured: true, messages };
+}
+
+/** Posts an agent reply into one conversation of the account's inbox. */
+export async function sendConversationReply({
   conversationId,
   content,
   env = process.env,
   fetchImpl = fetch,
 }) {
   const config = readChatwootApiConfig(env);
-  if (!config.configured) {
-    const error = new Error('Chatwoot is not configured');
-    error.status = 503;
-    throw error;
-  }
+  if (!config.configured) throw fail('Chatwoot is not configured', 503);
   const text = clean(content);
-  if (!text) {
-    const error = new Error('Type a message before sending');
-    error.status = 400;
-    throw error;
-  }
-  if (text.length > CHATWOOT_REPLY_MAX_LENGTH) {
-    const error = new Error(`Messages can be at most ${CHATWOOT_REPLY_MAX_LENGTH} characters`);
-    error.status = 400;
-    throw error;
-  }
-
-  const contactId = await findLeadChatwootContactId({ config, lead, fetchImpl });
-  const owned = contactId
-    ? await listContactConversations({ config, contactId, fetchImpl })
-    : [];
-  if (!owned.some((conversation) => String(conversation.id) === String(conversationId))) {
-    const error = new Error('That conversation does not belong to this lead');
-    error.status = 404;
-    throw error;
-  }
+  const invalid = replyValidationError(text);
+  if (invalid) throw fail(invalid, 400);
+  if (!clean(conversationId)) throw fail('A conversation is required', 400);
 
   const message = await chatwootCall(
     config,

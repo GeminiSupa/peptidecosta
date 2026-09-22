@@ -14,6 +14,10 @@ export const ADMIN_MODULES = [
   // does too.
   { id: 'fulfillment', label: 'Fulfillment', title: 'Fulfillment', group: 'Core Operations' },
   { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
+  // The Chatwoot inbox: the same conversations Chatwoot itself shows, read and
+  // answered from the dashboard. Permission-gated like Live Chat, because it
+  // carries customer conversations.
+  { id: 'chatwoot', label: 'Chatwoot', title: 'Chatwoot Inbox', group: 'Core Operations' },
   // Leads sits directly under Live Chat: chats are where leads now come from,
   // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
