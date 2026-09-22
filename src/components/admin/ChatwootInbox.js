@@ -20,6 +20,9 @@ const STATUS_STYLES = {
 };
 
 const REPLY_MAX_LENGTH = 4000;
+// Chatwoot is an outside service, so this is slower than the live-chat inbox,
+// which reads our own database.
+const POLL_MS = 30000;
 
 const panelStyle = {
   background: 'rgba(255,255,255,0.02)',
@@ -100,16 +103,17 @@ function MessageBubble({ message }) {
   );
 }
 
-function ConversationThread({ conversation }) {
+function ConversationThread({ conversation, draft, onDraftChange, onSent }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  // `quiet` is the background poll: it refills the thread without blanking it
+  // or flashing "Loading messages…" under the agent who is reading it.
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     setError('');
     try {
       const response = await adminFetch(`/api/admin/chatwoot?conversationId=${encodeURIComponent(conversation.id)}`);
@@ -117,13 +121,23 @@ function ConversationThread({ conversation }) {
       if (!response.ok) throw new Error(data.error || 'Could not load this conversation.');
       setMessages(Array.isArray(data.messages) ? data.messages : []);
     } catch (loadError) {
-      setError(loadError.message || 'Could not load this conversation.');
+      if (!quiet) setError(loadError.message || 'Could not load this conversation.');
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, [conversation.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // The customer's own replies arrive in Chatwoot, not here, so the open
+  // thread re-reads itself while the dashboard is on screen.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      load({ quiet: true });
+    }, POLL_MS);
+    return () => clearInterval(interval);
+  }, [load]);
 
   const sendReply = async () => {
     const content = draft.trim();
@@ -137,8 +151,11 @@ function ConversationThread({ conversation }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not send the reply.');
-      setDraft('');
-      if (data.message) setMessages((prev) => [...prev, data.message]);
+      onDraftChange('');
+      if (data.message) {
+        setMessages((prev) => [...prev, data.message]);
+        onSent(conversation.id, data.message);
+      }
     } catch (replyError) {
       setSendError(replyError.message || 'Could not send the reply.');
     } finally {
@@ -160,7 +177,7 @@ function ConversationThread({ conversation }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
             type="button"
-            onClick={load}
+            onClick={() => load()}
             disabled={loading}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'none', border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', borderRadius: '8px', padding: '4px 9px', fontSize: '0.7rem', cursor: loading ? 'wait' : 'pointer' }}
           >
@@ -199,7 +216,7 @@ function ConversationThread({ conversation }) {
       <div style={{ marginTop: '12px' }}>
         <textarea
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) sendReply();
           }}
@@ -260,11 +277,15 @@ export default function ChatwootInbox() {
     loading: true, error: '', configured: true, conversations: [], hasMore: false,
   });
   const [selectedId, setSelectedId] = useState(null);
+  // Unsent replies, kept per conversation so switching to another chat and
+  // back does not throw away what the agent was typing.
+  const [drafts, setDrafts] = useState({});
 
   // page 1 replaces the list; a later page is added to the end, so "Load more"
-  // reaches conversations past Chatwoot's first page.
-  const loadPage = useCallback(async (page) => {
-    setState((prev) => ({ ...prev, loading: true, error: '' }));
+  // reaches conversations past Chatwoot's first page. `quiet` is the
+  // background poll, which must not flash the spinner over a list in use.
+  const loadPage = useCallback(async (page, { quiet = false } = {}) => {
+    if (!quiet) setState((prev) => ({ ...prev, loading: true, error: '' }));
     try {
       const response = await adminFetch(
         `/api/admin/chatwoot?status=${encodeURIComponent(status)}&page=${page}`,
@@ -282,10 +303,18 @@ export default function ChatwootInbox() {
           hasMore: batch.length > 0,
         };
       });
-      setSelectedId((prev) => (prev && page > 1 ? prev : (batch[0]?.id ?? prev ?? null)));
+      // The open conversation stays open. Only a first load, or a filter that
+      // dropped it from the list, moves the selection.
+      setSelectedId((prev) => {
+        if (!prev) return batch[0]?.id ?? null;
+        if (quiet || page > 1) return prev;
+        return batch.some((conversation) => conversation.id === prev) ? prev : (batch[0]?.id ?? null);
+      });
       return page;
     } catch (error) {
-      setState((prev) => ({ ...prev, loading: false, error: error.message || 'Could not load Chatwoot conversations.' }));
+      if (!quiet) {
+        setState((prev) => ({ ...prev, loading: false, error: error.message || 'Could not load Chatwoot conversations.' }));
+      }
       return null;
     }
   }, [status]);
@@ -298,6 +327,35 @@ export default function ChatwootInbox() {
 
   // Reloads from the first page whenever the status filter changes.
   useEffect(() => { setPage(1); loadPage(1); }, [loadPage]);
+
+  // Keeps the list current while the dashboard is on screen. It only runs on
+  // page 1: a background reload while "Load more" pages are open would throw
+  // those extra conversations away.
+  useEffect(() => {
+    if (page !== 1) return undefined;
+    const interval = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      loadPage(1, { quiet: true });
+    }, POLL_MS);
+    return () => clearInterval(interval);
+  }, [loadPage, page]);
+
+  // A sent reply becomes the preview line straight away, rather than waiting
+  // for the next refresh.
+  const handleSent = useCallback((conversationId, message) => {
+    setState((prev) => ({
+      ...prev,
+      conversations: prev.conversations.map((conversation) => (
+        conversation.id === conversationId
+          ? { ...conversation, lastMessage: message.content, lastActivityAt: message.createdAt }
+          : conversation
+      )),
+    }));
+  }, []);
+
+  const setDraftFor = useCallback((conversationId, value) => {
+    setDrafts((prev) => ({ ...prev, [conversationId]: value }));
+  }, []);
 
   const selected = state.conversations.find((conversation) => conversation.id === selectedId) || null;
 
@@ -410,7 +468,15 @@ export default function ChatwootInbox() {
           </div>
 
           {selected
-            ? <ConversationThread key={selected.id} conversation={selected} />
+            ? (
+              <ConversationThread
+                key={selected.id}
+                conversation={selected}
+                draft={drafts[selected.id] || ''}
+                onDraftChange={(value) => setDraftFor(selected.id, value)}
+                onSent={handleSent}
+              />
+            )
             : (
               <div style={{ ...panelStyle, padding: '28px 16px', color: '#64748b', fontSize: '0.8rem', textAlign: 'center' }}>
                 Pick a conversation on the left to read it and reply.
