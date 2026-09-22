@@ -1471,6 +1471,29 @@ export default function CatalogPage() {
   // Telemetry product view logging has been moved to handleProductClick
 
 
+  /**
+   * Last rate this browser saw, when the API cannot give us one now.
+   *
+   * Better than the compiled-in constant and still not authoritative: the
+   * server may well be on a different number. That disagreement no longer
+   * strands the customer, because a repricing refusal now carries the server's
+   * own rate and the checkout adopts it. See saveOrderToDatabase.
+   */
+  const applyCachedExchangeRate = () => {
+    try {
+      const cached = localStorage.getItem('exchangeRate_USDCRC');
+      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
+      if (cached && cachedTime && isPlausibleRate(cached)) {
+        setExchangeRate(parseFloat(cached));
+        setExchangeRateUpdatedAt(parseInt(cachedTime, 10));
+        return;
+      }
+    } catch {
+      // Storage blocked (private browsing).
+    }
+    setExchangeRateUpdatedAt(Date.now());
+  };
+
   // Live currency exchange rate fetch
   const fetchLiveExchangeRate = async () => {
     try {
@@ -1495,34 +1518,11 @@ export default function CatalogPage() {
       // constant in this file, which is the one number the server is certain
       // not to be using.
       console.error('Live exchange rate unusable, falling back to cache:', res.status, data?.rate);
-      useCachedExchangeRate();
+      applyCachedExchangeRate();
     } catch (err) {
       console.error('Live exchange rate fetch failed, using fallback:', err);
-      useCachedExchangeRate();
+      applyCachedExchangeRate();
     }
-  };
-
-  /**
-   * Last rate this browser saw, when the API cannot give us one now.
-   *
-   * Better than the compiled-in constant and still not authoritative: the
-   * server may well be on a different number. That disagreement no longer
-   * strands the customer, because a repricing refusal now carries the server's
-   * own rate and the checkout adopts it. See saveOrderToDatabase.
-   */
-  const useCachedExchangeRate = () => {
-    try {
-      const cached = localStorage.getItem('exchangeRate_USDCRC');
-      const cachedTime = localStorage.getItem('exchangeRate_USDCRC_time');
-      if (cached && cachedTime && isPlausibleRate(cached)) {
-        setExchangeRate(parseFloat(cached));
-        setExchangeRateUpdatedAt(parseInt(cachedTime, 10));
-        return;
-      }
-    } catch {
-      // Storage blocked (private browsing).
-    }
-    setExchangeRateUpdatedAt(Date.now());
   };
 
   // Supabase Realtime subscription — live sync when admin changes prices/stock/products
