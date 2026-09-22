@@ -202,38 +202,70 @@ export default function OrderDetailPanel({
   const [resendingAccounting, setResendingAccounting] = useState(false);
   const [markingReady, setMarkingReady] = useState(false);
 
+  // The order shown was replaced. Three cases:
+  //  - a different order was opened: load every field from it;
+  //  - our own Save came back: load every field, so the form shows exactly
+  //    what was stored;
+  //  - the same order came back from something else (status change, an email
+  //    resend, fulfillment, payment method, the Refresh button): load the
+  //    fields the person has not touched and keep what they typed. That
+  //    used to be wiped silently — and the resend buttons' confirmation
+  //    line with it.
+  const shownOrderRef = useRef(null);
+  const fullReloadNextRef = useRef(false);
+
   useEffect(() => {
     if (!order) return;
-    const nextShipping = inferShippingCosts(order);
-    const nextCurrency = normalizeAdminOrderCurrency(order.currency);
-    setNotes(order.internal_notes || '');
-    setTrackingNumber(order.tracking_number || '');
-    setSaveError('');
-    setShippingAmount((nextCurrency === 'USD' ? nextShipping.usd : nextShipping.crc) || '');
-    setCustomerName(order.customer_name || '');
-    setCustomerPhone(order.customer_phone || '');
-    setCustomerEmail(order.customer_email || '');
-    setShippingAddress(order.shipping_address || '');
-    setEditItems(Array.isArray(order.items) ? order.items.map((i) => ({ ...i })) : []);
-    setOrderError('');
-    setManualDiscountType(order.manual_discount_type || 'none');
-    setManualDiscountValue(order.manual_discount_value || '');
-    setManualDiscountReason(order.manual_discount_reason || '');
-    setDiscountError('');
-    setPhoneCopied(false);
-    setReceiptResendNotice('');
-    setCardLinkCopied(false);
-    setCardLinkError('');
-    setCreditedAgent(order.sales_agent || '');
-    setOwnerReason('');
-    setAttributionAffiliateId(order.affiliate_id || '');
-    setCommissionMode(
-      isAgentReferralSource(order.agent_commission_source)
-        ? 'agent_referral'
-        : (order.agent_commission_rate_override ? 'custom' : 'default')
-    );
-    setCommissionOverridePct(order.agent_commission_rate_override || 20);
-    setAttributionError('');
+    const prev = shownOrderRef.current;
+    shownOrderRef.current = order;
+    const keepEdits = Boolean(prev) && prev.id === order.id && !fullReloadNextRef.current;
+    fullReloadNextRef.current = false;
+
+    // Keeps the field as typed when it no longer matches what the previous
+    // version of the order held; otherwise takes the new value.
+    const sync = (setter, prevValue, nextValue, same = (a, b) => a === b) => {
+      setter((current) => (keepEdits && !same(current, prevValue) ? current : nextValue));
+    };
+    const shippingOf = (row) => {
+      const costs = inferShippingCosts(row);
+      return (normalizeAdminOrderCurrency(row.currency) === 'USD' ? costs.usd : costs.crc) || '';
+    };
+    const itemsOf = (row) => (Array.isArray(row.items) ? row.items.map((i) => ({ ...i })) : []);
+    const sameItems = (a, b) => JSON.stringify(
+      (a || []).map((i) => [i.product, Number(i.qty) || 1, Number(i.price) || 0])
+    ) === JSON.stringify((b || []).map((i) => [i.product, Number(i.qty) || 1, Number(i.price) || 0]));
+    const modeOf = (row) => (isAgentReferralSource(row.agent_commission_source)
+      ? 'agent_referral'
+      : (row.agent_commission_rate_override ? 'custom' : 'default'));
+    const was = prev || {};
+
+    sync(setNotes, was.internal_notes || '', order.internal_notes || '');
+    sync(setTrackingNumber, was.tracking_number || '', order.tracking_number || '');
+    sync(setShippingAmount, prev ? shippingOf(prev) : '', shippingOf(order), (a, b) => Number(a || 0) === Number(b || 0));
+    sync(setCustomerName, was.customer_name || '', order.customer_name || '');
+    sync(setCustomerPhone, was.customer_phone || '', order.customer_phone || '');
+    sync(setCustomerEmail, was.customer_email || '', order.customer_email || '');
+    sync(setShippingAddress, was.shipping_address || '', order.shipping_address || '');
+    sync(setEditItems, prev ? itemsOf(prev) : [], itemsOf(order), sameItems);
+    sync(setManualDiscountType, was.manual_discount_type || 'none', order.manual_discount_type || 'none');
+    sync(setManualDiscountValue, was.manual_discount_value || '', order.manual_discount_value || '', (a, b) => Number(a || 0) === Number(b || 0));
+    sync(setManualDiscountReason, was.manual_discount_reason || '', order.manual_discount_reason || '');
+    sync(setCreditedAgent, was.sales_agent || '', order.sales_agent || '');
+    sync(setAttributionAffiliateId, was.affiliate_id || '', order.affiliate_id || '');
+    sync(setCommissionMode, prev ? modeOf(prev) : 'default', modeOf(order));
+    sync(setCommissionOverridePct, was.agent_commission_rate_override || 20, order.agent_commission_rate_override || 20, (a, b) => Number(a || 0) === Number(b || 0));
+
+    if (!keepEdits) {
+      setSaveError('');
+      setOrderError('');
+      setDiscountError('');
+      setPhoneCopied(false);
+      setReceiptResendNotice('');
+      setCardLinkCopied(false);
+      setCardLinkError('');
+      setOwnerReason('');
+      setAttributionError('');
+    }
   }, [order]);
 
   // No early return for a missing order: the state above already reads
@@ -564,6 +596,8 @@ export default function OrderDetailPanel({
     saveInFlightRef.current = true;
     setSavingAll(true);
     try {
+      // The order that comes back is what was stored; show all of it.
+      fullReloadNextRef.current = true;
       const saved = await patchOrder(
         updates,
         {
@@ -588,6 +622,7 @@ export default function OrderDetailPanel({
         await onResendCompletion?.(saved);
       }
     } catch (err) {
+      fullReloadNextRef.current = false;
       setSaveError(err.message);
     } finally {
       saveInFlightRef.current = false;
@@ -719,7 +754,7 @@ export default function OrderDetailPanel({
             </div>
             <div>
               <label>Email</label>
-              <input className="admin-input" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Optional" />
+              <input className="admin-input" type="text" inputMode="email" autoComplete="off" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="Optional" />
             </div>
             <div>
               <label>ID Number</label>
