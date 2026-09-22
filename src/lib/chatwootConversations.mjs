@@ -143,12 +143,6 @@ export async function listAccountConversations({
   return { configured: true, conversations };
 }
 
-/** The lead this conversation came from, when it was opened by the CRM. */
-export function leadIdFromChatwootIdentifier(identifier) {
-  const match = clean(identifier).match(/^google-ads-lead-([0-9a-f-]{36})$/i);
-  return match ? match[1] : '';
-}
-
 /** Every message in one conversation, oldest first. */
 export async function listConversationMessages({ config, conversationId, fetchImpl = fetch }) {
   const byId = new Map();

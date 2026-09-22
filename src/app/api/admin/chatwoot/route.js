@@ -32,10 +32,13 @@ export async function GET(request) {
     });
     return NextResponse.json(result);
   } catch (error) {
-    console.error('[Chatwoot inbox] Could not load from Chatwoot:', error.message);
+    // A conversation that no longer exists is the caller's 404, not a
+    // Chatwoot outage; anything else is reported as an upstream failure.
+    const status = [401, 403, 404].includes(error.status) ? error.status : 502;
+    if (status === 502) console.error('[Chatwoot inbox] Could not load from Chatwoot:', error.message);
     return NextResponse.json(
       { error: `Could not load from Chatwoot: ${error.message}` },
-      { status: 502 },
+      { status },
     );
   }
 }

@@ -256,26 +256,48 @@ function ConversationThread({ conversation }) {
  */
 export default function ChatwootInbox() {
   const [status, setStatus] = useState('');
-  const [state, setState] = useState({ loading: true, error: '', configured: true, conversations: [] });
+  const [state, setState] = useState({
+    loading: true, error: '', configured: true, conversations: [], hasMore: false,
+  });
   const [selectedId, setSelectedId] = useState(null);
 
-  const load = useCallback(async () => {
+  // page 1 replaces the list; a later page is added to the end, so "Load more"
+  // reaches conversations past Chatwoot's first page.
+  const loadPage = useCallback(async (page) => {
     setState((prev) => ({ ...prev, loading: true, error: '' }));
     try {
-      const response = await adminFetch(`/api/admin/chatwoot?status=${encodeURIComponent(status)}`);
+      const response = await adminFetch(
+        `/api/admin/chatwoot?status=${encodeURIComponent(status)}&page=${page}`,
+      );
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not load Chatwoot conversations.');
-      const conversations = Array.isArray(data.conversations) ? data.conversations : [];
-      setState({ loading: false, error: '', configured: data.configured !== false, conversations });
-      setSelectedId((prev) => (
-        conversations.some((conversation) => conversation.id === prev) ? prev : (conversations[0]?.id ?? null)
-      ));
+      const batch = Array.isArray(data.conversations) ? data.conversations : [];
+      setState((prev) => {
+        const conversations = page > 1 ? [...prev.conversations, ...batch] : batch;
+        return {
+          loading: false,
+          error: '',
+          configured: data.configured !== false,
+          conversations,
+          hasMore: batch.length > 0,
+        };
+      });
+      setSelectedId((prev) => (prev && page > 1 ? prev : (batch[0]?.id ?? prev ?? null)));
+      return page;
     } catch (error) {
       setState((prev) => ({ ...prev, loading: false, error: error.message || 'Could not load Chatwoot conversations.' }));
+      return null;
     }
   }, [status]);
 
-  useEffect(() => { load(); }, [load]);
+  const [page, setPage] = useState(1);
+  const load = useCallback(() => {
+    setPage(1);
+    return loadPage(1);
+  }, [loadPage]);
+
+  // Reloads from the first page whenever the status filter changes.
+  useEffect(() => { setPage(1); loadPage(1); }, [loadPage]);
 
   const selected = state.conversations.find((conversation) => conversation.id === selectedId) || null;
 
@@ -371,9 +393,20 @@ export default function ChatwootInbox() {
                 <div style={{ color: '#64748b', fontSize: '0.66rem', marginTop: '3px' }}>
                   {conversation.assigneeName || 'Unassigned'}
                   {conversation.lastActivityAt ? ` · ${formatTime(conversation.lastActivityAt)}` : ''}
+                  {conversation.unreadCount > 0 ? ` · ${conversation.unreadCount} unread` : ''}
                 </div>
               </button>
             ))}
+            {state.hasMore && state.conversations.length > 0 && (
+              <button
+                type="button"
+                onClick={() => { const next = page + 1; setPage(next); loadPage(next); }}
+                disabled={state.loading}
+                style={{ display: 'block', width: '100%', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: '#94a3b8', borderRadius: '8px', padding: '8px', fontSize: '0.74rem', cursor: state.loading ? 'wait' : 'pointer', marginTop: '4px' }}
+              >
+                {state.loading ? 'Loading…' : 'Load more'}
+              </button>
+            )}
           </div>
 
           {selected

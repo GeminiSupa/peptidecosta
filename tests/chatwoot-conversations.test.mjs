@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  leadIdFromChatwootIdentifier,
   listAccountConversations,
   loadConversationMessages,
   normalizeChatwootStatus,
@@ -83,6 +82,16 @@ test('a status filter is passed through, and an invented one is ignored', async 
   assert.doesNotMatch(second.calls[0].url, /status=/);
 });
 
+test('a later page is asked for by number, and junk falls back to page 1', async () => {
+  const { calls, fetchImpl } = fakeChatwoot();
+  await listAccountConversations({ page: 3, env: ENV, fetchImpl });
+  assert.match(calls[0].url, /page=3/);
+
+  const second = fakeChatwoot();
+  await listAccountConversations({ page: 'abc', env: ENV, fetchImpl: second.fetchImpl });
+  assert.match(second.calls[0].url, /page=1/);
+});
+
 test('the full history is read across pages, oldest first', async () => {
   const { fetchImpl } = fakeChatwoot();
   const result = await loadConversationMessages({ conversationId: 99, env: ENV, fetchImpl });
@@ -126,14 +135,6 @@ test('a reply with no conversation is refused', async () => {
     (error) => error.status === 400,
   );
   assert.equal(calls.length, 0);
-});
-
-test('a CRM lead is recognised in the contact identifier the sender uses', () => {
-  assert.equal(
-    leadIdFromChatwootIdentifier('google-ads-lead-11111111-2222-3333-4444-555555555555'),
-    '11111111-2222-3333-4444-555555555555',
-  );
-  assert.equal(leadIdFromChatwootIdentifier('someone-else'), '');
 });
 
 test('unknown statuses fall back to open', () => {
