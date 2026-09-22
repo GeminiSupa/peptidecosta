@@ -53,9 +53,11 @@
 .card { flex: 0 1 250px; min-width: 0; display: flex; flex-direction: column; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; overflow: hidden; }
 /* Padding inside the image box: some product photos are cropped tight to the
    vial, and without it those vials touched the card edges. */
-.cardImage { aspect-ratio: 1 / 1; max-width: 100%; box-sizing: border-box; padding: 18px; background: #f8fafc; display: flex; align-items: center; justify-content: center; }
+.cardImage { position: relative; aspect-ratio: 1 / 1; max-width: 100%; box-sizing: border-box; padding: 18px; background: #f8fafc; display: flex; align-items: center; justify-content: center; }
 .cardImage > span { flex: 1; align-self: stretch; }
 .cardImage > span[aria-hidden] { font-size: 2.4rem; color: var(--offer); display: flex; align-items: center; justify-content: center; }
+.dealBadge { position: absolute; top: 10px; left: 10px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 1px solid var(--offer-line); border-radius: 999px; background: rgba(255, 255, 255, 0.94); box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08); color: var(--offer); font-size: 0.72rem; font-weight: 800; line-height: 1; text-transform: uppercase; letter-spacing: 0.04em; }
+.dealBadge svg { width: 13px; height: 13px; }
 .cardBody { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 16px; flex: 1; }
 .cardBody h3 { margin: 0; font-size: 1rem; color: #111827; }
 .price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-variant-numeric: tabular-nums; }

@@ -290,6 +290,12 @@ export default function DealOfTheWeekPage() {
           return (
             <article key={product.product} className={styles.card}>
               <div className={styles.cardImage}>
+                {offersDeal && (
+                  <div className={styles.dealBadge}>
+                    <Tag aria-hidden="true" />
+                    {en ? 'Weekly deal' : 'Oferta semanal'}
+                  </div>
+                )}
                 {product.image_url
                   ? <EvenProductImage src={product.image_url} alt={product.product} />
                   : <span aria-hidden="true"><Tag /></span>}
