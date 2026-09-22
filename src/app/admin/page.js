@@ -26,7 +26,7 @@ import {
 import { markAbandonedCartsConverted } from '@/lib/abandonedCartRecovery.mjs';
 import { defaultFreeBacConfig, normalizeFreeBacSize } from '@/lib/bacWater.mjs';
 import { 
-  Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle,
+  Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle, MessagesSquare,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
   AlertCircle, ChevronRight, ChevronUp, MessageSquare, Database,
   Dna, FlaskConical, Syringe, TestTubes, Atom, 
@@ -140,6 +140,7 @@ const ProspectorManager = dynamicTab(() => import('@/components/admin/Prospector
 const MessengerInbox = dynamicTab(() => import('@/components/admin/MessengerInbox'), 'Loading messenger…');
 const MessengerPosts = dynamicTab(() => import('@/components/admin/MessengerPosts'), 'Loading posts…');
 const LiveChatInbox = dynamicTab(() => import('@/components/admin/LiveChatInbox'), 'Loading live chat…');
+const ChatwootInbox = dynamicTab(() => import('@/components/admin/ChatwootInbox'), 'Loading Chatwoot…');
 
 const FacebookIcon = ({ size = 14, style, ...props }) => (
   <svg 
@@ -1754,6 +1755,10 @@ Core Rules:
       badge: liveChatUnreadCount,
       badgeTone: 'info',
     },
+    chatwoot: {
+      label: 'Chatwoot',
+      icon: <MessagesSquare size={iconSize} />,
+    },
     leads: {
       label: 'Leads',
       icon: <Target size={iconSize} />,
@@ -1858,7 +1863,7 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'live_chat', 'leads', 'customers', 'carts']
+      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
@@ -7124,6 +7129,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-orders-tab admin-tab-panel">
             <ErrorBoundary>
               <LiveChatInbox />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {activeTab === 'chatwoot' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <ErrorBoundary>
+              <ChatwootInbox />
             </ErrorBoundary>
           </div>
         )}

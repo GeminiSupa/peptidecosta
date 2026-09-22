@@ -13,7 +13,15 @@ export const ADMIN_MODULES = [
   // because Omer is the only one packing — widen this the day someone else
   // does too.
   { id: 'fulfillment', label: 'Fulfillment', title: 'Fulfillment', group: 'Core Operations' },
-  { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations' },
+  // Taken out of the navigation 2026-09-23: agents work these conversations in
+  // the Chatwoot tab instead. The inbox, its routes and the website chat
+  // widget all still run, so dropping hiddenFromNav brings the tab straight
+  // back.
+  { id: 'live_chat', label: 'Live Chat', title: 'Live Chat', group: 'Core Operations', hiddenFromNav: true },
+  // The Chatwoot inbox: the same conversations Chatwoot itself shows, read and
+  // answered from the dashboard. Permission-gated like Live Chat, because it
+  // carries customer conversations.
+  { id: 'chatwoot', label: 'Chatwoot', title: 'Chatwoot Inbox', group: 'Core Operations' },
   // Leads sits directly under Live Chat: chats are where leads now come from,
   // so the two are worked together.
   { id: 'leads', label: 'Leads', title: 'Leads', group: 'Core Operations' },
