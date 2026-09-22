@@ -177,6 +177,23 @@ export function isBinnableTable(table) {
   return Object.prototype.hasOwnProperty.call(BIN_TABLES, String(table || ''));
 }
 
+/**
+ * PostgREST does not send Postgres's 42P01 when the Bin table is missing —
+ * it sends PGRST205 / "schema cache". The list used to treat that as a generic
+ * failure and show "Could not read the Bin" instead of asking for the SQL.
+ */
+export function isMissingDeletedRecordsTable(error) {
+  if (!error) return false;
+  const code = String(error.code || '');
+  const message = String(error.message || '');
+  return code === '42P01'
+    || code === 'PGRST205'
+    || (/deleted_records/i.test(message) && /does not exist|schema cache|could not find/i.test(message));
+}
+
+export const DELETED_RECORDS_MIGRATION_HINT =
+  'The Bin table does not exist yet. Run add-recycle-bin.sql in the Supabase SQL editor, then refresh this tab.';
+
 export function binTableConfig(table) {
   return BIN_TABLES[String(table || '')] || null;
 }

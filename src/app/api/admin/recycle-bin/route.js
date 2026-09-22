@@ -5,6 +5,8 @@ import { resolveAdminTabAccess } from '@/lib/adminModules';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   canTouchEntry,
+  DELETED_RECORDS_MIGRATION_HINT,
+  isMissingDeletedRecordsTable,
   recordTypeFor,
   summarizeEntry,
   visibleTablesFor,
@@ -57,14 +59,17 @@ export async function GET(request) {
     // The table missing means add-recycle-bin.sql has not been run yet. Say so
     // plainly rather than showing an empty Bin, which would read as "nothing
     // was ever deleted" — the one reading that is never true.
-    if (error.code === '42P01') {
+    if (isMissingDeletedRecordsTable(error)) {
       return NextResponse.json(
-        { error: 'The Bin table does not exist yet. Run add-recycle-bin.sql.' },
+        { error: DELETED_RECORDS_MIGRATION_HINT, needsMigration: true },
         { status: 503 },
       );
     }
     console.error('[recycle-bin] list failed', error);
-    return NextResponse.json({ error: 'Could not read the Bin' }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message ? `Could not read the Bin: ${error.message}` : 'Could not read the Bin' },
+      { status: 500 },
+    );
   }
 
   const entries = (data || []).map((entry) => {

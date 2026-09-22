@@ -7,6 +7,7 @@ import {
   childTablesFor,
   describeRecord,
   isBinnableTable,
+  isMissingDeletedRecordsTable,
   purgeDateFor,
   readRetention,
   recordTypeFor,
@@ -128,6 +129,15 @@ test('orders and live chats carry their children so a restore is not an empty sh
     { table: 'live_chat_messages', foreignKey: 'conversation_id' },
   ]);
   assert.deepEqual(childTablesFor('products'), []);
+});
+
+test('a missing Bin table is recognised even when PostgREST hides the 42P01', () => {
+  assert.equal(isMissingDeletedRecordsTable({ code: '42P01' }), true);
+  assert.equal(isMissingDeletedRecordsTable({
+    code: 'PGRST205',
+    message: "Could not find the table 'public.deleted_records' in the schema cache",
+  }), true);
+  assert.equal(isMissingDeletedRecordsTable({ message: 'permission denied for table deleted_records' }), false);
 });
 
 test('only registered tables are binnable, and each has a friendly type name', () => {
