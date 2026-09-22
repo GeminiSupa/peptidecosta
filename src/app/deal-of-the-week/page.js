@@ -146,9 +146,6 @@ export default function DealOfTheWeekPage() {
         : `Compra ${offer.min_units}+ viales`,
     };
   });
-  const offersForProduct = (productName) => activeOffers.filter((offer) => (
-    offer.product_names.some((name) => nameKey(name) === nameKey(productName))
-  ));
   const minUnits = dealMinUnits(deal);
   const maxUnits = dealMaxUnits(deal);
   const productCount = (deal?.product_names || []).length;
@@ -307,10 +304,6 @@ export default function DealOfTheWeekPage() {
                 )}
                 {savingLabel(price) && <span className={styles.saving}>{savingLabel(price)}</span>}
                 {bulk && price && <span className={styles.priceNote}>{en ? `each, at ${minUnits}+ vials` : `c/u, con ${minUnits}+ viales`}</span>}
-                {offersDeal && offersForProduct(product.product).map((offer) => {
-                  const summary = dealOfferSummaries({ items: [offer] }, lang)[0];
-                  return <span key={offer.id} className={offer.type === 'bundle' ? styles.saving : styles.priceNote}>{summary}</span>;
-                })}
                 {soldOut
                   ? <span className={styles.soldOut}>{en ? 'Sold out' : 'Agotado'}</span>
                   : qtyOf(product.product) > 0
