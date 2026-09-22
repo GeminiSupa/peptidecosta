@@ -437,16 +437,19 @@ export default function OrderDetailPanel({
     ? 'agent_referral'
     : (order.agent_commission_rate_override ? 'custom' : 'default');
 
+  // Compared exactly as typed, spaces included: anything the person typed
+  // counts as a change, so the Save button and the close warning react to
+  // it. The save itself still trims.
   const contactChanged =
-    customerName.trim() !== String(order.customer_name || '').trim() ||
-    customerPhone.trim() !== String(order.customer_phone || '').trim() ||
-    customerEmail.trim() !== String(order.customer_email || '').trim() ||
-    shippingAddress.trim() !== String(order.shipping_address || '').trim();
+    customerName !== (order.customer_name || '') ||
+    customerPhone !== (order.customer_phone || '') ||
+    customerEmail !== (order.customer_email || '') ||
+    shippingAddress !== (order.shipping_address || '');
   const itemsChanged = normalizeItemsForCompare(editItems) !== normalizeItemsForCompare(order.items);
   const shippingChanged = Math.abs((Number(shippingAmount) || 0) - savedShipping) > 0.004;
   const pricingChanged = itemsChanged || shippingChanged || hasManualDiscountChanged;
   const notesChanged = notes !== (order.internal_notes || '');
-  const trackingChanged = trackingNumber.trim() !== String(order.tracking_number || '').trim();
+  const trackingChanged = trackingNumber !== (order.tracking_number || '');
   const attributionChanged = isSuperadmin && (
     !sameOwner(order.sales_agent || '', creditedAgent) ||
     (attributionAffiliateId || '') !== (order.affiliate_id || '') ||
@@ -578,7 +581,10 @@ export default function OrderDetailPanel({
       alert('Changes saved.');
       // Same as the tracking field always did: a tracking number added to a
       // completed order sends the customer the completion email with it.
-      if (trackingChanged && tracking && ['Completed', 'Order Complete'].includes(saved?.status)) {
+      // Compared trimmed here: a stray space is a change worth saving, not a
+      // new tracking number worth emailing the customer about.
+      const newTracking = tracking && tracking !== String(order.tracking_number || '').trim();
+      if (newTracking && ['Completed', 'Order Complete'].includes(saved?.status)) {
         await onResendCompletion?.(saved);
       }
     } catch (err) {
