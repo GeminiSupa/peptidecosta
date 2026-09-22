@@ -55,6 +55,7 @@ import AgentDashboard from '@/components/admin/AgentDashboard';
 import GlobalSearch from '@/components/admin/GlobalSearch';
 import NotificationCenter from '@/components/admin/NotificationCenter';
 import LandingLeadSettingsManager from '@/components/admin/LandingLeadSettingsManager';
+import LeadChatwootTab from '@/components/admin/LeadChatwootTab';
 import OrderDetailPanel from '@/components/admin/OrderDetailPanel';
 import RefundDialog from '@/components/admin/RefundDialog';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
@@ -417,6 +418,9 @@ export default function AdminPage() {
   const [lastSelectedLeadIndex, setLastSelectedLeadIndex] = useState(null);
   const [expandedLeadViews, setExpandedLeadViews] = useState({});
   const [selectedLeadDetails, setSelectedLeadDetails] = useState(null);
+  // Which Lead Profile tab is showing, remembered per lead so opening another
+  // lead starts back on Profile.
+  const [leadDetailTab, setLeadDetailTab] = useState({ leadId: null, tab: 'profile' });
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
   // The order the refund confirmation is open for. Set by picking "Refunded"
   // in the orders list, or by the button on the order's own panel.
@@ -7503,6 +7507,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         const qualificationAnswers = Array.isArray(currentLead.qualification_data?.answers)
           ? currentLead.qualification_data.answers
           : [];
+        const activeLeadTab = leadDetailTab.leadId === currentLead.id ? leadDetailTab.tab : 'profile';
         return (
         <div className="modal active" onClick={() => setSelectedLeadDetails(null)} style={{ zIndex: 210 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%', maxHeight: '90vh', overflowY: 'auto', background: '#0e1626', color: '#f8fafc', borderRadius: '16px', padding: '30px', border: '1px solid rgba(255,255,255,0.1)' }}>
@@ -7516,8 +7521,36 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               </div>
             </div>
 
+            {/* Lead Profile tabs */}
+            <div role="tablist" style={{ display: 'flex', gap: '6px', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              {[['profile', 'Profile'], ['chatwoot', 'Chatwoot']].map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeLeadTab === tab}
+                  onClick={() => setLeadDetailTab({ leadId: currentLead.id, tab })}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: `2px solid ${activeLeadTab === tab ? '#38bdf8' : 'transparent'}`,
+                    color: activeLeadTab === tab ? '#38bdf8' : '#94a3b8',
+                    padding: '8px 14px',
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    marginBottom: '-1px',
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {activeLeadTab === 'chatwoot' && <LeadChatwootTab lead={currentLead} />}
+
             {/* Profile Grid */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: activeLeadTab === 'profile' ? 'flex' : 'none', flexDirection: 'column', gap: '20px' }}>
               
               {/* SECTION: CONTACT & BASICS */}
               <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
