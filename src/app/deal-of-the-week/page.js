@@ -124,9 +124,28 @@ export default function DealOfTheWeekPage() {
   const offers = normalizeDealOffers(deal?.offers);
   const activeOffers = offers.items.filter((offer) => offer.enabled);
   const offerSummaries = offersDeal ? dealOfferSummaries(deal?.offers, lang) : [];
-  const bundleKeys = new Set(activeOffers
-    .filter((offer) => offer.type === 'bundle')
-    .flatMap((offer) => offer.product_names.map(nameKey)));
+  const heroOffers = activeOffers.map((offer) => {
+    if (offer.type === 'bundle') {
+      return {
+        id: offer.id,
+        value: en
+          ? `${offer.free_qty} free ${offer.free_qty === 1 ? 'vial' : 'vials'}`
+          : `${offer.free_qty} ${offer.free_qty === 1 ? 'vial gratis' : 'viales gratis'}`,
+        condition: en
+          ? `Buy ${offer.buy_qty} of the same vial`
+          : `Compra ${offer.buy_qty} del mismo vial`,
+      };
+    }
+    return {
+      id: offer.id,
+      value: en
+        ? `${Math.round(offer.discount_pct * 100)}% off your order`
+        : `${Math.round(offer.discount_pct * 100)}% de descuento`,
+      condition: en
+        ? `Buy ${offer.min_units}+ vials`
+        : `Compra ${offer.min_units}+ viales`,
+    };
+  });
   const offersForProduct = (productName) => activeOffers.filter((offer) => (
     offer.product_names.some((name) => nameKey(name) === nameKey(productName))
   ));
@@ -247,21 +266,9 @@ export default function DealOfTheWeekPage() {
     const price = priceFor(product);
     return price?.was ? Math.max(best, price.was - price.now) : best;
   }, 0);
-  // The most a free vial is worth, for version A's money-first wording.
-  const maxFreeVial = products.reduce((best, product) => (
-    bundleKeys.has(nameKey(product.product)) ? Math.max(best, priceNumber(product.price_usd)) : best
-  ), 0);
-  const offerHeadline = () => {
-    if (variant === 'b') {
-      return en
-        ? `${activeOffers.length} ${activeOffers.length === 1 ? 'way' : 'ways'} to save this week`
-        : `${activeOffers.length} ${activeOffers.length === 1 ? 'forma' : 'formas'} de ahorrar esta semana`;
-    }
-    if (maxFreeVial > 0 && activeOffers.length === 1 && activeOffers[0].type === 'bundle') {
-      return en ? `Free vials worth up to ${money(maxFreeVial)}` : `Viales gratis de hasta ${money(maxFreeVial)}`;
-    }
-    return offerSummaries.join(en ? ' or ' : ' o ');
-  };
+  const offerHeadline = () => (en
+    ? `${activeOffers.length} ${activeOffers.length === 1 ? 'way' : 'ways'} to save`
+    : `${activeOffers.length} ${activeOffers.length === 1 ? 'forma' : 'formas'} de ahorrar`);
 
   const headline = !deal ? '' : offersDeal ? offerHeadline() : variant === 'b'
     ? (bulk ? (en ? 'Build your wholesale order' : 'Arma tu pedido mayorista') : (en ? 'This week\'s deal picks' : 'Las ofertas de esta semana'))
@@ -339,7 +346,7 @@ export default function DealOfTheWeekPage() {
   );
 
   const limitedBadge = <p className={styles.badge}><PackageCheck aria-hidden="true" />{en ? 'Limited stock' : 'Inventario limitado'}</p>;
-  const eyebrow = <p className={styles.eyebrow}><RefreshCw size={14} aria-hidden="true" />{en ? 'Deal of the Week · New offer every week' : 'Oferta de la Semana · Nueva oferta cada semana'}</p>;
+  const eyebrow = <p className={styles.eyebrow}><RefreshCw size={14} aria-hidden="true" />{en ? 'Deal of the Week' : 'Oferta de la Semana'}</p>;
 
   return (
     <div className="clone-home">
@@ -360,29 +367,38 @@ export default function DealOfTheWeekPage() {
 
         {ready && deal && variant === 'a' && (
           <>
-            <section className={styles.hero}>
+            <section className={`${styles.hero} ${offersDeal ? styles.heroOffer : ''}`}>
               {eyebrow}
               <h1>{headline}</h1>
-              <p className={styles.lead}>
-                {offersDeal
-                  ? (en
-                    ? `${activeOffers.length} ${activeOffers.length === 1 ? 'offer' : 'offers'} this week, applied automatically at checkout. If your order qualifies for more than one, you get whichever saves you most.`
-                    : `${activeOffers.length} ${activeOffers.length === 1 ? 'oferta' : 'ofertas'} esta semana, aplicadas automáticamente al pagar. Si tu pedido califica para más de una, recibes la que más te ahorra.`)
-                  : bulk
+              {!offersDeal && <p className={styles.lead}>
+                {bulk
                   ? (en ? `Mix and match any ${minUnits} or more vials from the ${productCount} products below. The discount applies automatically at checkout.` : `Combina ${minUnits} o más viales de los ${productCount} productos de abajo. El descuento se aplica automáticamente al pagar.`)
                   : (en ? 'The prices below are already marked down. No code needed.' : 'Los precios de abajo ya tienen el descuento. Sin código.')}
-              </p>
-              <div className={styles.facts}>
-                {offersDeal ? (
-                  offerSummaries.map((summary, index) => <span key={`${summary}-${index}`}><strong>{index + 1}</strong>{summary}</span>)
-                ) : maxSaving > 0
+              </p>}
+              {offersDeal ? (
+                <div className={styles.offerGrid} aria-label={en ? 'This week\'s offers' : 'Ofertas de esta semana'}>
+                  {heroOffers.map((offer) => (
+                    <div className={styles.offerCard} key={offer.id}>
+                      <strong>{offer.value}</strong>
+                      <span>{offer.condition}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className={styles.facts}>
+                {maxSaving > 0
                   ? <span><strong>{money(maxSaving)}</strong>{en ? 'max. saved per vial' : 'máx. de ahorro por vial'}</span>
                   : <span><strong>{pct}%</strong>{en ? 'off' : 'de descuento'}</span>}
                 {bulk && <span><strong>{minUnits}+</strong>{en ? 'vials, mix & match' : 'viales combinables'}</span>}
                 <span><strong>{productCount}</strong>{en ? 'products' : 'productos'}</span>
                 {endsLabel && <span><strong><CalendarClock size={26} aria-hidden="true" /></strong>{en ? `Ends ${endsLabel}` : `Termina el ${endsLabel}`}</span>}
-              </div>
-              {limitedBadge}
+              </div>}
+              {offersDeal ? (
+                <div className={styles.dealMeta}>
+                  <span><Check aria-hidden="true" />{en ? 'Best savings applied automatically' : 'El mejor ahorro se aplica automáticamente'}</span>
+                  {endsLabel && <span><CalendarClock aria-hidden="true" />{en ? `Ends ${endsLabel}` : `Termina el ${endsLabel}`}</span>}
+                  <span><PackageCheck aria-hidden="true" />{en ? 'Limited stock' : 'Inventario limitado'}</span>
+                </div>
+              ) : limitedBadge}
               <div><button type="button" className={styles.cta} onClick={() => scrollToProducts('hero')}>{en ? 'Shop the deal' : 'Comprar la oferta'}</button></div>
             </section>
             {productGrid}
