@@ -103,7 +103,11 @@ export function computeOrderTotals(lineItems, currency, exchangeRate = FALLBACK_
 
   const total = discountedTotal + shipping;
 
-  return { subtotal, discountPct, discountAmount, discountedTotal, shipping, total, vialCount, bacCharge: bac.charge };
+  // discountableSubtotal is the merchandise alone, with BAC water left out.
+  // promoDiscountAmount has always read it off this object; it was computed
+  // here but never returned, so every promo code quietly discounted `undefined`
+  // - which rounds to zero - and customers got nothing off.
+  return { subtotal, discountableSubtotal, discountPct, discountAmount, discountedTotal, shipping, total, vialCount, bacCharge: bac.charge };
 }
 
 // Outer fence for USD -> CRC. Deliberately wide: it only catches garbage — a
