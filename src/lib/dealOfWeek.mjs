@@ -13,7 +13,7 @@
 
 import { crWallToIso, formatCrInstant, CR_UTC_OFFSET_HOURS } from './crTime.mjs';
 import { dealFieldsMatch } from './dealProductProtection.mjs';
-import { OFFERS_PRICING_MODE, dealOfferSummaries } from './dealOffers.mjs';
+import { OFFERS_PRICING_MODE, dealOfferSummaries, normalizeDealOffers } from './dealOffers.mjs';
 
 const CR_OFFSET_MS = CR_UTC_OFFSET_HOURS * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -481,5 +481,77 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
       '',
       destination,
     ].join('\n'),
+  };
+}
+
+/** A deal row written before add-flash-sales.sql has no kind: it is weekly. */
+export function dealKindOf(deal) {
+  return deal?.kind === 'flash' ? 'flash' : 'weekly';
+}
+
+/** Is this deal switched on and inside its own start/end window right now? */
+export function isDealRunning(deal, now = new Date()) {
+  if (deal?.status !== 'live') return false;
+  const instant = now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (deal.starts_at && instant < Date.parse(deal.starts_at)) return false;
+  if (deal.ends_at && instant > Date.parse(deal.ends_at)) return false;
+  return true;
+}
+
+/**
+ * One storefront view of every promotion running right now.
+ *
+ * A flash sale is a separate deal row that runs alongside the Deal of the Week.
+ * Rather than teach the catalog, the cart and the checkout about two deals,
+ * their offers are pooled into a single deal-shaped object here. chooseDealOffer
+ * then compares every offer from both - and the volume tier - and awards the one
+ * that saves the customer most. That is how "best saving wins" keeps holding
+ * with a flash sale on: the flash is simply one more candidate, never an extra
+ * discount layered on top.
+ *
+ * Each offer carries the id of the deal it came from, so the order is credited
+ * to the promotion that actually discounted it.
+ *
+ * Shelf and bulk-threshold deals are not poolable - a shelf deal discounts by
+ * rewriting prices, which is not an offer at all - so such a weekly deal is
+ * returned untouched and alone. Launching a flash sale against one is refused
+ * up front, so this case only arises for deals that predate flash sales.
+ */
+export function combineLiveDeals(deals, now = new Date()) {
+  const running = (deals || []).filter((deal) => isDealRunning(deal, now));
+  if (running.length === 0) return null;
+
+  const weekly = running.find((deal) => dealKindOf(deal) === 'weekly') || null;
+  const poolable = running.filter((deal) => dealPricingMode(deal) === OFFERS_PRICING_MODE);
+
+  // Nothing to pool: keep the single deal exactly as the storefront has always
+  // received it.
+  if (poolable.length <= 1) return weekly || running[0];
+
+  const items = [];
+  const productNames = [];
+  for (const deal of poolable) {
+    const clean = normalizeDealOffers(deal.offers);
+    for (const item of clean.items) {
+      if (!item.enabled) continue;
+      // Offer ids are only unique within one deal, and chooseDealOffer picks a
+      // winner by id, so they are namespaced by deal before being pooled.
+      items.push({ ...item, id: `${deal.id}:${item.id}`, deal_id: deal.id });
+      productNames.push(...item.product_names);
+    }
+  }
+
+  // The weekly deal anchors the identity, title and countdown the page already
+  // shows; a flash sale adds offers to it without renaming the week. With no
+  // weekly deal running, the flash sale stands on its own.
+  const anchor = weekly && dealPricingMode(weekly) === OFFERS_PRICING_MODE ? weekly : poolable[0];
+  return {
+    ...anchor,
+    product_names: [...new Set(productNames)],
+    pricing_mode: OFFERS_PRICING_MODE,
+    offers: { items },
+    // Every deal whose offers are in the pool, so a winning offer can be traced
+    // back and the admin screens can list what is running.
+    pooled_deal_ids: poolable.map((deal) => deal.id),
   };
 }

@@ -206,22 +206,30 @@ export function authoritativeCheckout({
       ? effectiveVolumeDiscountPct(promo, overridePct)
       : effectiveVolumeDiscountPct(promo, getVolumeDiscountPct(vialCount)));
 
-  // Flexible weekly offers: exactly one configured offer or the ordinary
-  // volume tier applies — whichever saves the customer most.
+  // Flexible deal offers, from the weekly deal and any live flash sale
+  // together: exactly one configured offer or the ordinary volume tier
+  // applies — whichever saves the customer most.
   const dealOffer = dealOffers && !promo
     ? chooseDealOffer(dealOffers, requested, {
       volumePct: volumeDiscountPct,
       bacCharge: summarizeBacWater(requested, currency, exchangeRate).charge,
     })
     : null;
-  if (dealOffer && (dealOffer.kind === 'mix' || dealOffer.kind === 'bundle')) volumeDiscountPct = 0;
+  if (dealOffer && dealOffer.kind !== 'volume' && dealOffer.kind !== 'none') volumeDiscountPct = 0;
 
   const totals = computeOrderTotals(requested, currency, exchangeRate, { volumeDiscountPct });
-  const promoDiscount = dealOffer?.kind === 'mix'
+  let promoDiscount;
+  if (dealOffer?.kind === 'mix') {
     // "10% off your entire order": totals.subtotal is the merchandise plus the
     // paid BAC water, so the water is discounted too.
-    ? roundCurrency(totals.subtotal * (Number(dealOffer.offer?.discount_pct ?? dealOffer.mix.discountPct) || 0), currency)
-    : promoDiscountAmount(requested, totals, promo, currency);
+    promoDiscount = roundCurrency(totals.subtotal * (Number(dealOffer.offer?.discount_pct ?? dealOffer.mix.discountPct) || 0), currency);
+  } else if (dealOffer?.kind === 'flat') {
+    // A flash sale marks down only its own products. chooseDealOffer already
+    // measured that against the same lines, so its figure is the discount.
+    promoDiscount = roundCurrency(dealOffer.savings, currency);
+  } else {
+    promoDiscount = promoDiscountAmount(requested, totals, promo, currency);
+  }
   const finalTotal = roundCurrency(totals.discountedTotal - promoDiscount + totals.shipping, currency);
 
   const orderLang = postedOrder?.lang || 'es';
@@ -258,6 +266,9 @@ export function authoritativeCheckout({
     volumeDiscountAmount: totals.discountAmount,
     promoDiscount,
     dealOffer: dealOffer ? dealOffer.kind : null,
+    // Which deal's offer won, when the weekly deal and a flash sale were both
+    // in the running. Null when the winner came from a single unpooled deal.
+    dealOfferDealId: dealOffer?.dealId || null,
     shipping: totals.shipping,
     total: finalTotal,
     totalUsd: currency === 'USD' ? finalTotal : round2(finalTotal / exchangeRate),

@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
+  FLASH_KIND,
+  endFlashSale,
+  launchFlashSale,
   getLiveDeal,
   listDeals,
   getDealOperations,
@@ -23,8 +26,11 @@ export async function GET(request) {
 
   try {
     const supabase = getSupabaseAdmin();
-    const [live, recent, scheduled] = await Promise.all([
+    const [live, flash, recent, scheduled] = await Promise.all([
       getLiveDeal(supabase),
+      // A flash sale runs alongside the weekly deal, so it is read separately
+      // rather than competing for the same "the live deal" slot.
+      getLiveDeal(supabase, FLASH_KIND).catch(() => null),
       listDeals(supabase),
       getScheduledDeal(supabase),
     ]);
@@ -35,6 +41,7 @@ export async function GET(request) {
     return NextResponse.json({
       live: live && operations ? { ...live, ...operations } : live,
       scheduled: scheduled ? { ...scheduled, problems } : null,
+      flash,
       recent,
     });
   } catch (err) {
@@ -44,6 +51,8 @@ export async function GET(request) {
 }
 
 /**
+ * flash_launch    → start a flash sale beside the weekly deal, ending when told
+ * flash_end       → stop the running flash sale now
  * preview         → what the deal would do, writing nothing
  * launch          → mark the prices down and raise the banner (does NOT send announcements)
  * schedule        → save a deal that the expire-deals cron launches at its start time
@@ -111,6 +120,24 @@ export async function POST(request) {
         offers: body.offers || null,
       });
       return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (action === 'flash_launch') {
+      const result = await launchFlashSale({
+        productNames: body.product_names,
+        discountPct: body.discount_pct,
+        endsAt: body.ends_at,
+        titleEn: body.title_en,
+        titleEs: body.title_es,
+        createdBy: auth.user?.id || null,
+        confirmedHighDiscount: body.confirm_high_discount === true,
+        allowUntrackedStock: body.allow_untracked_stock === true,
+      });
+      return NextResponse.json({ ok: true, ...result });
+    }
+
+    if (action === 'flash_end') {
+      return NextResponse.json({ ok: true, ...(await endFlashSale()) });
     }
 
     if (action === 'end') {

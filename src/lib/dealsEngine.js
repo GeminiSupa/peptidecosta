@@ -79,16 +79,45 @@ function offersMigrationHint(error) {
     : '';
 }
 
-/** The deal currently marked live, or null. Also used to block a second one. */
-export async function getLiveDeal(supabase) {
+export const WEEKLY_KIND = 'weekly';
+export const FLASH_KIND = 'flash';
+
+/** A row written before add-flash-sales.sql has no kind; it is a weekly deal. */
+export function dealKind(deal) {
+  return deal?.kind === FLASH_KIND ? FLASH_KIND : WEEKLY_KIND;
+}
+
+/**
+ * The live deal of one kind, or null. Also used to block a second one.
+ *
+ * Defaults to the weekly deal so every existing caller keeps asking the same
+ * question it always asked, now that a flash sale can be live at the same time.
+ */
+export async function getLiveDeal(supabase, kind = WEEKLY_KIND) {
   const { data, error } = await supabase
     .from('deals')
     .select('*')
-    .eq('status', 'live')
-    .maybeSingle();
+    .eq('status', 'live');
 
   if (error) throw new Error(`Could not read the live deal: ${error.message}`);
-  return data || null;
+  const live = (data || []).filter((deal) => dealKind(deal) === kind);
+  if (live.length > 1) {
+    // The per-kind unique index makes this unreachable; if it ever happens,
+    // failing loudly beats silently charging from whichever row sorted first.
+    throw new Error(`${live.length} ${kind} deals are marked live at once. End one in the Deal of the Week tab.`);
+  }
+  return live[0] || null;
+}
+
+/** Every live deal, whatever its kind. */
+export async function getLiveDeals(supabase) {
+  const { data, error } = await supabase
+    .from('deals')
+    .select('*')
+    .eq('status', 'live');
+
+  if (error) throw new Error(`Could not read live deals: ${error.message}`);
+  return data || [];
 }
 
 /** Recent deals for the admin screen, newest first. */
@@ -332,6 +361,8 @@ export async function launchDeal({
   maxUnits = 0,
   offers = null,
   scheduledDeal = null,
+  kind = WEEKLY_KIND,
+  endsAt = null,
   now = new Date(),
 }) {
   const supabase = getSupabaseAdmin();
@@ -342,7 +373,9 @@ export async function launchDeal({
   const safety = dealSafety(pct, { confirmedHighDiscount });
   if (!safety.ok) throw new Error(safety.error);
 
-  const alreadyLive = await getLiveDeal(supabase);
+  // Scoped to the kind: a flash sale and the Deal of the Week may run at the
+  // same time, but never two of either.
+  const alreadyLive = await getLiveDeal(supabase, kind);
   if (alreadyLive) {
     throw new Error(
       `"${alreadyLive.title_en || 'A deal'}" is already live until ${alreadyLive.ends_at}. End it before starting another.`
@@ -354,6 +387,7 @@ export async function launchDeal({
     supabase,
     products.map((product) => product.product),
     now,
+    { pricingMode: mode },
   );
   if (promoConflict) throw new Error(dealPromoConflictMessage(promoConflict));
 
@@ -370,9 +404,13 @@ export async function launchDeal({
   if (scheduledDeal && Date.parse(scheduledDeal.ends_at) <= now.getTime()) {
     throw new Error('Its end time has already passed, so it was never started.');
   }
+  // A flash sale ends when the admin said it ends; only a weekly deal is tied
+  // to the Sunday boundary.
   const window = scheduledDeal
     ? { startsAt: now.toISOString(), endsAt: scheduledDeal.ends_at, rolledForward: false }
-    : weekWindow(now);
+    : (endsAt
+      ? { startsAt: now.toISOString(), endsAt: new Date(endsAt).toISOString(), rolledForward: false }
+      : weekWindow(now));
   const { rate } = await getDatabaseBackedUsdToCrcRate();
 
   // Snapshot before touching anything. If the markdown loop fails partway, this
@@ -399,6 +437,7 @@ export async function launchDeal({
     pricing_mode: mode,
     min_units: minimum,
     max_units: maximum || null,
+    kind,
     ...(dealOffers ? { offers: dealOffers } : {}),
   };
   const drafts = dealBroadcastDrafts(draftDeal);
@@ -414,6 +453,7 @@ export async function launchDeal({
       pricing_mode: mode,
       min_units: minimum,
       max_units: maximum || null,
+      kind,
       ...(dealOffers ? { offers: dealOffers } : {}),
       baseline,
       applied,
@@ -423,7 +463,7 @@ export async function launchDeal({
   };
   const { data: deal, error: insertError, droppedColumns } = await writeDroppingMissingColumns(
     insertPayload,
-    ['applied', 'announcement_drafts', 'announcement_status'],
+    ['applied', 'announcement_drafts', 'announcement_status', 'kind'],
     (row) => (scheduledDeal
       // Only a row still waiting to start may be switched on, so two cron runs
       // racing over the same scheduled deal cannot both launch it.
@@ -558,6 +598,96 @@ export async function endDeal(deal) {
   return { restored };
 }
 
+/**
+ * Refuse a flash sale before it is written if add-flash-sales.sql has not run.
+ *
+ * `kind` is in the droppable list so a pre-migration database can still launch
+ * an ordinary weekly deal - but dropping it from a FLASH row would silently
+ * store the flash sale as a second weekly deal. Probing the column first turns
+ * that into a plain instruction instead.
+ */
+async function requireFlashSaleSchema(supabase) {
+  const { error } = await supabase.from('deals').select('kind').limit(1);
+  if (error) {
+    throw new Error('Flash sales need one database change first — run add-flash-sales.sql in Supabase, then try again.');
+  }
+}
+
+/**
+ * Start a flash sale: a percentage off chosen products, no code, no minimum,
+ * ending at the time the admin picked.
+ *
+ * It runs alongside the Deal of the Week rather than replacing it. At checkout
+ * both sets of offers are compared and the customer gets the better one, so a
+ * flash sale can never make an order cost more than it would have, and never
+ * stacks on top of the weekly deal.
+ */
+export async function launchFlashSale({
+  productNames,
+  discountPct,
+  endsAt,
+  titleEn,
+  titleEs,
+  createdBy,
+  confirmedHighDiscount = false,
+  allowUntrackedStock = false,
+  now = new Date(),
+}) {
+  const supabase = getSupabaseAdmin();
+  await requireFlashSaleSchema(supabase);
+
+  const end = Date.parse(endsAt);
+  if (!Number.isFinite(end)) throw new Error('Choose when the flash sale ends.');
+  if (end <= now.getTime()) throw new Error('That end time has already passed. Pick a later one.');
+
+  // A shelf deal discounts by rewriting prices rather than by offering terms,
+  // so its markdown and a flash sale cannot be compared - they would stack.
+  const weekly = await getLiveDeal(supabase, WEEKLY_KIND);
+  if (weekly && dealPricingMode(weekly) !== OFFERS_PRICING_MODE) {
+    throw new Error(
+      `The live Deal of the Week marks shelf prices down, so a flash sale cannot run beside it without stacking. End "${weekly.title_en || 'the weekly deal'}" first.`
+    );
+  }
+
+  const pct = Number(discountPct);
+  if (!(pct > 0 && pct < 1)) throw new Error('The flash sale discount must be between 1% and 99%.');
+  const products = [...new Set((productNames || []).map((name) => String(name || '').trim()).filter(Boolean))];
+  if (products.length === 0) throw new Error('Choose at least one product for the flash sale.');
+
+  return launchDeal({
+    productNames: products,
+    titleEn,
+    titleEs,
+    createdBy,
+    confirmedHighDiscount,
+    allowUntrackedStock,
+    pricingMode: OFFERS_PRICING_MODE,
+    offers: {
+      items: [{
+        id: 'flash-1',
+        type: 'flat',
+        enabled: true,
+        product_names: products,
+        discount_pct: pct,
+        name_en: String(titleEn || '').trim() || `${Math.round(pct * 100)}% off`,
+        name_es: String(titleEs || '').trim() || `${Math.round(pct * 100)}% de descuento`,
+      }],
+    },
+    kind: FLASH_KIND,
+    endsAt: new Date(end).toISOString(),
+    now,
+  });
+}
+
+/** Stop the running flash sale now. Shelf prices were never touched. */
+export async function endFlashSale() {
+  const supabase = getSupabaseAdmin();
+  const live = await getLiveDeal(supabase, FLASH_KIND);
+  if (!live) throw new Error('No flash sale is running.');
+  const { restored } = await endDeal(live);
+  return { restored, deal: live };
+}
+
 /** Cron entry point: end any live deal whose Sunday has passed. */
 export async function expireDueDeals(now = new Date()) {
   const supabase = getSupabaseAdmin();
@@ -655,6 +785,7 @@ export async function scheduleDeal({
     supabase,
     products.map((product) => product.product),
     new Date(window.startsAt),
+    { pricingMode: mode },
   );
   if (promoConflict) throw new Error(`${dealPromoConflictMessage(promoConflict)} (checked at the scheduled start time)`);
 
@@ -766,7 +897,9 @@ export async function startDueScheduledDeals(now = new Date()) {
   const results = [];
   for (const deal of data || []) {
     try {
-      if (await getLiveDeal(supabase)) {
+      // Only a deal of the same kind is in the way; a flash sale running
+      // beside it is not.
+      if (await getLiveDeal(supabase, dealKind(deal))) {
         // Not a failure: the live deal is ended by expiry or by hand, and the
         // next run starts this one.
         results.push({ id: deal.id, ok: true, waiting: 'another deal is still live' });
@@ -787,6 +920,7 @@ export async function startDueScheduledDeals(now = new Date()) {
         minUnits: deal.min_units,
         maxUnits: deal.max_units,
         offers: deal.offers,
+        kind: dealKind(deal),
         scheduledDeal: deal,
         now,
       });

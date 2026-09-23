@@ -23,7 +23,7 @@ import { identityMessage, validateCustomerName } from '@/lib/checkoutIdentity.mj
 import { researchAckMessage, researchAckRecord, validateResearchAck } from '@/lib/researchAcknowledgement.mjs';
 import { createCardCheckoutToken } from '@/lib/cardPaymentLink';
 import { findLiveDealConflictForPromo, promoDealConflictMessage } from '@/lib/promoStackingSafety.mjs';
-import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
+import { automaticDealPromo, combineLiveDeals, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE } from '@/lib/dealOffers.mjs';
 import { DEAL_PAGE_EXPERIMENT, normalizeVariant } from '@/lib/dealPageExperiment.mjs';
 import {
@@ -555,7 +555,10 @@ export async function POST(request) {
       // select('*') keeps ordinary checkout compatible during a rolling deploy:
       // pre-migration databases simply return legacy shelf-deal rows, while a
       // bulk launch itself still refuses until its required columns exist.
-      supabase.from('deals').select('*').eq('status', 'live').limit(1),
+      // Every live promotion, not just one: a flash sale runs alongside the
+      // Deal of the Week, and combineLiveDeals pools their offers so the
+      // customer is charged the single best one.
+      supabase.from('deals').select('*').eq('status', 'live'),
     ]);
     if (productError) {
       return NextResponse.json({ error: `Could not verify current prices: ${productError.message}` }, { status: 503 });
@@ -563,7 +566,7 @@ export async function POST(request) {
     if (liveDealError) {
       return NextResponse.json({ error: `Could not verify weekly-deal pricing: ${liveDealError.message}` }, { status: 503 });
     }
-    const liveDeal = (liveDealRows || [])[0] || null;
+    const liveDeal = combineLiveDeals(liveDealRows || []);
     const matchedDeal = activeDealForOrder(liveDeal ? [liveDeal] : [], order.items);
     const dealMaximum = dealMaxUnits(matchedDeal);
     const dealUnits = dealEligibleUnits(matchedDeal, order.items);
@@ -632,7 +635,10 @@ export async function POST(request) {
 
     // Attribution is derived from the live deal and the products actually
     // priced, never from a query parameter supplied by the shopper.
-    if (matchedDeal) order.deal_id = matchedDeal.id;
+    // Credit the promotion whose offer actually discounted this order: with a
+    // flash sale and the weekly deal both running, the winner may not be the
+    // deal the pooled view is anchored to.
+    if (matchedDeal) order.deal_id = authoritative.dealOfferDealId || matchedDeal.id;
 
     // A marketing tag must never cost us the sale. A free-text campaign name
     // reaching a uuid column used to fail the whole insert, which broke

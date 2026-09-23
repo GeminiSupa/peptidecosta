@@ -225,6 +225,13 @@ function crWallAtOrAfter(iso) {
 
 export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onProductsChanged }) {
   const [live, setLive] = useState(null);
+  const [flash, setFlash] = useState(null);
+  const [flashProducts, setFlashProducts] = useState([]);
+  const [flashPercent, setFlashPercent] = useState(50);
+  const [flashEndsWall, setFlashEndsWall] = useState('');
+  const [flashQuery, setFlashQuery] = useState('');
+  const [flashBusy, setFlashBusy] = useState(false);
+  const [flashError, setFlashError] = useState('');
   const [scheduled, setScheduled] = useState(null);
   const [startMode, setStartMode] = useState('now');
   const [startWall, setStartWall] = useState('');
@@ -352,6 +359,7 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not load deals');
       setLive(data.live || null);
+      setFlash(data.flash || null);
       setScheduled(data.scheduled || null);
       setRecent(data.recent || []);
       // With a deal live, the only option is to schedule the next one, and
@@ -616,6 +624,89 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
                   ? 'A deal is already live. Schedule this deal or end the live one first.'
                   : '';
 
+  /** End of today, Costa Rica — the usual flash-sale finish. */
+  const flashEndOfToday = () => {
+    const nowCr = isoToCrWall(new Date().toISOString());
+    return `${String(nowCr).slice(0, 10)}T23:59`;
+  };
+
+  const flashVisibleProducts = useMemo(() => {
+    const q = flashQuery.trim().toLowerCase();
+    const eligible = products.filter((product) => !isBacWater(product.product));
+    if (!q) return eligible;
+    return eligible.filter((product) => (
+      String(product.product || '').toLowerCase().includes(q)
+      || String(product.category || '').toLowerCase().includes(q)
+    ));
+  }, [flashQuery, products]);
+
+  const flashEndsIso = flashEndsWall ? crWallToIso(flashEndsWall) : '';
+  const flashBlocker = flashProducts.length === 0
+    ? 'Tick at least one product.'
+    : !(Number(flashPercent) > 0 && Number(flashPercent) < 100)
+      ? 'The discount must be between 1% and 99%.'
+      : !flashEndsIso
+        ? 'Choose when the sale ends.'
+        : Date.parse(flashEndsIso) <= Date.now()
+          ? 'That end time has already passed.'
+          : '';
+
+  const startFlashSale = async () => {
+    if (flashBlocker) return;
+    const names = flashProducts.join(', ');
+    if (!window.confirm(`Start a ${Math.round(Number(flashPercent))}% flash sale on ${names}?
+
+It ends automatically at ${formatCrInstant(flashEndsIso)}.`)) return;
+    setFlashBusy(true);
+    setFlashError('');
+    try {
+      const res = await adminFetch('/api/admin/deals', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'flash_launch',
+          product_names: flashProducts,
+          discount_pct: Number(flashPercent) / 100,
+          ends_at: flashEndsIso,
+          title_en: `${Math.round(Number(flashPercent))}% off ${names}`,
+          title_es: `${Math.round(Number(flashPercent))}% de descuento en ${names}`,
+          // A flash sale is deliberately deep and deliberately short; the
+          // high-discount review exists for week-long markdowns.
+          confirm_high_discount: true,
+          allow_untracked_stock: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not start the flash sale.');
+      setFlashProducts([]);
+      await load();
+      onProductsChanged?.();
+    } catch (err) {
+      setFlashError(err.message);
+    } finally {
+      setFlashBusy(false);
+    }
+  };
+
+  const stopFlashSale = async () => {
+    if (!window.confirm('Stop the flash sale now? Prices go back to normal immediately.')) return;
+    setFlashBusy(true);
+    setFlashError('');
+    try {
+      const res = await adminFetch('/api/admin/deals', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'flash_end' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not stop the flash sale.');
+      await load();
+      onProductsChanged?.();
+    } catch (err) {
+      setFlashError(err.message);
+    } finally {
+      setFlashBusy(false);
+    }
+  };
+
   return (
     <div className="admin-orders-tab">
       <div className="admin-toolbar">
@@ -636,6 +727,132 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
           <Loader size={16} className="spin" /> Loading…
         </div>
       )}
+
+      {/* ---------- Flash sale ---------- */}
+      <div style={{ ...card, borderColor: flash ? 'rgba(239,68,68,0.45)' : undefined }}>
+        <h4 style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 6px' }}>
+          <Zap size={16} color="#ef4444" /> Flash sale
+        </h4>
+        <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0 0 14px' }}>
+          A short, deep discount on a few products. No promo code &mdash; it applies by itself,
+          from one vial, and switches off at the time you set. It runs alongside the Deal of
+          the Week: a customer gets whichever saves them more, never both.
+        </p>
+
+        {flash ? (
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', padding: '14px' }}>
+            <div style={{ fontWeight: 700, color: '#fca5a5', marginBottom: '6px' }}>{flash.title_en || 'Flash sale'}</div>
+            <div style={{ fontSize: '0.82rem', color: '#e2e8f0', marginBottom: '4px' }}>
+              {(flash.product_names || []).join(', ')}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+              Ends <DealTime iso={flash.ends_at} /> &mdash; it stops on its own, you do not need to come back.
+            </div>
+            <button
+              type="button"
+              className="admin-btn"
+              style={{ marginTop: '12px', background: '#ef4444', color: '#fff' }}
+              onClick={stopFlashSale}
+              disabled={flashBusy}
+            >
+              {flashBusy ? <Loader size={14} className="spin" /> : <X size={14} />} Stop it now
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: '12px' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem', color: '#94a3b8' }}>
+                Discount
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <input
+                    className="admin-input"
+                    type="number"
+                    min="1"
+                    max="99"
+                    value={flashPercent}
+                    onChange={(event) => setFlashPercent(event.target.value)}
+                    style={{ width: '90px' }}
+                  />
+                  <span style={{ color: '#e2e8f0' }}>% off</span>
+                </div>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem', color: '#94a3b8' }}>
+                Ends at (Costa Rica time)
+                <input
+                  className="admin-input"
+                  type="datetime-local"
+                  value={flashEndsWall}
+                  onChange={(event) => setFlashEndsWall(event.target.value)}
+                />
+              </label>
+              <button type="button" className="admin-btn" style={{ padding: '6px 10px', fontSize: '0.75rem' }} onClick={() => setFlashEndsWall(flashEndOfToday())}>
+                <Clock size={13} /> End of today
+              </button>
+            </div>
+
+            {flashEndsIso && (
+              <div style={{ fontSize: '0.78rem', color: '#38bdf8', marginBottom: '10px' }}>
+                Stops automatically at <strong>{formatCrInstant(flashEndsIso)}</strong>
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '6px' }}>
+              Products on sale &mdash; {flashProducts.length} selected
+            </div>
+            <div className="weekly-deal-product-search">
+              <Search size={15} />
+              <input value={flashQuery} onChange={(event) => setFlashQuery(event.target.value)} placeholder="Search products" aria-label="Search flash sale products" />
+              {flashQuery && <button type="button" onClick={() => setFlashQuery('')} aria-label="Clear search"><X size={14} /></button>}
+            </div>
+            <div className="admin-input" style={{ width: '100%', maxHeight: '170px', overflowY: 'auto', padding: '8px 12px', background: '#0b1220', border: '1px solid #334155', borderRadius: '8px' }}>
+              {flashVisibleProducts.map((p) => {
+                const isChecked = flashProducts.includes(p.product);
+                return (
+                  <label key={p.id || p.product} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '6px 0', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                    <input
+                      type="checkbox"
+                      style={{ width: '16px', height: '16px', accentColor: '#ef4444', cursor: 'pointer' }}
+                      checked={isChecked}
+                      onChange={() => setFlashProducts(isChecked
+                        ? flashProducts.filter((name) => name !== p.product)
+                        : [...flashProducts, p.product])}
+                    />
+                    <span style={{ fontSize: '0.85rem', fontWeight: isChecked ? 'bold' : 'normal', color: isChecked ? '#fca5a5' : '#e2e8f0' }}>{p.product}</span>
+                    {p.status !== 'In Stock' && (
+                      <span style={{ fontSize: '0.7rem', color: '#f87171', border: '1px solid rgba(248,113,113,0.4)', borderRadius: '4px', padding: '1px 5px' }}>{p.status}</span>
+                    )}
+                    <span className="weekly-deal-product-meta">
+                      <span>{p.priceUsd}</span>
+                      <small>{p.inventoryCount === null ? 'stock untracked' : `${p.inventoryCount} available`}</small>
+                    </span>
+                  </label>
+                );
+              })}
+              {flashVisibleProducts.length === 0 && <div style={{ color: '#94a3b8', fontSize: '0.85rem', padding: '8px' }}>No matching products found.</div>}
+            </div>
+
+            {flashError && (
+              <div style={{ marginTop: '10px', color: '#fca5a5', fontSize: '0.82rem', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: '2px' }} /> {flashError}
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="admin-btn"
+              style={{ marginTop: '14px', background: flashBlocker ? '#334155' : '#ef4444', color: '#fff' }}
+              onClick={startFlashSale}
+              disabled={Boolean(flashBlocker) || flashBusy}
+              title={flashBlocker || undefined}
+            >
+              {flashBusy ? <Loader size={14} className="spin" /> : <Zap size={14} />} Start flash sale
+            </button>
+            {flashBlocker && (
+              <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#94a3b8' }}>{flashBlocker}</div>
+            )}
+          </>
+        )}
+      </div>
 
       {/* ---------- The live deal ---------- */}
       {!loading && live && (

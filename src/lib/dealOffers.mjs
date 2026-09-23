@@ -1,6 +1,6 @@
 /**
- * Flexible Deal of the Week offers. Admins can add any number of two proven
- * pricing mechanics: "Mix & Match" and "Buy X, Get Y Free".
+ * Flexible deal offers. Admins can add any number of three proven pricing
+ * mechanics: "Mix & Match", "Buy X, Get Y Free" and a straight "% off".
  *
  *   Mix & Match — N or more vials from the chosen products takes a percentage
  *   off the WHOLE order, BAC water included. BAC water never counts toward N.
@@ -9,6 +9,12 @@
  *   product free. The customer adds X; the free vials are added for them as
  *   zero-priced "(Free Gift)" lines, so stock, packing list and emails all see
  *   them. BAC water never qualifies.
+ *
+ *   Flat % off — a percentage off the chosen products themselves, with no
+ *   minimum and no code. This is what a flash sale is made of: one vial of one
+ *   product at half price qualifies on its own. It discounts only its own
+ *   products, never the rest of the cart, so it cannot quietly mark down an
+ *   order that happens to contain one sale item.
  *
  * The offers never stack with each other, with promo codes, or with the
  * automatic volume tiers: the order gets whichever ONE saves the most, the
@@ -24,6 +30,7 @@ import { isBacWater } from './bacWater.mjs';
 
 export const OFFERS_PRICING_MODE = 'offers';
 export const MIX_OFFER_TYPE = 'mix';
+export const FLAT_OFFER_TYPE = 'flat';
 export const BUNDLE_OFFER_TYPE = 'bundle';
 
 const nameKey = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -52,8 +59,14 @@ function rawOfferItems(raw) {
   return items;
 }
 
+function offerType(raw) {
+  if (raw?.type === BUNDLE_OFFER_TYPE) return BUNDLE_OFFER_TYPE;
+  if (raw?.type === FLAT_OFFER_TYPE) return FLAT_OFFER_TYPE;
+  return MIX_OFFER_TYPE;
+}
+
 function normalizeOffer(raw, index) {
-  const type = raw?.type === BUNDLE_OFFER_TYPE ? BUNDLE_OFFER_TYPE : MIX_OFFER_TYPE;
+  const type = offerType(raw);
   const base = {
     id: offerId(raw?.id, index, type),
     type,
@@ -61,10 +74,18 @@ function normalizeOffer(raw, index) {
     product_names: names(raw?.product_names),
     name_en: String(raw?.name_en || '').trim().slice(0, 100),
     name_es: String(raw?.name_es || '').trim().slice(0, 100),
+    // Which deal contributed this offer. Set when two live deals are merged
+    // into one storefront view, so the winning offer can be credited to the
+    // deal that owns it rather than to whichever deal was read first.
+    deal_id: String(raw?.deal_id || '').trim() || null,
   };
-  return type === BUNDLE_OFFER_TYPE
-    ? { ...base, buy_qty: Math.max(1, toInt(raw?.buy_qty, 4)), free_qty: Math.max(1, toInt(raw?.free_qty, 1)) }
-    : { ...base, min_units: Math.max(1, toInt(raw?.min_units, 2)), discount_pct: Number(raw?.discount_pct) || 0 };
+  if (type === BUNDLE_OFFER_TYPE) {
+    return { ...base, buy_qty: Math.max(1, toInt(raw?.buy_qty, 4)), free_qty: Math.max(1, toInt(raw?.free_qty, 1)) };
+  }
+  if (type === FLAT_OFFER_TYPE) {
+    return { ...base, discount_pct: Number(raw?.discount_pct) || 0 };
+  }
+  return { ...base, min_units: Math.max(1, toInt(raw?.min_units, 2)), discount_pct: Number(raw?.discount_pct) || 0 };
 }
 
 const disabledMix = () => ({ id: 'mix-1', type: MIX_OFFER_TYPE, enabled: false, product_names: [], name_en: '', name_es: '', min_units: 2, discount_pct: 0 });
@@ -96,10 +117,12 @@ export function dealOffersError(offers) {
     const item = items[index] || {};
     if (item.enabled !== true) continue;
     const label = `Offer #${index + 1}`;
-    if (![MIX_OFFER_TYPE, BUNDLE_OFFER_TYPE].includes(item.type)) return `${label}: choose a supported offer type.`;
+    if (![MIX_OFFER_TYPE, BUNDLE_OFFER_TYPE, FLAT_OFFER_TYPE].includes(item.type)) return `${label}: choose a supported offer type.`;
     if (names(item.product_names).length === 0) return `${label}: choose which products qualify.`;
     if (names(item.product_names).some(isBacWater)) return `${label}: BAC Water cannot be an offer product.`;
-    if (item.type === MIX_OFFER_TYPE) {
+    if (item.type === FLAT_OFFER_TYPE) {
+      if (!(Number(item.discount_pct) > 0 && Number(item.discount_pct) < 1)) return `${label}: the discount must be between 1% and 99%.`;
+    } else if (item.type === MIX_OFFER_TYPE) {
       if (!Number.isInteger(Number(item.min_units)) || Number(item.min_units) < 1) return `${label}: the vial minimum must be a whole number of 1 or more.`;
       if (!(Number(item.discount_pct) > 0 && Number(item.discount_pct) < 1)) return `${label}: the discount must be between 1% and 99%.`;
     } else {
@@ -142,11 +165,24 @@ export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge =
 
   const offerResults = clean.items.filter((item) => item.enabled).map((item) => {
     const eligibleKeys = new Set(item.product_names.map(nameKey));
+    if (item.type === FLAT_OFFER_TYPE) {
+      // Only the sale products are discounted, so the saving is measured on
+      // their own lines. One vial is enough: there is no minimum to reach.
+      let eligibleSubtotal = 0;
+      let units = 0;
+      for (const line of paidLines) {
+        if (!eligibleKeys.has(line.key)) continue;
+        eligibleSubtotal += line.unitPrice * line.qty;
+        units += line.qty;
+      }
+      const savings = item.discount_pct * eligibleSubtotal;
+      return { id: item.id, dealId: item.deal_id, type: item.type, config: item, qualifies: units > 0 && savings > 0, savings, units, minUnits: 0 };
+    }
     if (item.type === MIX_OFFER_TYPE) {
       const units = paidLines.reduce((sum, line) => sum + (eligibleKeys.has(line.key) ? line.qty : 0), 0);
       const qualifies = units >= item.min_units;
       const savings = qualifies ? item.discount_pct * (merchSubtotal + (Number(bacCharge) || 0)) : 0;
-      return { id: item.id, type: item.type, config: item, qualifies, savings, units, minUnits: item.min_units };
+      return { id: item.id, dealId: item.deal_id, type: item.type, config: item, qualifies, savings, units, minUnits: item.min_units };
     }
 
     const quantities = new Map();
@@ -174,7 +210,7 @@ export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge =
       if (free > 0) freeLines.push({ product: entry.product, qty: free, unitPrice: entry.unitPrice });
     }
     const savings = freeLines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
-    return { id: item.id, type: item.type, config: item, qualifies: freeLines.length > 0, savings, freeLines, shortByStock };
+    return { id: item.id, dealId: item.deal_id, type: item.type, config: item, qualifies: freeLines.length > 0, savings, freeLines, shortByStock };
   });
 
   const volumeSavings = Math.max(0, Number(volumePct) || 0) / 100 * merchSubtotal;
@@ -196,6 +232,9 @@ export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge =
     kind,
     savings,
     offerId: winner?.id || null,
+    // The deal the winning offer came from, so an order is credited to the
+    // flash sale or to the weekly deal — whichever actually discounted it.
+    dealId: winner?.dealId || null,
     offer: winner?.config || null,
     offers: offerResults,
     mix: {
@@ -232,7 +271,11 @@ function offerDisplayName(item, lang) {
 function offerSummary(item, lang = 'en') {
   const isEn = String(lang).toLowerCase().startsWith('en');
   const customName = offerDisplayName(item, lang);
-  const terms = item.type === BUNDLE_OFFER_TYPE
+  const terms = item.type === FLAT_OFFER_TYPE
+    ? (isEn
+      ? `${Math.round(item.discount_pct * 100)}% off ${item.product_names.join(', ')}`
+      : `${Math.round(item.discount_pct * 100)}% de descuento en ${item.product_names.join(', ')}`)
+    : item.type === BUNDLE_OFFER_TYPE
     ? (isEn
       ? `Buy ${item.buy_qty} of the same vial, get ${item.free_qty} free`
       : `Compra ${item.buy_qty} del mismo vial y llévate ${item.free_qty} gratis`)
@@ -265,6 +308,13 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       ? `Deal of the Week — ${offerDisplayName(winning, lang) || 'Buy & Get Free'}: ${free} FREE added to your order${short}. Offers do not stack.`
       : `Oferta de la Semana — ${offerDisplayName(winning, lang) || 'Compra y recibe gratis'}: ${free} GRATIS en tu pedido${short}. Las ofertas no se acumulan.`;
   }
+  if (choice.kind === FLAT_OFFER_TYPE && winning) {
+    const pct = Math.round(winning.discount_pct * 100);
+    const what = winning.product_names.join(', ');
+    return isEn
+      ? `Flash sale — ${pct}% off ${what} is applied. Offers do not stack, so you always get the biggest saving.`
+      : `Oferta relámpago — ${pct}% de descuento en ${what} aplicado. Las ofertas no se acumulan; siempre recibes el mayor ahorro.`;
+  }
   if (choice.kind === 'volume') {
     return isEn
       ? 'Your volume discount saves more than this week\'s offers, so it is applied instead.'
@@ -279,6 +329,12 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       return isEn
         ? `add ${toGo} more qualifying ${toGo === 1 ? 'vial' : 'vials'} for ${pct}% off your whole order`
         : `agrega ${toGo} ${toGo === 1 ? 'vial participante' : 'viales participantes'} para ${pct}% de descuento en todo tu pedido`;
+    }
+    if (item.type === FLAT_OFFER_TYPE) {
+      const pct = Math.round(item.discount_pct * 100);
+      return isEn
+        ? `add ${item.product_names.join(' or ')} for ${pct}% off`
+        : `agrega ${item.product_names.join(' o ')} para ${pct}% de descuento`;
     }
     return isEn
       ? `buy ${item.buy_qty} of the same qualifying vial to get ${item.free_qty} free`
