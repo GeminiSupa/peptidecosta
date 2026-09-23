@@ -72,6 +72,25 @@ The customer-facing summary is a third place: a discount that has no row in
 `hasPromoDiscount`) simply vanishes from the arithmetic, leaving goods + shipping
 that do not add up to the total.
 
+## Adding an offer type or a discount is never one change
+
+A `flat` offer was added to the pricing engine and then surfaced wrong in five
+separate places, each found only by looking at the real page. When you add one,
+walk every surface that renders or prices it:
+
+1. `chooseDealOffer` — scoring (`src/lib/dealOffers.mjs`)
+2. `authoritativeCheckout.mjs` — what the server charges
+3. `src/app/catalog/page.js` — the browser's total **and** the order-summary row
+4. `checkoutBreakdown.mjs` — the invoice figures
+5. `src/app/deal-of-the-week/page.js` — the offer tiles
+6. `dealOfferSummaries` / `dealOfferRuleSummaries` / `dealOfferCartMessage` /
+   `flatOfferBadgeForProduct` — customer-facing wording and the catalog ribbon
+7. `dealBannerText` / `dealBroadcastDrafts` — banner and announcement copy
+
+A branch that reads `if (type === 'bundle') … else …` will silently treat the new
+type as the old one — that is exactly how "Buy undefined+ vials" reached
+customers. Grep for the existing type names and check every hit.
+
 ## Verifying against production data
 
 `.env.local` holds live Supabase credentials. Write a throwaway `.mjs` **inside
@@ -176,7 +195,8 @@ disturbing the running weekly deal.
   mixed cart correctly falling back to the volume tier at $655.
 - Also fixed: promo codes discounting $0; product saves throwing while two deals
   were live; the WhatsApp bot losing all deal knowledge; the order summary
-  showing no line for the flash discount; announcements claiming "Ends Sunday".
+  showing no line for the flash discount; announcements claiming "Ends Sunday";
+  the Deal of the Week page rendering "50% off your order / Buy undefined+ vials".
 - Sale extended to **Thu 24 Sep 23:59 CR** by updating `ends_at` directly.
 
 **Still unproven at session end:** no flash sale has ever been through the
