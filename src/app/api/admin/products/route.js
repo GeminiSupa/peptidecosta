@@ -54,13 +54,18 @@ async function moveReviewsToNewName(supabase, fromName, toName) {
  * remains real and is surfaced.
  */
 async function loadLiveDeal(supabase) {
+  // A flash sale runs beside the Deal of the Week, so "the live deal" can be
+  // two rows. maybeSingle() turned that into an error and this function threw
+  // it, which stopped every product save while a flash sale was on. The guard
+  // protects whatever any live deal has priced, so the lists are merged.
   const { data, error } = await supabase
     .from('deals')
     .select('id,product_names')
-    .eq('status', 'live')
-    .maybeSingle();
+    .eq('status', 'live');
   if (error && !isMissingDealsTable(error)) throw error;
-  return data?.product_names?.length ? data : null;
+  const rows = data || [];
+  const productNames = [...new Set(rows.flatMap((row) => row.product_names || []).filter(Boolean))];
+  return productNames.length ? { id: rows[0]?.id || null, product_names: productNames } : null;
 }
 
 function dealConflictResponse(conflicts) {

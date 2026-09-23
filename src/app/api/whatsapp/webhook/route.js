@@ -30,6 +30,7 @@ import {
   OPT_IN_CONFIRMATION,
 } from '@/lib/whatsappCompliance';
 import { verifyMetaWebhook } from '@/lib/metaWebhookAuth';
+import { combineLiveDeals } from '@/lib/dealOfWeek.mjs';
 
 // ─── Supabase client (server-side with service role for writes) ───
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -368,15 +369,18 @@ export async function POST(request) {
                     .from('deals')
                     // pricing_mode, min_units and offers let the bot describe a
                     // threshold or two-offer deal instead of a flat markdown.
-                    .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status,pricing_mode,min_units,offers')
+                    .select('id,title_en,title_es,product_names,discount_pct,starts_at,ends_at,status,pricing_mode,min_units,offers,kind')
                     .eq('status', 'live')
                     .lte('starts_at', nowIso)
-                    .gte('ends_at', nowIso)
-                    .maybeSingle();
+                    .gte('ends_at', nowIso);
                   if (dealResult.error) console.warn('[WhatsApp Webhook] Failed to load weekly deal:', dealResult.error.message);
+                  // Was maybeSingle(), which errors the moment a flash sale is
+                  // live alongside the weekly deal - and the bot then fell back
+                  // to knowing about no deal at all. Pooling them is what the
+                  // storefront does, so the bot quotes the same offers.
                   salesSnapshot = buildWhatsAppSalesSnapshot({
                     products: catalogProducts,
-                    liveDeal: dealResult.data || null,
+                    liveDeal: combineLiveDeals(dealResult.data || []),
                   });
                   salesContext = formatWhatsAppSalesContext(salesSnapshot);
                 } catch (err) {
