@@ -221,3 +221,21 @@ test('a flash sale is not described as money off the whole order', () => {
   assert.match(flashRule, /those products only/);
   assert.doesNotMatch(flashRule, /off your entire order/);
 });
+
+test('the weekly deal page describes only the weekly deal', () => {
+  // The flash sale is pooled for pricing, never for description: listing it
+  // under "Deal of the Week" gave it the weekly end date, and counted it as
+  // one of the week's "ways to save".
+  const running = [weeklyDeal, flashDeal];
+  const weekly = running.find((d) => d.kind !== 'flash');
+  const flash = running.find((d) => d.kind === 'flash');
+  const weeklyTiles = normalizeDealOffers(weekly.offers).items.filter((o) => o.enabled);
+  assert.equal(weeklyTiles.length, 1, 'only the weekly deal\u2019s own offers');
+  assert.ok(weeklyTiles.every((o) => o.type !== 'flat'), 'no flash offer on the weekly card');
+  assert.notEqual(weekly.ends_at, flash.ends_at, 'the two promotions end at different times');
+
+  // ...while the pooled view, which prices the cart, still contains both.
+  const pooled = combineLiveDeals(running, duringBoth);
+  const pooledTypes = normalizeDealOffers(pooled.offers).items.map((o) => o.type);
+  assert.ok(pooledTypes.includes('flat') && pooledTypes.includes('mix'));
+});

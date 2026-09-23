@@ -116,6 +116,13 @@ deal-shaped object so the catalog, cart and checkout keep seeing "one deal".
 Each offer carries `deal_id` for attribution; offer ids are namespaced
 `dealId:offerId` because ids are only unique within a deal.
 
+**Pooling is for pricing, never for describing.** `/api/deals/current` returns
+`deal` (pooled, price the cart with this), plus `weekly` and `flash` separately
+(describe with these). The Deal of the Week page showed the pooled view and so
+announced a flash sale as one of the week's "3 ways to save", under the weekly
+deal's end date — telling customers a sale ending Thursday ran until Sunday.
+Any new surface must pick the right one deliberately.
+
 **Best saving wins, and discounts never stack.** `chooseDealOffer`
 (`src/lib/dealOffers.mjs`) scores every offer plus the volume tier and awards the
 single best one. Offer types: `mix` (N+ vials → % off the whole order), `bundle`

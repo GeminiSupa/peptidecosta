@@ -65,7 +65,13 @@ export default function DealOfTheWeekPage() {
   const { lang, setLang, landingSettings } = usePublicPageContent('page_bulk_discounts');
   const { links } = useBusinessLinks();
   const { variant, track } = useDealPageExperiment();
+  // `deal` is what this page DESCRIBES: the Deal of the Week. `pricingDeal`
+  // is every running promotion pooled together, which is what the cart on this
+  // page must price against so a flash sale still discounts. Showing the pooled
+  // view listed a flash sale as a weekly offer, under the weekly end date.
   const [deal, setDeal] = useState(undefined);
+  const [pricingDeal, setPricingDeal] = useState(null);
+  const [flashOnly, setFlashOnly] = useState(false);
   const [products, setProducts] = useState([]);
   // Version A's headline is built from the product prices, so the page waits
   // for them rather than showing one headline and swapping it a moment later.
@@ -83,8 +89,15 @@ export default function DealOfTheWeekPage() {
   useEffect(() => {
     fetch('/api/deals/current', { cache: 'no-store' })
       .then((response) => response.json())
-      .then((data) => setDeal(data?.deal || null))
-      .catch(() => setDeal(null));
+      .then((data) => {
+        // With no weekly deal running, a live flash sale is what there is to
+        // show; the wording below switches so it is never called the week's.
+        const shown = data?.weekly || data?.flash || null;
+        setFlashOnly(!data?.weekly && Boolean(data?.flash));
+        setDeal(shown);
+        setPricingDeal(data?.deal || null);
+      })
+      .catch(() => { setDeal(null); setPricingDeal(null); });
     fetch('/api/exchange-rate', { cache: 'no-store' })
       .then((response) => (response.ok ? response.json() : null))
       .then((data) => { if (Number(data?.rate) > 0) setRate(Number(data.rate)); })
@@ -229,7 +242,7 @@ export default function DealOfTheWeekPage() {
   // Which offer the cart has earned so far — the same chooser checkout uses,
   // for the progress line only; the checkout recalculates everything.
   const offerChoice = offersDeal
-    ? chooseDealOffer(deal.offers, cart.map((item) => {
+    ? chooseDealOffer((pricingDeal || deal).offers, cart.map((item) => {
       const row = products.find((product) => nameKey(product.product) === nameKey(item.product));
       return {
         product: item.product,
@@ -244,7 +257,7 @@ export default function DealOfTheWeekPage() {
   const offerEarned = offerChoice && (offerChoice.kind === 'mix' || offerChoice.kind === 'bundle');
 
   const progressText = offersDeal
-    ? dealOfferCartMessage(offerChoice, deal, lang)
+    ? dealOfferCartMessage(offerChoice, pricingDeal || deal, lang)
     : !bulk
     ? (en ? 'Deal prices apply at checkout.' : 'Los precios de oferta se aplican al pagar.')
     : overMax
@@ -307,7 +320,7 @@ export default function DealOfTheWeekPage() {
                 {offersDeal && (
                   <div className={styles.dealBadge}>
                     <Tag aria-hidden="true" />
-                    {en ? 'Weekly deal' : 'Oferta semanal'}
+                    {flashOnly ? (en ? 'Flash sale' : 'Oferta relámpago') : (en ? 'Weekly deal' : 'Oferta semanal')}
                   </div>
                 )}
                 {product.image_url
