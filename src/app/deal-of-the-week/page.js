@@ -136,6 +136,20 @@ export default function DealOfTheWeekPage() {
           : `Compra ${offer.buy_qty} del mismo vial`,
       };
     }
+    if (offer.type === 'flat') {
+      // A flash sale has no minimum and discounts only its own products, so
+      // neither "your order" nor a vial count describes it. Saying either
+      // printed "Buy undefined+ vials" and promised a whole-order discount
+      // that checkout does not give.
+      const names = offer.product_names || [];
+      return {
+        id: offer.id,
+        value: `${Math.round(offer.discount_pct * 100)}% ${en ? 'off' : 'de descuento'}`,
+        condition: names.length > 0 && names.length <= 2
+          ? `${en ? 'On' : 'En'} ${names.join(en ? ' & ' : ' y ')}`
+          : `${en ? `On ${names.length} selected products` : `En ${names.length} productos seleccionados`}`,
+      };
+    }
     return {
       id: offer.id,
       value: en

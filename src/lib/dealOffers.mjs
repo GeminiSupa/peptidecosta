@@ -368,8 +368,16 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
     const customName = offerDisplayName(item, lang);
     const prefix = customName || (item.type === MIX_OFFER_TYPE
       ? (isEn ? 'Mix & Match' : 'Combina')
-      : (isEn ? 'Buy & Get Free' : 'Compra y recibe gratis'));
-    if (item.type === MIX_OFFER_TYPE) {
+      : item.type === FLAT_OFFER_TYPE
+        ? (isEn ? 'Flash sale' : 'Oferta relámpago')
+        : (isEn ? 'Buy & Get Free' : 'Compra y recibe gratis'));
+    if (item.type === FLAT_OFFER_TYPE) {
+      const pct = Math.round(item.discount_pct * 100);
+      const names = item.product_names.join(', ');
+      rules.push(isEn
+        ? `${prefix}: ${pct}% off ${names}, from a single vial, with no minimum and no code. The discount applies to those products only, not to the rest of the order.`
+        : `${prefix}: ${pct}% de descuento en ${names}, desde un solo vial, sin mínimo y sin código. El descuento aplica solo a esos productos, no al resto del pedido.`);
+    } else if (item.type === MIX_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       rules.push(isEn
         ? `${prefix}: buy ${item.min_units} or more qualifying peptide vials in any combination and get ${pct}% off your entire order.`

@@ -202,3 +202,22 @@ test('the deepest flat offer wins the ribbon', () => {
   ] };
   assert.equal(flatOfferBadgeForProduct(two, GHK, 'en').discountPct, 50);
 });
+
+import { dealOfferRuleSummaries, dealOfferSummaries } from '../src/lib/dealOffers.mjs';
+
+test('a flash sale never renders "undefined" anywhere it is described', () => {
+  const pooled = combineLiveDeals([weeklyDeal, flashDeal], duringBoth).offers;
+  for (const lang of ['en', 'es']) {
+    for (const text of [...dealOfferSummaries(pooled, lang), ...dealOfferRuleSummaries(pooled, lang)]) {
+      assert.doesNotMatch(text, /undefined|NaN/, `"${text}"`);
+    }
+  }
+});
+
+test('a flash sale is not described as money off the whole order', () => {
+  const rules = dealOfferRuleSummaries({ items: [flashOffers.items[0]] }, 'en');
+  const flashRule = rules.find((r) => /Flash sale/.test(r));
+  assert.ok(flashRule, 'the flat offer needs its own rule line');
+  assert.match(flashRule, /those products only/);
+  assert.doesNotMatch(flashRule, /off your entire order/);
+});
