@@ -59,6 +59,7 @@ import {
   normalizeCustomerName,
   validateCustomerName,
 } from '@/lib/checkoutIdentity.mjs';
+import { HONEYPOT_FIELD, junkOrderMessage } from '@/lib/checkoutJunkGuard.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
@@ -395,6 +396,9 @@ export default function CatalogPage() {
 
   // Checkout inputs
   const [customerName, setCustomerName] = useState('');
+  // The honeypot's value. Stays empty for every human who ever loads this page;
+  // see the hidden input in the checkout form and checkoutJunkGuard.mjs.
+  const [honeypotValue, setHoneypotValue] = useState('');
   // The phone box is two controls: a country and the national digits. Everything
   // downstream still reads `customerPhone`, which is kept as the composed E.164
   // number so the order, the WhatsApp send and the CRM all agree on one format.
@@ -2296,7 +2300,10 @@ export default function CatalogPage() {
     dealChoice: getDealOfferChoice(),
     bacFreeLines: getBacSummary().freeLines,
   });
-  const getAppliedPromoData = () => (!getMatchedWeeklyDeal() && promoData?.valid ? promoData : null);
+  // A code no longer has to wait for the deal to end. It is kept whenever it
+  // is valid; getPromoDiscountAmount decides whether it or the running offer
+  // saves more, matching the server.
+  const getAppliedPromoData = () => (promoData?.valid ? promoData : null);
   const getWeeklyDealLimitError = () => {
     const deal = getMatchedWeeklyDeal();
     const max = dealMaxUnits(deal);
@@ -2401,11 +2408,25 @@ export default function CatalogPage() {
     return formatPriceVal(Math.round(FREE_SHIPPING_USD_THRESHOLD * exchangeRate), 'CRC');
   };
 
+  // Deal or code, never both - and the customer keeps whichever saves more.
+  // authoritativeCheckout makes the same choice on the server; if these two
+  // disagree the order is refused at submission, so they must stay in step.
+  const getDealWinner = () => {
+    const offer = getDealOfferChoice();
+    if (!offer) return null;
+    const promo = getAppliedPromoData();
+    if (!promo) return offer;
+    const base = getDiscountableSubtotal();
+    const promoSaving = base * (Number(promo.discount_pct) || 0);
+    // Ties stay with the deal: it needs no code.
+    return offer.savings >= promoSaving ? offer : null;
+  };
+
   const getPromoDiscountAmount = () => {
     // A live weekly deal is the only promotion on an order containing one of
     // its selected products. Prefer it even if a stale code was validated just
     // before the deal became live; the server enforces the same rule again.
-    const offer = getDealOfferChoice();
+    const offer = getDealWinner();
     if (offer) {
       if (offer.kind === 'flat') {
         // A flash sale discounts only its own products. chooseDealOffer has
@@ -2659,6 +2680,10 @@ export default function CatalogPage() {
       const orderPayload = {
         ...applyStoredAttribution(orderRow),
         research_ack: { accepted: true, version: RESEARCH_ACK_VERSION },
+        // Attached here, with the acknowledgement, for the same reason: both
+        // checkout paths come through this function, so neither can quietly
+        // miss it. The API strips the key before the insert.
+        [HONEYPOT_FIELD]: honeypotValue,
       };
 
       // A signed-in customer's session travels with the order so the server can
@@ -2782,6 +2807,17 @@ export default function CatalogPage() {
 
     if (result?.errorCode === 'too_many_attempts') {
       return { title: tooManyAttemptsTitle(lang), detail: serverMessage || tooManyAttemptsMessage(lang) };
+    }
+
+    // The junk guard. Its own title because the fallback below opens with
+    // "we could not save your order", which reads as our fault and sends her
+    // to WhatsApp before she has looked at the form — and a typo in the name
+    // or phone box is the likeliest reason a real customer ever sees this.
+    if (result?.errorCode === 'details_not_verified') {
+      return {
+        title: lang === 'en' ? 'Please check your details' : 'Revise sus datos',
+        detail: serverMessage || junkOrderMessage(lang),
+      };
     }
 
     if (result?.errorCode === 'price_changed') {
@@ -4993,7 +5029,7 @@ export default function CatalogPage() {
                 ? (lang === 'en' ? `Weekly bulk deal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} selected vials. It applies automatically and does not stack.` : `Oferta mayorista semanal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} viales seleccionados. Se aplica automáticamente y no se acumula.`)
                 : (lang === 'en' ? 'Deal of the Week applied automatically. Other discounts do not stack.' : 'Oferta de la Semana aplicada automáticamente. Otros descuentos no se acumulan.'))}
             </div>}
-            {!getMatchedWeeklyDeal() && <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {<div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <CheckoutLabel htmlFor="field-promoCode">
                 {lang === 'en' ? 'Promo code' : 'Código promocional'}
               </CheckoutLabel>
@@ -5007,13 +5043,13 @@ export default function CatalogPage() {
                   value={promoCodeInput}
                   onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
                   style={{ flex: 1, textTransform: 'uppercase', marginBottom: 0 }}
-                  disabled={Boolean(promoData?.valid || getMatchedWeeklyDeal())}
+                  disabled={Boolean(promoData?.valid)}
                 />
                 {!promoData?.valid ? (
                   <button
                     type="button"
                     onClick={() => handleApplyPromo()}
-                    disabled={Boolean(promoLoading || !promoCodeInput || getMatchedWeeklyDeal())}
+                    disabled={Boolean(promoLoading || !promoCodeInput)}
                     style={{
                       background: promoCodeInput && !promoLoading ? '#38bdf8' : '#334155',
                       color: '#fff',
@@ -5021,7 +5057,7 @@ export default function CatalogPage() {
                       borderRadius: '12px',
                       padding: '0 16px',
                       fontWeight: '600',
-                      cursor: promoCodeInput && !promoLoading && !getMatchedWeeklyDeal() ? 'pointer' : 'not-allowed',
+                      cursor: promoCodeInput && !promoLoading ? 'pointer' : 'not-allowed',
                       fontSize: '0.85rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -5113,6 +5149,25 @@ export default function CatalogPage() {
                 the submit event, so without it the browser's own bubble preempts
                 validateForm() and none of the inline field errors ever render. */
             <form id="checkout-form-main" noValidate onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
+
+              {/* The honeypot. Off-screen rather than display:none, because a
+                  script that skips hidden inputs is the one this is for; out of
+                  the tab order and hidden from screen readers so no customer
+                  can reach it by keyboard or hear it read out. The name is
+                  meaningless on purpose — an autofiller looks for "company" or
+                  "address", so it has nothing here to recognise and cannot fill
+                  it in on a real customer's behalf. Anything in it at the API
+                  is a script filling every box on the page. */}
+              <input
+                type="text"
+                name={HONEYPOT_FIELD}
+                value={honeypotValue}
+                onChange={(e) => setHoneypotValue(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+                style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', opacity: 0 }}
+              />
 
               <div className="checkout-step-header">
                 <span className="checkout-step-number">1</span>

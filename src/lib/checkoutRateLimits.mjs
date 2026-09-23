@@ -29,6 +29,20 @@
  */
 export const ORDER_ATTEMPTS_PER_IP_PER_HOUR = 40;
 
+/**
+ * Saved orders — not attempts — from one address per hour.
+ *
+ * The attempt counter above does not cap a patient spammer: three junk orders
+ * ten minutes apart on 23 Sep 2026 used three of its forty. This is the brake
+ * on how many orders one address can actually put in front of the sales team.
+ *
+ * Fifteen because the busiest real hour in the whole order history is eight,
+ * from 152.231.145.243 — a sales agent typing customers' orders into the
+ * public form one after another. The cap has to clear that with room, so it
+ * sits nearly double it and still turns an unbounded flood into fifteen.
+ */
+export const ORDERS_PER_IP_PER_HOUR = 15;
+
 /** Saved orders per email address, and separately per phone number, per day. */
 export const ORDERS_PER_CONTACT_PER_DAY = 15;
 
@@ -81,6 +95,25 @@ export function orderContactLimits(order) {
   }
 
   return limits;
+}
+
+/**
+ * The saved-order cap for one address.
+ *
+ * Shaped like the contact limits and consumed alongside them, because it is
+ * the same kind of rule: it counts orders that exist, not requests we turned
+ * away. Kept apart from `order-create-ip`, which counts attempts, so the two
+ * never share a counter and a refusal can never eat into this one.
+ */
+export function orderIpSavedLimits(ip) {
+  const key = String(ip || '').trim();
+  if (!key) return [];
+  return [{
+    bucket: 'order-create-ip-saved',
+    key,
+    limit: ORDERS_PER_IP_PER_HOUR,
+    windowSeconds: ORDER_IP_WINDOW_SECONDS,
+  }];
 }
 
 /**

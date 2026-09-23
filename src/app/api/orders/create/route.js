@@ -38,10 +38,17 @@ import {
 import {
   limiterUnavailableMessage,
   orderContactLimits,
+  orderIpSavedLimits,
   tooManyAttemptsMessage,
   ORDER_ATTEMPTS_PER_IP_PER_HOUR,
   ORDER_IP_WINDOW_SECONDS,
 } from '@/lib/checkoutRateLimits.mjs';
+import {
+  HONEYPOT_FIELD,
+  junkOrderMessage,
+  junkOrderSummary,
+  scoreJunkOrder,
+} from '@/lib/checkoutJunkGuard.mjs';
 import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
@@ -397,12 +404,13 @@ export async function POST(request) {
       );
     }
 
-    // Peeked, not consumed. These cap how much one person may buy in a day, so
-    // they may only count orders that actually saved — a customer refused by
-    // the validation below has bought nothing, and charging her a slot for it
-    // spends her allowance on our own failures. The matching consume runs once
-    // the insert has succeeded.
-    const contactLimits = orderContactLimits(order);
+    // Peeked, not consumed. These cap how much one person may buy in a day —
+    // and, since 23 Sep 2026, how many orders one address may put in front of
+    // the sales team in an hour. All of them count orders that actually saved:
+    // a customer refused by the validation below has bought nothing, and
+    // charging her a slot for it spends her allowance on our own failures. The
+    // matching consume runs once the insert has succeeded.
+    const contactLimits = [...orderIpSavedLimits(ip), ...orderContactLimits(order)];
     for (const contactLimit of contactLimits) {
       const result = await peekDurableRateLimit(supabase, contactLimit);
       if (result.allowed) continue;
@@ -436,6 +444,25 @@ export async function POST(request) {
       return NextResponse.json({ error: identityMessage(nameCheck.reason, orderLang) }, { status: 400 });
     }
     order.customer_name = nameCheck.name;
+
+    // What the fields say, now that the name is normalized. The limiters above
+    // count requests, which is no help against somebody filling this form by
+    // hand every few minutes — that is exactly how three "test / 8888 8888 /
+    // f@b.com" orders reached the team's phones on 23 Sep 2026. Scored rather
+    // than pattern-matched so no single odd-looking field can turn away a real
+    // customer; see checkoutJunkGuard.mjs for what each signal is worth.
+    const junk = scoreJunkOrder(order);
+    // The hidden field never belongs on the row. Nothing whitelists the order
+    // fields before the insert, so leaving it here is an unknown column and a
+    // failed order for the real customers who never filled it in.
+    delete order[HONEYPOT_FIELD];
+    if (junk.blocked) {
+      console.warn(`[orders/create] Refused junk order from ${ip}: ${junkOrderSummary(junk)}`);
+      return NextResponse.json(
+        { error: junkOrderMessage(orderLang), errorCode: 'details_not_verified' },
+        { status: 400 },
+      );
+    }
 
     // The bank's condition on the card account: no order may be created — and
     // therefore no card checkout token minted — without the research-use
@@ -579,7 +606,10 @@ export async function POST(request) {
     const dealPromo = resolvedPromo ? null : automaticDealPromo(matchedDeal, order.items);
     // A two-offer deal is priced inside authoritativeCheckout, which picks the
     // one offer that saves the customer most and adds any free vials itself.
-    const dealOffers = !resolvedPromo && matchedDeal && dealPricingMode(matchedDeal) === OFFERS_PRICING_MODE
+    // Passed even with a code entered: authoritativeCheckout prices the deal
+    // and the code and charges the cheaper, so a small code can no longer
+    // cancel a bigger offer.
+    const dealOffers = matchedDeal && dealPricingMode(matchedDeal) === OFFERS_PRICING_MODE
       ? matchedDeal.offers
       : null;
     const authoritative = authoritativeCheckout({

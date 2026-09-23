@@ -106,3 +106,29 @@ test('once the flash sale ends, prices go back on their own', () => {
   assert.equal(result.promoDiscount, 0);
   assert.equal(result.subtotal, 70);
 });
+
+test('a small promo code cannot cancel a bigger deal', () => {
+  const code = { code: 'SAVE10', discount_pct: 0.10, target_product: null };
+  const items = [{ product: GHK, qty: 2 }];
+  const withCode = authoritativeCheckout({
+    postedOrder: { currency: 'USD', items, lang: 'en' },
+    products, exchangeRate: 500, promo: code,
+    dealOffers: combineLiveDeals([weeklyDeal, flashDeal], during)?.offers,
+  });
+  // Flash sale saves $70; the code would save $14. The customer keeps the $70.
+  assert.equal(withCode.promoDiscount, 70);
+  assert.equal(withCode.dealOffer, 'flat');
+  assert.equal(withCode.promoApplied, false);
+});
+
+test('a bigger promo code does beat the deal', () => {
+  const code = { code: 'HALF', discount_pct: 0.60, target_product: null };
+  const items = [{ product: GHK, qty: 2 }];
+  const r = authoritativeCheckout({
+    postedOrder: { currency: 'USD', items, lang: 'en' },
+    products, exchangeRate: 500, promo: code,
+    dealOffers: combineLiveDeals([weeklyDeal, flashDeal], during)?.offers,
+  });
+  assert.equal(r.promoApplied, true);
+  assert.equal(r.promoDiscount, 84);
+});
