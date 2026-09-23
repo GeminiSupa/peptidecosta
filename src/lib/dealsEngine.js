@@ -669,8 +669,10 @@ export async function launchFlashSale({
         enabled: true,
         product_names: products,
         discount_pct: pct,
-        name_en: String(titleEn || '').trim() || `${Math.round(pct * 100)}% off`,
-        name_es: String(titleEs || '').trim() || `${Math.round(pct * 100)}% de descuento`,
+        // Deliberately unnamed: a flat offer already reads as "50% off X", and
+        // naming it after the same words printed it twice.
+        name_en: '',
+        name_es: '',
       }],
     },
     kind: FLASH_KIND,

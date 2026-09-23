@@ -392,6 +392,27 @@ export function automaticDealPromo(deal, items = []) {
  * names the product and the saving and nothing else — there is no room for
  * terms, and the catalog card already shows the struck-through price.
  */
+/**
+ * How a promotion announces itself. A flash sale is not the week's deal: it is
+ * short, it names its own finish, and calling it "Deal of the Week — ends
+ * Sunday" told customers the wrong end time.
+ */
+function dealVoice(deal, isEn) {
+  if (dealKindOf(deal) !== 'flash') {
+    return {
+      heading: isEn ? 'DEAL OF THE WEEK' : 'OFERTA DE LA SEMANA',
+      ends: isEn ? 'Ends Sunday at midnight.' : 'Termina el domingo a medianoche.',
+    };
+  }
+  const when = deal?.ends_at ? formatCrInstant(deal.ends_at) : '';
+  return {
+    heading: isEn ? 'FLASH SALE' : 'OFERTA RELÁMPAGO',
+    ends: when
+      ? (isEn ? `Ends ${when}.` : `Termina ${when}.`)
+      : (isEn ? 'Ends soon.' : 'Termina pronto.'),
+  };
+}
+
 export function dealBannerText(deal, lang = 'en') {
   const pct = toPercent(deal?.discount_pct);
   if (!pct) return '';
@@ -400,9 +421,10 @@ export function dealBannerText(deal, lang = 'en') {
     const custom = String((isEn ? deal?.title_en : deal?.title_es) || '').trim();
     if (custom) return custom;
     const offers = dealOfferSummaries(deal?.offers, lang).join(isEn ? ' — or — ' : ' — o — ');
+    const voice = dealVoice(deal, isEn);
     return isEn
-      ? `⚡ DEAL OF THE WEEK: ${offers}. No code needed; offers do not stack.`
-      : `⚡ OFERTA DE LA SEMANA: ${offers}. Sin código; las ofertas no se acumulan.`;
+      ? `⚡ ${voice.heading}: ${offers}. No code needed; offers do not stack. ${voice.ends}`
+      : `⚡ ${voice.heading}: ${offers}. Sin código; las ofertas no se acumulan. ${voice.ends}`;
   }
   const names = deal?.product_names || [];
   const bulk = dealPricingMode(deal) === 'bulk_threshold';
@@ -448,36 +470,40 @@ export function dealBroadcastDrafts(deal, { catalogUrl } = {}) {
   if (dealPricingMode(deal) === OFFERS_PRICING_MODE) {
     const en = dealOfferSummaries(deal?.offers, 'en');
     const es = dealOfferSummaries(deal?.offers, 'es');
+    const voiceEn = dealVoice(deal, true);
+    const voiceEs = dealVoice(deal, false);
     return {
-      emailSubject: `⚡ Deal of the Week: ${en.join(' or ')}`,
+      emailSubject: `⚡ ${voiceEn.heading === 'FLASH SALE' ? 'Flash sale' : 'Deal of the Week'}: ${en.join(' or ')}`,
       message: [
-        `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
+        `⚡ *${voiceEn.heading} / ${voiceEs.heading}*`,
         '',
-        ...en.map((offer, index) => `Offer #${index + 1}: ${offer}.`),
+        ...en.map((offer, index) => (en.length > 1 ? `Offer #${index + 1}: ${offer}.` : `${offer}.`)),
         `Applied automatically, no code needed. If your order qualifies for multiple offers, you get whichever saves more — they do not stack. BAC Water does not count toward the offers. Stock is limited.`,
-        `Ends Sunday at midnight.`,
+        voiceEn.ends,
         '',
-        ...es.map((offer, index) => `Oferta #${index + 1}: ${offer}.`),
+        ...es.map((offer, index) => (es.length > 1 ? `Oferta #${index + 1}: ${offer}.` : `${offer}.`)),
         `Se aplica automáticamente, sin código. Si tu pedido califica para varias ofertas, recibes la que más ahorra; no se acumulan. El agua bacteriostática no cuenta para las ofertas. Inventario limitado.`,
-        `Termina el domingo a medianoche.`,
+        voiceEs.ends,
         '',
         destination,
       ].join('\n'),
     };
   }
 
+  const plainEn = dealVoice(deal, true);
+  const plainEs = dealVoice(deal, false);
   return {
-    emailSubject: `⚡ Deal of the Week: ${pct}% off ${namesEn}`,
+    emailSubject: `⚡ ${plainEn.heading === 'FLASH SALE' ? 'Flash sale' : 'Deal of the Week'}: ${pct}% off ${namesEn}`,
     message: [
-      `⚡ *DEAL OF THE WEEK / OFERTA DE LA SEMANA*`,
+      `⚡ *${plainEn.heading} / ${plainEs.heading}*`,
       '',
       `${pct}% off ${namesEn}${requirementEn} — automatically applied, no code needed.`,
       `One deal only: this does not stack with volume discounts or promo codes. Stock is limited.`,
-      `Ends Sunday at midnight.`,
+      plainEn.ends,
       '',
       `${pct}% de descuento en ${namesEs}${requirementEs} — se aplica automáticamente, sin código.`,
       `Una sola oferta: no se acumula con descuentos por volumen ni códigos. Inventario limitado.`,
-      `Termina el domingo a medianoche.`,
+      plainEs.ends,
       '',
       destination,
     ].join('\n'),

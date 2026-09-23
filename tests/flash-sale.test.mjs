@@ -78,12 +78,12 @@ test('the volume tier still wins when it is worth more than either offer', () =>
 
 const weeklyDeal = {
   id: 'weekly-1', kind: 'weekly', status: 'live', pricing_mode: 'offers',
-  title_en: 'Deal of the Week', product_names: [GHK, TIRZ], offers: weeklyOffers,
+  title_en: 'Deal of the Week', product_names: [GHK, TIRZ], offers: weeklyOffers, discount_pct: 0.10,
   starts_at: '2026-09-21T07:00:00.000Z', ends_at: '2026-09-28T05:59:59.999Z',
 };
 const flashDeal = {
   id: 'flash-1', kind: 'flash', status: 'live', pricing_mode: 'offers',
-  title_en: '50% off GHK-Cu', product_names: [GHK], offers: flashOffers,
+  title_en: '50% off GHK-Cu', product_names: [GHK], offers: flashOffers, discount_pct: 0.50,
   starts_at: '2026-09-23T12:00:00.000Z', ends_at: '2026-09-24T05:59:00.000Z',
 };
 const duringBoth = new Date('2026-09-23T18:00:00.000Z');
@@ -138,4 +138,28 @@ test('a shelf weekly deal is never pooled, it is returned untouched', () => {
   const combined = combineLiveDeals([shelf, flashDeal], duringBoth);
   assert.equal(combined.pricing_mode, 'shelf');
   assert.equal(combined.id, 'weekly-1');
+});
+
+import { dealBannerText, dealBroadcastDrafts } from '../src/lib/dealOfWeek.mjs';
+
+test('a flash sale announces its own end time, not Sunday', () => {
+  const bare = { ...flashDeal, title_en: '', title_es: '' };
+  const drafts = dealBroadcastDrafts(bare);
+  assert.doesNotMatch(drafts.message, /Sunday/i, 'a flash sale does not end on Sunday');
+  assert.doesNotMatch(drafts.message, /domingo/i);
+  assert.match(drafts.message, /FLASH SALE \/ OFERTA RELÁMPAGO/);
+  assert.match(dealBannerText(bare, 'en'), /FLASH SALE/);
+  assert.doesNotMatch(dealBannerText(bare, 'en'), /DEAL OF THE WEEK/);
+});
+
+test('the weekly deal still says Sunday', () => {
+  const bare = { ...weeklyDeal, title_en: '', title_es: '' };
+  const drafts = dealBroadcastDrafts(bare);
+  assert.match(drafts.message, /Ends Sunday at midnight/);
+  assert.match(drafts.message, /DEAL OF THE WEEK \/ OFERTA DE LA SEMANA/);
+});
+
+test('a single offer is not numbered "Offer #1"', () => {
+  const drafts = dealBroadcastDrafts({ ...flashDeal, title_en: '', title_es: '' });
+  assert.doesNotMatch(drafts.message, /Offer #1/);
 });
