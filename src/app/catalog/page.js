@@ -2341,7 +2341,9 @@ export default function CatalogPage() {
     // A two-offer deal replaces the volume tier only when the offer it picked
     // saves more; otherwise the ordinary tier stands.
     const offer = getDealOfferChoice();
-    if (offer) return offer.kind === 'mix' || offer.kind === 'bundle' ? 0 : getVolumeDiscountPct(getCartVialCount());
+    // Any offer that wins replaces the tier - a flash sale included. Only
+    // 'volume' (the tier itself won) and 'none' leave it standing.
+    if (offer) return offer.kind !== 'volume' && offer.kind !== 'none' ? 0 : getVolumeDiscountPct(getCartVialCount());
     return getNonOfferVolumePct();
   };
   const getNonOfferVolumePct = () =>
@@ -2405,6 +2407,14 @@ export default function CatalogPage() {
     // before the deal became live; the server enforces the same rule again.
     const offer = getDealOfferChoice();
     if (offer) {
+      if (offer.kind === 'flat') {
+        // A flash sale discounts only its own products. chooseDealOffer has
+        // already measured that against these exact lines, so its figure is
+        // the discount - matching authoritativeCheckout, which the server
+        // charges from.
+        const flat = Math.max(0, Number(offer.savings) || 0);
+        return currency === 'USD' ? Math.round(flat * 100) / 100 : Math.round(flat);
+      }
       if (offer.kind !== 'mix') return 0;
       // "10% off your entire order": paid BAC water included. Rounded exactly
       // as authoritativeCheckout rounds it.
