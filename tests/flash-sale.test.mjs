@@ -163,3 +163,42 @@ test('a single offer is not numbered "Offer #1"', () => {
   const drafts = dealBroadcastDrafts({ ...flashDeal, title_en: '', title_es: '' });
   assert.doesNotMatch(drafts.message, /Offer #1/);
 });
+
+import { flatOfferBadgeForProduct } from '../src/lib/dealOffers.mjs';
+
+test('the flash products get a ribbon, and nothing else does', () => {
+  const pooled = combineLiveDeals([weeklyDeal, flashDeal], duringBoth).offers;
+  assert.deepEqual(flatOfferBadgeForProduct(pooled, GHK, 'en'), { text: 'Save 50%', discountPct: 50, code: null });
+  assert.equal(flatOfferBadgeForProduct(pooled, GHK, 'es').text, 'Ahorra 50%');
+  // Mix & Match and Buy X Get Y depend on the rest of the cart, so a single
+  // card cannot honestly claim a saving from them.
+  assert.equal(flatOfferBadgeForProduct(pooled, TIRZ, 'en'), null);
+});
+
+test('the ribbon matches the product name however it is spaced or cased', () => {
+  const pooled = combineLiveDeals([flashDeal], duringBoth).offers;
+  assert.ok(flatOfferBadgeForProduct(pooled, '  ghk-cu 50MG  ', 'en'));
+  assert.equal(flatOfferBadgeForProduct(pooled, 'GHK-CU 100mg', 'en'), null);
+});
+
+test('no ribbon once the flash sale is over', () => {
+  const after = combineLiveDeals([weeklyDeal, flashDeal], new Date('2026-09-25T00:00:00.000Z'));
+  assert.equal(flatOfferBadgeForProduct(after.offers, GHK, 'en'), null);
+});
+
+test('a disabled or nonsense flat offer earns no ribbon', () => {
+  const off = { items: [{ ...flashOffers.items[0], enabled: false }] };
+  assert.equal(flatOfferBadgeForProduct(off, GHK, 'en'), null);
+  const zero = { items: [{ ...flashOffers.items[0], discount_pct: 0 }] };
+  assert.equal(flatOfferBadgeForProduct(zero, GHK, 'en'), null);
+  assert.equal(flatOfferBadgeForProduct(null, GHK, 'en'), null);
+  assert.equal(flatOfferBadgeForProduct(flashOffers, '', 'en'), null);
+});
+
+test('the deepest flat offer wins the ribbon', () => {
+  const two = { items: [
+    { id: 'a', type: 'flat', enabled: true, product_names: [GHK], discount_pct: 0.20 },
+    { id: 'b', type: 'flat', enabled: true, product_names: [GHK], discount_pct: 0.50 },
+  ] };
+  assert.equal(flatOfferBadgeForProduct(two, GHK, 'en').discountPct, 50);
+});

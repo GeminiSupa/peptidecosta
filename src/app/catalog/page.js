@@ -73,7 +73,7 @@ import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
-import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, freeVialLine } from '@/lib/dealOffers.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
 import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
@@ -3355,6 +3355,7 @@ export default function CatalogPage() {
       const original = parsePrice(p.originalPriceUsd);
       const current = parsePrice(p.priceUsd);
       if (original > 0 && current > 0 && original > current) return true;
+      if (flatOfferBadgeForProduct(weeklyDeal?.offers, p.product, lang)) return true;
       return Boolean(getPromoBadgeForProduct(promoBadges, p.product, lang));
     },
   };
@@ -4331,8 +4332,12 @@ export default function CatalogPage() {
               const cardOriginalUsd = parsePrice(p.originalPriceUsd);
               const cardPriceUsd = parsePrice(p.priceUsd);
               const hasRealMarkdown = cardOriginalUsd > 0 && cardPriceUsd > 0 && cardOriginalUsd > cardPriceUsd;
+              // A live flash sale ribbons its own products. It is checked
+              // first because it needs no code: the reduced price shown here
+              // is what checkout actually charges.
               const promoSale = !isBac && inStock && !hasRealMarkdown
-                ? getPromoBadgeForProduct(promoBadges, p.product, lang)
+                ? (flatOfferBadgeForProduct(weeklyDeal?.offers, p.product, lang)
+                  || getPromoBadgeForProduct(promoBadges, p.product, lang))
                 : null;
               const promoPct = promoSale && promoSale.discountPct > 0 ? promoSale.discountPct : 0;
               const promoPriceLabel = (cur) => {
@@ -4386,7 +4391,9 @@ export default function CatalogPage() {
                         }
                       }
                       if (!text) {
-                        text = getPromoBadgeForProduct(promoBadges, p.product, lang)?.text || null;
+                        text = flatOfferBadgeForProduct(weeklyDeal?.offers, p.product, lang)?.text
+                          || getPromoBadgeForProduct(promoBadges, p.product, lang)?.text
+                          || null;
                       }
                       if (!text) return null;
 

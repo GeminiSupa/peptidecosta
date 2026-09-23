@@ -406,3 +406,30 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
 
   return rules;
 }
+
+/**
+ * The catalog ribbon for a product carried by a live flat offer.
+ *
+ * A flat offer is the only offer type whose saving is knowable from one
+ * product alone - Mix & Match and Buy X Get Y both depend on what else is in
+ * the cart, so neither can honestly label a single card. The shape matches
+ * getPromoBadgeForProduct so the card's existing ribbon and struck-through
+ * price need no special case; unlike a promo ribbon, this discount needs no
+ * code, so the price shown is the price charged.
+ */
+export function flatOfferBadgeForProduct(offers, productName, lang = 'es') {
+  const name = nameKey(productName);
+  if (!name) return null;
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  let best = null;
+  for (const item of normalizeDealOffers(offers).items) {
+    if (item.type !== FLAT_OFFER_TYPE || !item.enabled) continue;
+    if (!item.product_names.some((candidate) => nameKey(candidate) === name)) continue;
+    const pct = Math.round((Number(item.discount_pct) || 0) * 100);
+    if (pct <= 0 || pct >= 100) continue;
+    if (!best || pct > best.discountPct) {
+      best = { text: isEn ? `Save ${pct}%` : `Ahorra ${pct}%`, discountPct: pct, code: null };
+    }
+  }
+  return best;
+}
