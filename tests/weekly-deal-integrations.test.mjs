@@ -88,7 +88,14 @@ test('bulk threshold controls live in Deal of the Week and checkout enforces exc
   assert.match(dealPanel, /Promo codes<\/span><strong>Blocked/);
   assert.match(checkout, /promo: resolvedPromo \|\| dealPromo/);
   assert.match(checkout, /suppressVolumeDiscount/);
-  assert.match(catalog, /!getMatchedWeeklyDeal\(\) && <div/);
+  // Exclusivity is enforced by pricing, not by hiding the promo box. The box
+  // used to be removed whenever a deal matched the cart; with 61 of 80 products
+  // in a weekly deal that meant customers could almost never enter a code at
+  // all. Now a code is always enterable and getDealWinner decides whether it or
+  // the running offer saves more - the two still never combine.
+  assert.doesNotMatch(catalog, /!getMatchedWeeklyDeal\(\) && <div/);
+  assert.match(catalog, /const getDealWinner = \(\) =>/);
+  assert.match(catalog, /offer\.savings >= promoSaving \? offer : null/);
 });
 
 test('flexible offer setup guides non-technical admins and derives its rules from saved settings', () => {
