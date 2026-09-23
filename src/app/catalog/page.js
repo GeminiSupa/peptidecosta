@@ -3445,9 +3445,14 @@ export default function CatalogPage() {
     const breakdown = getCheckoutBreakdown();
     const hasVolumeDiscount = volumePct > 0;
     const hasPromoDiscount = Boolean(appliedPromo);
-    const hasWeeklyDealDiscount = Boolean(automaticDeal) || dealChoice?.kind === 'mix';
+    // A flash sale takes money off the total exactly as the weekly deal does,
+    // so it needs its own line. Without one the summary showed $140 of goods
+    // plus shipping and then a smaller total, with nothing saying where the
+    // missing money went.
+    const isFlashSale = dealChoice?.kind === 'flat';
+    const hasWeeklyDealDiscount = Boolean(automaticDeal) || dealChoice?.kind === 'mix' || isFlashSale;
     const hasWeeklyBundle = dealChoice?.kind === 'bundle' && breakdown.weeklyGiftLines.length > 0;
-    const weeklyPct = dealChoice?.kind === 'mix'
+    const weeklyPct = dealChoice?.kind === 'mix' || isFlashSale
       ? breakdown.discountPct
       : Number(automaticDeal?.discount_pct) || 0;
     const hasAmountDiscount = hasVolumeDiscount || hasPromoDiscount || hasWeeklyDealDiscount;
@@ -3565,9 +3570,13 @@ export default function CatalogPage() {
         {hasWeeklyDealDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
             <span className="cart-total-label" style={{ color: '#f97316' }}>
-              {lang === 'en'
-                ? `WEEKLY DEAL (${percentLabel(weeklyPct)}% OFF)`
-                : `OFERTA SEMANAL (${percentLabel(weeklyPct)}% DESC.)`}
+              {isFlashSale
+                ? (lang === 'en'
+                  ? `FLASH SALE (${percentLabel(weeklyPct)}% OFF)`
+                  : `OFERTA RELÁMPAGO (${percentLabel(weeklyPct)}% DESC.)`)
+                : (lang === 'en'
+                  ? `WEEKLY DEAL (${percentLabel(weeklyPct)}% OFF)`
+                  : `OFERTA SEMANAL (${percentLabel(weeklyPct)}% DESC.)`)}
             </span>
             <span className="cart-total-val" style={{ color: '#f97316' }}>-{formatPriceVal(getPromoDiscountAmount(), currency)}</span>
           </div>

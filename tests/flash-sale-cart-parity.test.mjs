@@ -81,3 +81,25 @@ test('a flash sale shows its saving on the invoice breakdown', () => {
   assert.equal(breakdown.discountAmount, 35, 'the invoice must not show a zero saving');
   assert.equal(breakdown.discountPct, 0.50);
 });
+
+test('the order summary numbers add up on their own', () => {
+  // The summary printed goods + shipping and then a smaller total, with no
+  // line accounting for the difference. Whatever is shown must reconcile.
+  for (const items of [
+    [{ product: GHK, qty: 1 }],
+    [{ product: GHK, qty: 2 }],
+    [{ product: GHK, qty: 2 }, { product: TIRZ, qty: 1 }],
+  ]) {
+    const server = authoritativeCheckout({
+      postedOrder: { currency: 'USD', items, lang: 'en' },
+      products, exchangeRate: 448.67, dealOffers: offers,
+    });
+    const shown = server.subtotal - server.volumeDiscountAmount - server.promoDiscount + server.shipping;
+    assert.equal(
+      Math.round(shown * 100) / 100,
+      server.total,
+      `subtotal ${server.subtotal} - discounts (${server.volumeDiscountAmount} + ${server.promoDiscount}) + shipping ${server.shipping} must equal ${server.total}`,
+    );
+    assert.ok(server.promoDiscount > 0, 'a flash sale cart must show a discount, not a silent gap');
+  }
+});
