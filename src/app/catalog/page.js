@@ -366,6 +366,10 @@ export default function CatalogPage() {
   const categoryScrollRef = useRef(null);
   const suggestionsScrollRef = useRef(null);
   const autoPromoAppliedRef = useRef(false);
+  // The cart a promo code was last tried against. A code waiting for a
+  // product is retried when the cart changes, and without this it would be
+  // retried against the same unchanged cart over and over.
+  const promoTriedCartRef = useRef(null);
   const [catArrows, setCatArrows] = useState({ left: false, right: false });
   const [sugArrows, setSugArrows] = useState({ left: false, right: false });
   const [activeCategory, setActiveCategory] = useState('all');
@@ -2488,6 +2492,18 @@ export default function CatalogPage() {
     return currency === 'USD' ? roundToCents(total) : total;
   };
 
+  /**
+   * A plain description of what is in the basket right now.
+   *
+   * Only used to tell "the cart changed" from "the cart did not", so a held
+   * promo code is re-checked when the shopper adds something and left alone
+   * when they have not. Sorted so the same basket always reads the same.
+   */
+  const cartPromoSignature = () => cart
+    .map((item) => `${item.product}x${item.qty}`)
+    .sort()
+    .join('|');
+
   const handleApplyPromo = async (codeOverride = null) => {
     // Only a string can be a code. A click event slipping in here stringified
     // to "[object Object]", overwrote the input, and failed validation - which
@@ -2496,6 +2512,7 @@ export default function CatalogPage() {
     const codeToApply = String(codeOverride || promoCodeInput || '').trim().toUpperCase();
     if (!codeToApply) return;
     setPromoCodeInput(codeToApply);
+    promoTriedCartRef.current = cartPromoSignature();
     setPromoLoading(true);
     setPromoError('');
     try {
@@ -2517,7 +2534,11 @@ export default function CatalogPage() {
           const targets = data.target_product.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
           const hasTargetItem = cart.some(item => targets.some(t => item.product.toLowerCase().includes(t)));
           if (!hasTargetItem) {
-            setPromoData(null);
+            // Held, not discarded. A code arriving on an affiliate link is
+            // tried the moment the page opens, when the cart is still empty,
+            // so throwing it away here lost the customer their discount before
+            // they had added anything. It now waits for the product instead.
+            setPromoData({ ...data, valid: false, pending: true });
             setPromoError(lang === 'en' ? `This promo requires ${data.target_product} in your cart.` : `Este código requiere ${data.target_product} en el carrito.`);
             setPromoLoading(false);
             return;
@@ -2578,6 +2599,10 @@ export default function CatalogPage() {
   // then apply it automatically the moment the qualifying count is reached.
   useEffect(() => {
     if (!promoData?.pending || promoLoading) return;
+    // Nothing about the basket has changed since the last attempt, so the
+    // answer cannot have changed either. Without this a code held for a
+    // product it will never see would retry on every render.
+    if (promoTriedCartRef.current === cartPromoSignature()) return;
     const check = checkUnitLimits(promoData, getPromoUnitCount(promoData));
     if (!check.ok) return;
     handleApplyPromo(promoData.code);
