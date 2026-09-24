@@ -9,12 +9,9 @@ export const GOOGLE_LOCAL_LISTING_URL = 'https://maps.app.goo.gl/b9YaeUXyuvBuj8v
  * point of the review email. The g.page/r/…/review form opens the rating box
  * directly.
  *
- * Supplied by Omer on 2026-09-05 from Google Business Profile -> Ask for
- * reviews. Verified to resolve to listing 0xa1fd683cec6185e1:0x1e3a5dbf8dd4b8d6,
- * the same business as GOOGLE_LOCAL_LISTING_URL, through Google's own
- * review-solicitation flow.
+ * Updated by Omer on 2026-09-24 after the prior Google local listing was lost.
  */
-export const GOOGLE_REVIEW_URL = 'https://g.page/r/Cda41I2_XToeEBM/review';
+export const GOOGLE_REVIEW_URL = 'https://g.page/r/CfFdfEu7WZOHEBM/review';
 
 export const FACEBOOK_REVIEW_URL = 'https://www.facebook.com/costaricapeptides/reviews';
 
@@ -44,6 +41,12 @@ const LEGACY_GOOGLE_LISTING_URLS = new Set([
   'https://maps.app.goo.gl/G4MqFLWW7y9FXvKi9?g_st=ic',
   'https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9',
   'https://maps.app.goo.gl/jJCMHBM8aPXx67G3A',
+]);
+
+// Retired direct review forms. A CMS row can carry one of these even after the
+// default changes, so normalizeBusinessLinks upgrades it to the current form.
+const LEGACY_GOOGLE_REVIEW_URLS = new Set([
+  'https://g.page/r/Cda41I2_XToeEBM/review',
 ]);
 
 // Anything in here, saved as the REVIEW link, is a map card rather than a
@@ -87,7 +90,11 @@ export function normalizeBusinessLinks(value) {
   // The current listing URL is included: it was the default for this field
   // until 2026-09-05, so it is sitting in saved rows meaning "review link"
   // while only ever opening the map card.
-  if (!merged.googleReviewUrl || LISTING_URLS_USED_AS_REVIEW_LINKS.has(merged.googleReviewUrl)) {
+  if (
+    !merged.googleReviewUrl ||
+    LISTING_URLS_USED_AS_REVIEW_LINKS.has(merged.googleReviewUrl) ||
+    LEGACY_GOOGLE_REVIEW_URLS.has(merged.googleReviewUrl)
+  ) {
     merged.googleReviewUrl = GOOGLE_REVIEW_URL;
   }
 
