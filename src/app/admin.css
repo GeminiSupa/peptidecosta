@@ -11972,11 +11972,71 @@
 --------------------------------------------------------------------------- */
 
 .banner-section-help {
-    margin: 0 0 16px;
+    margin: 0 0 18px;
     font-size: 0.85rem;
     line-height: 1.55;
     color: #94a3b8;
-    max-width: 62ch;
+    max-width: 68ch;
+}
+
+/* The create form. Full-width single-line inputs on a wide monitor are a metre
+   of empty box for ten words, so the two languages sit side by side and the
+   whole section is capped at a readable width instead of stretching. */
+.banner-form {
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.banner-form-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px 20px;
+}
+
+.banner-field {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.banner-field > span {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #94a3b8;
+}
+
+.banner-field > input {
+    width: 100%;
+}
+
+.banner-form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+}
+
+.banner-form-hint {
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: #64748b;
+    max-width: 58ch;
+}
+
+.banner-form-buttons {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.banner-form-buttons .banner-btn {
+    padding: 9px 18px;
 }
 
 .banner-list-head {
@@ -12039,6 +12099,9 @@
 .banner-card-text {
     min-width: 0;
     flex: 1;
+    /* A line of banner copy stretched across a 1400px monitor is unreadable;
+       the eye loses the line coming back. */
+    max-width: 92ch;
 }
 
 .banner-card-status {

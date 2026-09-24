@@ -609,24 +609,44 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
         </p>
 
         {/* Create Banner */}
-        <div style={{ display: 'grid', gap: '12px', marginBottom: '20px', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>English Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
-            <input ref={bannerEnInputRef} type="text" value={newBannerEn} onChange={e => setNewBannerEn(e.target.value)} className="admin-input" placeholder="e.g. Free shipping over {{usd_200}}!" style={{ width: '100%' }} />
+        <div className="banner-form">
+          <div className="banner-form-fields">
+            <label className="banner-field">
+              <span>English banner text</span>
+              <input
+                ref={bannerEnInputRef}
+                type="text"
+                value={newBannerEn}
+                onChange={e => setNewBannerEn(e.target.value)}
+                className="admin-input"
+                placeholder="Free shipping over {{usd_200}}!"
+              />
+            </label>
+            <label className="banner-field">
+              <span>Spanish banner text</span>
+              <input
+                type="text"
+                value={newBannerEs}
+                onChange={e => setNewBannerEs(e.target.value)}
+                className="admin-input"
+                placeholder="¡Envío gratis superior a {{usd_200}}!"
+              />
+            </label>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>Spanish Banner Text (Use {'{{usd_200}}'} for dynamic currency)</label>
-            <input type="text" value={newBannerEs} onChange={e => setNewBannerEs(e.target.value)} className="admin-input" placeholder="e.g. ¡Envío gratis superior a {{usd_200}}!" style={{ width: '100%' }} />
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button type="button" onClick={handleCreateOrUpdateBanner} style={{ flex: 1, padding: '8px 16px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-              {editingBannerId ? 'Save Changes' : '+ Create New Banner'}
-            </button>
-            {editingBannerId && (
-              <button type="button" onClick={cancelEditBanner} style={{ padding: '8px 16px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>
-                Cancel
+          <div className="banner-form-actions">
+            <span className="banner-form-hint">
+              Write {'{{usd_200}}'} where a price should go and it converts to the visitor&apos;s currency.
+            </span>
+            <div className="banner-form-buttons">
+              {editingBannerId && (
+                <button type="button" onClick={cancelEditBanner} className="banner-btn">
+                  Cancel
+                </button>
+              )}
+              <button type="button" onClick={handleCreateOrUpdateBanner} className="banner-btn banner-btn-primary">
+                {editingBannerId ? 'Save changes' : '+ Create banner'}
               </button>
-            )}
+            </div>
           </div>
         </div>
 
