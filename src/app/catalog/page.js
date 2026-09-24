@@ -2304,6 +2304,10 @@ export default function CatalogPage() {
   // is valid; getPromoDiscountAmount decides whether it or the running offer
   // saves more, matching the server.
   const getAppliedPromoData = () => (promoData?.valid ? promoData : null);
+  const getAppliedPromoCommissionRate = () => {
+    const rate = Number(getAppliedPromoData()?.commission_rate);
+    return Number.isFinite(rate) ? rate : 0;
+  };
   const getWeeklyDealLimitError = () => {
     const deal = getMatchedWeeklyDeal();
     const max = dealMaxUnits(deal);
@@ -2788,6 +2792,34 @@ export default function CatalogPage() {
     revealField('checkoutError');
   };
 
+  const detailReviewMessage = (field) => {
+    const messages = {
+      customerName: {
+        en: 'Please check the name. Use the full legal name for delivery.',
+        es: 'Revise el nombre. Use el nombre legal completo para el envío.',
+      },
+      customerPhone: {
+        en: 'Please check the WhatsApp number and country code.',
+        es: 'Revise el número de WhatsApp y el código de país.',
+      },
+      shippingAddress: {
+        en: 'Please check the province, canton, district, and exact address.',
+        es: 'Revise provincia, cantón, distrito y dirección exacta.',
+      },
+    };
+    return messages[field]?.[lang === 'en' ? 'en' : 'es'] || '';
+  };
+
+  const highlightDetailReviewFields = () => {
+    setFormErrors((prev) => ({
+      ...prev,
+      customerName: prev.customerName || detailReviewMessage('customerName'),
+      customerPhone: prev.customerPhone || detailReviewMessage('customerPhone'),
+      shippingAddress: prev.shippingAddress || detailReviewMessage('shippingAddress'),
+    }));
+    revealField('customerName');
+  };
+
   /**
    * Turn a refused save into something worth reading.
    *
@@ -2814,6 +2846,7 @@ export default function CatalogPage() {
     // to WhatsApp before she has looked at the form — and a typo in the name
     // or phone box is the likeliest reason a real customer ever sees this.
     if (result?.errorCode === 'details_not_verified') {
+      highlightDetailReviewFields();
       return {
         title: lang === 'en' ? 'Please check your details' : 'Revise sus datos',
         detail: serverMessage || junkOrderMessage(lang),
@@ -3020,8 +3053,8 @@ export default function CatalogPage() {
       discount_amount_usd: getAppliedPromoData() ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
       discount_amount_crc: getAppliedPromoData() ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
       affiliate_id: getAppliedPromoData()?.affiliate_id || null,
-      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoData().commission_rate).toFixed(2)) : 0,
-      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoData().commission_rate) : 0,
+      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoCommissionRate()).toFixed(2)) : 0,
+      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoCommissionRate()) : 0,
     });
 
     if (!cardSave.ok) {
@@ -3209,8 +3242,8 @@ export default function CatalogPage() {
       discount_amount_usd: getAppliedPromoData() ? (currency === 'USD' ? getPromoDiscountAmount() : parseFloat((getPromoDiscountAmount() / exchangeRate).toFixed(2))) : 0,
       discount_amount_crc: getAppliedPromoData() ? (currency === 'CRC' ? getPromoDiscountAmount() : Math.round(getPromoDiscountAmount() * exchangeRate)) : 0,
       affiliate_id: getAppliedPromoData()?.affiliate_id || null,
-      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoData().commission_rate).toFixed(2)) : 0,
-      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoData().commission_rate) : 0,
+      affiliate_commission_usd: getAppliedPromoData() ? parseFloat(((totalUsd - (currency === 'USD' ? getShippingFee() : getShippingFee()/exchangeRate)) * getAppliedPromoCommissionRate()).toFixed(2)) : 0,
+      affiliate_commission_crc: getAppliedPromoData() ? Math.round(((currency === 'CRC' ? (totalVal - getShippingFee()) : (totalVal - getShippingFee()) * exchangeRate)) * getAppliedPromoCommissionRate()) : 0,
     });
 
     if (!saveResult.ok) {
