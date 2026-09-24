@@ -12,6 +12,7 @@
 import test from 'node:test';
 import { tenPlusDiscountPct } from '../src/lib/bulkDeal.mjs';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 
 import {
   calculateAdminOrderTotals,
@@ -20,6 +21,9 @@ import {
   manualDiscountReplacesVolume,
 } from '../src/lib/adminOrderTotals.mjs';
 import { authoritativeCheckout } from '../src/lib/authoritativeCheckout.mjs';
+
+const manualOrderRoute = fs.readFileSync('src/app/api/admin/orders/create/route.js', 'utf8');
+const manualOrderModal = fs.readFileSync('src/components/admin/ManualOrderModal.js', 'utf8');
 
 // Ten vials at ₡45,037 — the order from the report that prompted this.
 const ITEMS = [{ product: 'GLP-1 5mg', qty: 10, price: 45037 }];
@@ -215,4 +219,20 @@ test('reopening an order honours the choice it was saved with', () => {
   // to the default rule.
   assert.equal(resolveOnEdit({ source: 'admin_manual', apply_volume_discount: null }, 'percentage', 25), true);
   assert.equal(resolveOnEdit({ source: 'website', apply_volume_discount: null }, 'percentage', 25), false);
+});
+
+test('manual order negotiated discounts are superadmin-only', () => {
+  assert.match(
+    manualOrderRoute,
+    /!auth\.profile\.is_superadmin && requestedManualDiscountType && requestedManualDiscountValue > 0/,
+  );
+  assert.match(manualOrderRoute, /Only a superadmin can add a manual order discount/);
+  assert.match(
+    manualOrderRoute,
+    /const manualDiscountType = auth\.profile\.is_superadmin \? requestedManualDiscountType : null;/,
+  );
+
+  assert.match(manualOrderModal, /const manualDiscountType = isSuperadmin && form\.manual_discount_type !== 'none'/);
+  assert.match(manualOrderModal, /apply_volume_discount: isSuperadmin \? form\.apply_volume_discount : true/);
+  assert.match(manualOrderModal, /\.\.\.\(isSuperadmin \? \{\s*manual_discount_type: manualDiscountType,/s);
 });

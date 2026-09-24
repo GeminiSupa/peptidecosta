@@ -133,7 +133,9 @@ export default function ManualOrderModal({
   const giftShortfall = bacGiftShortfall(form.items);
 
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
-  const manualDiscountType = form.manual_discount_type === 'none' ? null : form.manual_discount_type;
+  const manualDiscountType = isSuperadmin && form.manual_discount_type !== 'none'
+    ? form.manual_discount_type
+    : null;
   const {
     itemsSubtotal,
     discountPct,
@@ -247,15 +249,15 @@ export default function ManualOrderModal({
             promo_code: form.promo_code.trim() || null,
             shipping_cost_usd: shippingCosts.usd,
             shipping_cost_crc: shippingCosts.crc,
-            manual_discount_type: manualDiscountType,
-            manual_discount_value: manualDiscountType ? discountValue : 0,
-            manual_discount_reason: manualDiscountType
-              ? (form.manual_discount_reason.trim() || null)
-              : null,
             internal_notes: form.internal_notes.trim() || null,
             notify_customer: form.notify_customer,
-            apply_volume_discount: form.apply_volume_discount,
+            apply_volume_discount: isSuperadmin ? form.apply_volume_discount : true,
             ...(isSuperadmin ? {
+              manual_discount_type: manualDiscountType,
+              manual_discount_value: manualDiscountType ? discountValue : 0,
+              manual_discount_reason: manualDiscountType
+                ? (form.manual_discount_reason.trim() || null)
+                : null,
               ...(form.sales_agent.trim() && form.sales_agent !== HOUSE_SALE ? { sales_agent: form.sales_agent.trim() } : {}),
               house_sale: form.sales_agent === HOUSE_SALE,
               affiliate_id: form.affiliate_id || null,
@@ -431,78 +433,93 @@ export default function ManualOrderModal({
               the only place to record it was the order detail panel, the
               customer's confirmation went out at the undiscounted price and
               their receipt was wrong from the moment it arrived. */}
-          <div style={{
-            marginTop: '12px',
-            padding: '14px',
-            borderRadius: '10px',
-            border: '1px solid rgba(56, 189, 248, 0.22)',
-            background: 'rgba(56, 189, 248, 0.06)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
-              <BadgePercent size={16} /> Order discount
-            </div>
-            {/* Two columns, with the reason on its own row underneath. The
-                order panel's three-across layout has the width for it; this
-                modal does not, and it clipped every one of the three labels. */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
-              <select
-                className="admin-select"
-                value={form.manual_discount_type}
-                onChange={(e) => setForm({
-                  ...form,
-                  manual_discount_type: e.target.value,
-                  // Follows the discount by default; the checkbox below still
-                  // has the last word.
-                  apply_volume_discount: e.target.value === 'none',
-                })}
-              >
-                <option value="none">No manual discount</option>
-                <option value="percentage">Percentage</option>
-                <option value="fixed">Fixed amount</option>
-              </select>
-              <input
-                className="admin-input"
-                type="number"
-                min="0"
-                max={form.manual_discount_type === 'percentage' ? '100' : undefined}
-                step={form.manual_discount_type === 'percentage' ? '0.1' : (form.currency === 'USD' ? '0.01' : '1')}
-                value={form.manual_discount_value}
-                onChange={(e) => setForm({ ...form, manual_discount_value: e.target.value })}
-                disabled={!manualDiscountType}
-                placeholder={form.manual_discount_type === 'percentage' ? 'Percent' : `Amount ${form.currency}`}
-              />
-              <input
-                className="admin-input"
-                style={{ gridColumn: '1 / -1' }}
-                value={form.manual_discount_reason}
-                maxLength={200}
-                onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
-                disabled={!manualDiscountType}
-                placeholder="Reason shown on receipt (optional)"
-              />
-            </div>
-            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={form.apply_volume_discount}
-                onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
-                style={{ marginTop: '2px' }}
-              />
-              <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
-                Also apply the automatic volume discount ({volumeTierLabel})
-                <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
-                  {form.apply_volume_discount
-                    ? (manualDiscountType
-                      ? 'Both discounts come off — the customer pays less than the figure you typed above.'
-                      : 'The usual bulk pricing applies.')
-                    : 'Off, so the discount you typed above is the whole discount.'}
+          {isSuperadmin ? (
+            <div style={{
+              marginTop: '12px',
+              padding: '14px',
+              borderRadius: '10px',
+              border: '1px solid rgba(56, 189, 248, 0.22)',
+              background: 'rgba(56, 189, 248, 0.06)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
+                <BadgePercent size={16} /> Order discount
+              </div>
+              {/* Two columns, with the reason on its own row underneath. The
+                  order panel's three-across layout has the width for it; this
+                  modal does not, and it clipped every one of the three labels. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
+                <select
+                  className="admin-select"
+                  value={form.manual_discount_type}
+                  onChange={(e) => setForm({
+                    ...form,
+                    manual_discount_type: e.target.value,
+                    // Follows the discount by default; the checkbox below still
+                    // has the last word.
+                    apply_volume_discount: e.target.value === 'none',
+                  })}
+                >
+                  <option value="none">No manual discount</option>
+                  <option value="percentage">Percentage</option>
+                  <option value="fixed">Fixed amount</option>
+                </select>
+                <input
+                  className="admin-input"
+                  type="number"
+                  min="0"
+                  max={form.manual_discount_type === 'percentage' ? '100' : undefined}
+                  step={form.manual_discount_type === 'percentage' ? '0.1' : (form.currency === 'USD' ? '0.01' : '1')}
+                  value={form.manual_discount_value}
+                  onChange={(e) => setForm({ ...form, manual_discount_value: e.target.value })}
+                  disabled={!manualDiscountType}
+                  placeholder={form.manual_discount_type === 'percentage' ? 'Percent' : `Amount ${form.currency}`}
+                />
+                <input
+                  className="admin-input"
+                  style={{ gridColumn: '1 / -1' }}
+                  value={form.manual_discount_reason}
+                  maxLength={200}
+                  onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
+                  disabled={!manualDiscountType}
+                  placeholder="Reason shown on receipt (optional)"
+                />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.apply_volume_discount}
+                  onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
+                  style={{ marginTop: '2px' }}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                  Also apply the automatic volume discount ({volumeTierLabel})
+                  <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
+                    {form.apply_volume_discount
+                      ? (manualDiscountType
+                        ? 'Both discounts come off — the customer pays less than the figure you typed above.'
+                        : 'The usual bulk pricing applies.')
+                      : 'Off, so the discount you typed above is the whole discount.'}
+                  </span>
                 </span>
-              </span>
-            </label>
-            <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
-              The order discount is applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
-            </p>
-          </div>
+              </label>
+              <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                The order discount is applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
+              </p>
+            </div>
+          ) : (
+            <div style={{
+              marginTop: '12px',
+              padding: '11px 12px',
+              borderRadius: '10px',
+              border: '1px solid rgba(34, 197, 94, 0.22)',
+              background: 'rgba(34, 197, 94, 0.06)',
+              color: '#bbf7d0',
+              fontSize: '0.76rem',
+              lineHeight: 1.45,
+            }}>
+              Automatic discounts are applied for this manual order. Volume discounts and valid promo codes are priced by the server from the live catalog.
+            </div>
+          )}
 
           <div className="order-detail-totals" style={{ marginTop: '12px' }}>
             <div><span>Items subtotal</span><span>{money(itemsSubtotal)}</span></div>

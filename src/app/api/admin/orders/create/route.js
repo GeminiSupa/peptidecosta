@@ -179,9 +179,19 @@ export async function POST(request) {
     // which meant the confirmation reached the customer carrying a price
     // nobody had agreed to. Same validation as /api/admin/orders/update so the
     // two entry points cannot disagree about what a valid discount is.
-    const manualDiscountType = normalizeManualDiscountType(order.manual_discount_type);
-    const manualDiscountValue = Number(order.manual_discount_value || 0);
-    const manualDiscountReason = String(order.manual_discount_reason || '').trim();
+    const requestedManualDiscountType = normalizeManualDiscountType(order.manual_discount_type);
+    const requestedManualDiscountValue = Number(order.manual_discount_value || 0);
+    if (!auth.profile.is_superadmin && requestedManualDiscountType && requestedManualDiscountValue > 0) {
+      return NextResponse.json({
+        error: 'Only a superadmin can add a manual order discount. Use the automatic volume discount or a valid promo code.',
+      }, { status: 403 });
+    }
+
+    const manualDiscountType = auth.profile.is_superadmin ? requestedManualDiscountType : null;
+    const manualDiscountValue = auth.profile.is_superadmin ? requestedManualDiscountValue : 0;
+    const manualDiscountReason = auth.profile.is_superadmin
+      ? String(order.manual_discount_reason || '').trim()
+      : '';
     if (!Number.isFinite(manualDiscountValue) || manualDiscountValue < 0) {
       return NextResponse.json({ error: 'Discount value must be zero or greater' }, { status: 400 });
     }
