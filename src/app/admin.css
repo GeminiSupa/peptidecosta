@@ -12016,9 +12016,9 @@
 .banner-card {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 16px;
+    align-items: flex-start;
+    gap: 28px;
+    padding: 16px 18px;
     border-radius: 12px;
     background: rgba(15, 23, 42, 0.65);
     border: 1px solid rgba(148, 163, 184, 0.14);
@@ -12045,12 +12045,12 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     font-weight: 700;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #64748b;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 
 .banner-card.is-live .banner-card-status {
@@ -12070,12 +12070,19 @@
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 
+/* A grid rather than an inline chip: banner wording runs long and wraps, and
+   inline the second line slid back under the EN/ES tag instead of lining up
+   with the first. */
 .banner-card-line {
-    margin: 0 0 4px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 0 10px;
+    align-items: start;
+    margin: 0 0 8px;
     font-size: 0.9rem;
-    line-height: 1.45;
+    line-height: 1.55;
     color: #f1f5f9;
-    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .banner-card-line-muted {
@@ -12085,24 +12092,25 @@
 }
 
 .banner-card-lang {
-    display: inline-block;
-    min-width: 26px;
-    margin-right: 8px;
-    padding: 1px 5px;
+    padding: 2px 0 1px;
     border-radius: 4px;
     background: rgba(148, 163, 184, 0.14);
     color: #94a3b8;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     font-weight: 800;
     letter-spacing: 0.06em;
     text-align: center;
-    vertical-align: 2px;
+    /* Sits on the first line of the text beside it rather than above it. */
+    margin-top: 2px;
 }
 
 .banner-card-actions {
     display: flex;
     gap: 6px;
     flex: 0 0 auto;
+    /* Level with the first line of wording, not floating in the middle of a
+       three-line banner. */
+    padding-top: 2px;
 }
 
 .banner-btn {
