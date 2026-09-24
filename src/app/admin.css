@@ -11863,3 +11863,102 @@
 .admin-layout [style*="color: #334155"] {
     color: #8494aa !important;
 }
+
+/* Bin tab contrast rescue
+   Scoped only to the deleted-items tab. This intentionally sits after the
+   broad admin contrast guardrails so shared table/dim styles cannot make the
+   Bin unreadable in dark mode. */
+.recycle-bin {
+    color: #e5edf7 !important;
+}
+
+.recycle-bin__head h2,
+.recycle-bin__head h2 svg {
+    color: #f8fafc !important;
+}
+
+.recycle-bin__lede {
+    color: #cbd5e1 !important;
+}
+
+.recycle-bin__retention label,
+.recycle-bin__toggle,
+.recycle-bin__meta,
+.recycle-bin__locked {
+    color: #d7e2f0 !important;
+}
+
+.recycle-bin__search,
+.recycle-bin__search svg {
+    color: #64748b !important;
+}
+
+[data-theme="dark"] .recycle-bin__search,
+[data-theme="dark"] .recycle-bin__search svg {
+    color: #cbd5e1 !important;
+}
+
+.recycle-bin__search input,
+.recycle-bin__retention select,
+.recycle-bin__filters select {
+    color: #0f172a !important;
+}
+
+[data-theme="dark"] .recycle-bin__search input,
+[data-theme="dark"] .recycle-bin__retention select,
+[data-theme="dark"] .recycle-bin__filters select {
+    color: #f8fafc !important;
+}
+
+.recycle-bin__table,
+.recycle-bin__table thead,
+.recycle-bin__table tbody,
+.recycle-bin__table tr,
+.recycle-bin__table th,
+.recycle-bin__table td {
+    opacity: 1 !important;
+}
+
+.recycle-bin__table th {
+    color: #334155 !important;
+    font-weight: 900 !important;
+}
+
+[data-theme="dark"] .recycle-bin__table th {
+    color: #e2e8f0 !important;
+}
+
+.recycle-bin__table td {
+    color: #0f172a !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="dark"] .recycle-bin__table td {
+    color: #dbeafe !important;
+}
+
+.recycle-bin__table td[data-label="Item"] {
+    color: #020617 !important;
+    font-weight: 800 !important;
+}
+
+[data-theme="dark"] .recycle-bin__table td[data-label="Item"] {
+    color: #f8fafc !important;
+}
+
+.recycle-bin__reason {
+    color: #475569 !important;
+    font-weight: 700 !important;
+}
+
+[data-theme="dark"] .recycle-bin__reason {
+    color: #cbd5e1 !important;
+}
+
+.recycle-bin__table tr.is-restored td {
+    opacity: 0.72 !important;
+}
+
+.recycle-bin__actions button {
+    opacity: 1 !important;
+}
