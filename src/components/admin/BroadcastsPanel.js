@@ -39,6 +39,38 @@ const BANNERS_PER_PAGE = 5;
 const FLEXIBLE_OFFER_TEMPLATE = 'promo_precio_especial_v1';
 const FLEXIBLE_OFFER_FIELDS = ['Product ({{1}})', 'Offer ({{2}})', 'End date ({{3}})', 'Catalog link ({{4}})'];
 
+/**
+ * The approved wording of the chosen template, in the chosen language.
+ *
+ * Meta is asked for every approved template's components when the tab loads, so
+ * the real text is already here — it was just never shown or read. Without it
+ * the panel had to be told about each template by name, and only ever knew one.
+ */
+function templateBodyText(details, name, language) {
+  if (!name) return '';
+  const wanted = String(language || 'es').toLowerCase();
+  const sameName = (details || []).filter((t) => t?.name === name);
+  const chosen = sameName.find((t) => String(t.language || '').toLowerCase() === wanted)
+    || sameName.find((t) => String(t.language || '').toLowerCase().startsWith(wanted.slice(0, 2)))
+    || sameName[0];
+  return chosen?.components?.find((c) => c?.type === 'BODY')?.text || '';
+}
+
+/**
+ * How many values Meta expects, read off the approved wording.
+ *
+ * The highest number, not how many are written: a template using {{1}} and
+ * {{3}} still needs three values sent, or Meta refuses the whole send for a
+ * parameter count mismatch.
+ */
+function countTemplateVariables(bodyText) {
+  let highest = 0;
+  for (const match of String(bodyText || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    highest = Math.max(highest, Number(match[1]) || 0);
+  }
+  return highest;
+}
+
 export default function BroadcastsPanel({ products = [], draft = null, onDraftApplied }) {
   const [audience, setAudience] = useState('all_customers');
   const [customContacts, setCustomContacts] = useState('');
@@ -87,6 +119,9 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   // banner means dragging blind.
   const [bannerPage, setBannerPage] = useState(1);
   const [metaTemplates, setMetaTemplates] = useState([]);
+  // The full approved definitions, so the panel can read a template's wording
+  // and its variable count instead of being hardcoded to know one name.
+  const [metaTemplateDetails, setMetaTemplateDetails] = useState([]);
 
   const loadBanners = async () => {
     try {
@@ -232,6 +267,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
       .then(res => res.json())
       .then(data => {
         if (data.templates) setMetaTemplates(data.templates);
+        if (Array.isArray(data.details)) setMetaTemplateDetails(data.details);
       })
       .catch(e => console.error('Failed to load templates', e));
 
@@ -378,10 +414,28 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   }, [draft, onDraftApplied]);
 
   const hasEmailHtml = Boolean(channels.email && emailFormat === 'html' && emailHtmlContent.trim());
+
+  // What the chosen template actually says, and how many values it wants.
+  const selectedTemplateBody = useMemo(
+    () => templateBodyText(metaTemplateDetails, channels.whatsappTemplateName, channels.whatsappTemplateLanguage),
+    [metaTemplateDetails, channels.whatsappTemplateName, channels.whatsappTemplateLanguage],
+  );
+  // Only trust a count we actually read. If Meta could not be reached the list
+  // is empty, and treating that as "no variables" would send nothing into a
+  // template that needs four.
+  const templateIsKnown = Boolean(channels.whatsappTemplateName) && Boolean(selectedTemplateBody);
+  const templateVariableCount = templateIsKnown ? countTemplateVariables(selectedTemplateBody) : null;
+
   const usesCustomTemplateParameters = channels.whatsappTemplateParamMode === 'custom';
+  // Against the template's real count, not just "is it empty". A template with
+  // no variables at all is complete with an empty list; sending one value into
+  // it is what Meta refuses.
+  const expectedParameterCount = templateVariableCount === null
+    ? (channels.whatsappTemplateParameters?.length || 0)
+    : templateVariableCount;
   const hasMissingCustomTemplateParameters = usesCustomTemplateParameters && (
     !Array.isArray(channels.whatsappTemplateParameters)
-    || channels.whatsappTemplateParameters.length === 0
+    || channels.whatsappTemplateParameters.length !== expectedParameterCount
     || channels.whatsappTemplateParameters.some((value) => !String(value || '').trim())
   );
 
@@ -1143,14 +1197,21 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 value={channels.whatsappTemplateName || ''}
                 onChange={e => {
                   const templateName = e.target.value;
-                  const isFlexibleOffer = templateName.trim() === FLEXIBLE_OFFER_TEMPLATE;
+                  // Decided from the template's own approved wording. This used
+                  // to check one hardcoded name, so every other multi-variable
+                  // template silently fell through to "{{1}} is the customer
+                  // name" — which would have put a person's name where the
+                  // product goes, and sent nothing at all for {{2}}.
+                  const body = templateBodyText(metaTemplateDetails, templateName, channels.whatsappTemplateLanguage);
+                  const count = body ? countTemplateVariables(body) : null;
+                  const needsOwnValues = count !== null && count !== 1;
                   setChannels({
                     ...channels,
                     whatsappTemplateName: templateName,
-                    whatsappTemplateParamMode: isFlexibleOffer ? 'custom' : (channels.whatsappTemplateParamMode === 'custom' ? 'name' : channels.whatsappTemplateParamMode),
-                    whatsappTemplateParameters: isFlexibleOffer
-                      ? (channels.whatsappTemplateParameters?.length === 4 ? channels.whatsappTemplateParameters : ['', '', '', ''])
-                      : [],
+                    whatsappTemplateParamMode: needsOwnValues
+                      ? 'custom'
+                      : (channels.whatsappTemplateParamMode === 'custom' ? 'name' : channels.whatsappTemplateParamMode),
+                    whatsappTemplateParameters: needsOwnValues ? Array.from({ length: count }, () => '') : [],
                   });
                 }}
               >
@@ -1163,42 +1224,88 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 className="admin-input"
                 style={{ width: '120px', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: '8px' }}
                 value={channels.whatsappTemplateLanguage || 'es'}
-                onChange={e => setChannels({ ...channels, whatsappTemplateLanguage: e.target.value })}
+                onChange={e => {
+                  const language = e.target.value;
+                  // The two languages of a template can be approved with
+                  // different variable counts, so the boxes are rebuilt rather
+                  // than left at the old length.
+                  const body = templateBodyText(metaTemplateDetails, channels.whatsappTemplateName, language);
+                  const count = body ? countTemplateVariables(body) : null;
+                  if (count === null || count === 1 || channels.whatsappTemplateParamMode !== 'custom') {
+                    setChannels({ ...channels, whatsappTemplateLanguage: language });
+                    return;
+                  }
+                  const existing = channels.whatsappTemplateParameters || [];
+                  setChannels({
+                    ...channels,
+                    whatsappTemplateLanguage: language,
+                    whatsappTemplateParameters: Array.from({ length: count }, (_, i) => existing[i] || ''),
+                  });
+                }}
               >
                 <option value="es">ES (Spanish)</option>
                 <option value="en_US">EN (English)</option>
               </select>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Use an approved template name to bypass the 24-hour window restriction and reach all leads.</p>
-            {channels.whatsappTemplateName && usesCustomTemplateParameters && (
+            {channels.whatsappTemplateName && selectedTemplateBody && (
+              <div className="wa-template-preview">
+                <strong>What Meta approved — you cannot change this wording</strong>
+                <pre>{selectedTemplateBody}</pre>
+                <span>
+                  {templateVariableCount === 0
+                    ? 'This template has no blanks. It sends exactly as written above.'
+                    : templateVariableCount === 1
+                      ? 'The {{1}} above is filled in per person — choose what goes in it below.'
+                      : `The ${templateVariableCount} numbered blanks above are filled in from the boxes below.`}
+                </span>
+              </div>
+            )}
+            {channels.whatsappTemplateName && usesCustomTemplateParameters && expectedParameterCount > 0 && (
               <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px' }}>
                 <strong style={{ display: 'block', color: '#e2e8f0', fontSize: '0.8rem', marginBottom: '8px' }}>
-                  Approved offer fields
+                  Fill in the blanks
                 </strong>
                 <div style={{ display: 'grid', gap: '9px' }}>
-                  {FLEXIBLE_OFFER_FIELDS.map((label, index) => (
-                    <label key={label} style={{ display: 'grid', gap: '4px', color: '#cbd5e1', fontSize: '0.74rem' }}>
-                      <span>{label}</span>
-                      <input
-                        className="admin-input"
-                        type={index === 3 ? 'url' : 'text'}
-                        value={channels.whatsappTemplateParameters?.[index] || ''}
-                        onChange={(event) => {
-                          const parameters = [...(channels.whatsappTemplateParameters || ['', '', '', ''])];
-                          parameters[index] = event.target.value;
-                          setChannels({ ...channels, whatsappTemplateParameters: parameters });
-                        }}
-                        style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}
-                      />
-                    </label>
-                  ))}
+                  {Array.from({ length: expectedParameterCount }, (_, index) => {
+                    const knownLabel = channels.whatsappTemplateName === FLEXIBLE_OFFER_TEMPLATE
+                      ? FLEXIBLE_OFFER_FIELDS[index]
+                      : null;
+                    return (
+                      <label key={index} style={{ display: 'grid', gap: '4px', color: '#cbd5e1', fontSize: '0.74rem' }}>
+                        <span>{knownLabel || `Goes into {{${index + 1}}}`}</span>
+                        <input
+                          className="admin-input"
+                          type="text"
+                          value={channels.whatsappTemplateParameters?.[index] || ''}
+                          onChange={(event) => {
+                            const parameters = Array.from(
+                              { length: expectedParameterCount },
+                              (_, i) => channels.whatsappTemplateParameters?.[i] || '',
+                            );
+                            parameters[index] = event.target.value;
+                            setChannels({ ...channels, whatsappTemplateParameters: parameters });
+                          }}
+                          style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}
+                        />
+                      </label>
+                    );
+                  })}
                 </div>
                 <p style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.45, margin: '8px 0 0' }}>
-                  These values are sent in Meta&apos;s approved order. Keep them in the selected template language.
+                  Everyone gets the same values, in Meta&apos;s approved order. Write them in the
+                  language selected above. Line breaks are not allowed by Meta and get flattened
+                  into spaces.
                 </p>
               </div>
             )}
-            {channels.whatsappTemplateName && !usesCustomTemplateParameters && (
+            {/* A one-variable template keeps this chooser on screen even after
+                "the same text for everyone" is picked — hiding it left no way
+                back to per-person names. A template whose wording could not be
+                read falls back to the old behaviour. */}
+            {channels.whatsappTemplateName
+              && (templateVariableCount === 1 || (templateVariableCount === null && !usesCustomTemplateParameters))
+              && (
               <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(52, 211, 153, 0.06)', border: '1px solid rgba(52, 211, 153, 0.2)', borderRadius: '8px' }}>
                 <label style={{ display: 'block', color: '#e2e8f0', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
                   What does {'{{1}}'} contain?
@@ -1210,19 +1317,23 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                     ...channels,
                     whatsappTemplateParamMode: e.target.value,
                     whatsappGreetingVariable: e.target.value === 'greeting',
+                    whatsappTemplateParameters: e.target.value === 'custom' ? [''] : [],
                   })}
                   style={{ width: '100%', background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}
                 >
                   <option value="name">Customer name</option>
                   <option value="greeting">Whole greeting</option>
                   <option value="message">Message Composer text</option>
+                  <option value="custom">The same text for everyone</option>
                 </select>
                 <p style={{ fontSize: '0.76rem', color: '#cbd5e1', lineHeight: 1.45, margin: '7px 0 0' }}>
                   {channels.whatsappTemplateParamMode === 'message'
                     ? `Use an approved template whose {{1}} is the offer body. The complete Message Composer text will be inserted, including the Weekly Deal link.`
                     : channels.whatsappTemplateParamMode === 'greeting'
                       ? `Use when {{1}} is the whole greeting, such as “Hola María”.`
-                      : `Use when the approved template already says “Hola” and {{1}} is only the customer name.`}
+                      : channels.whatsappTemplateParamMode === 'custom'
+                        ? 'Nobody’s name is used. Everyone gets the same words in {{1}} — type them in the box below.'
+                        : `Use when the approved template already says “Hola” and {{1}} is only the customer name.`}
                 </p>
               </div>
             )}

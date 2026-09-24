@@ -12213,3 +12213,43 @@
         justify-content: center;
     }
 }
+
+/* The chosen WhatsApp template's approved wording, shown above the boxes that
+   fill its blanks. Without it you are typing values into numbered slots with
+   no idea what sentence they land in. */
+.wa-template-preview {
+    margin-top: 10px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.wa-template-preview strong {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+
+.wa-template-preview pre {
+    margin: 0;
+    padding: 0;
+    font-family: inherit;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: #e2e8f0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.wa-template-preview span {
+    display: block;
+    margin-top: 9px;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: #94a3b8;
+}
