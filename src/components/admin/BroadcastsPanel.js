@@ -4,6 +4,7 @@ import { Send, Users, Smartphone, Mail, AlertTriangle, Sparkles, Loader, Calenda
 import { adminFetch } from '@/lib/adminApi';
 import BroadcastProgress from '@/components/admin/BroadcastProgress';
 import { crHourOf, readSendWindow, withinSendWindow } from '@/lib/broadcastPacing.mjs';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({
   value: h,
@@ -32,6 +33,8 @@ function formatDuration(seconds) {
   const rest = minutes % 60;
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
+
+const BANNERS_PER_PAGE = 5;
 
 const FLEXIBLE_OFFER_TEMPLATE = 'promo_precio_especial_v1';
 const FLEXIBLE_OFFER_FIELDS = ['Product ({{1}})', 'Offer ({{2}})', 'End date ({{3}})', 'Catalog link ({{4}})'];
@@ -79,6 +82,10 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
   const [newBannerEn, setNewBannerEn] = useState('');
   const [newBannerEs, setNewBannerEs] = useState('');
   const [bannersLoading, setBannersLoading] = useState(true);
+  // Paged rather than one long scrolling box. With a year of announcements in
+  // the list the inner scrollbar shrinks to a few pixels and finding an old
+  // banner means dragging blind.
+  const [bannerPage, setBannerPage] = useState(1);
   const [metaTemplates, setMetaTemplates] = useState([]);
 
   const loadBanners = async () => {
@@ -109,6 +116,30 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
 
   const [editingBannerId, setEditingBannerId] = useState(null);
   const bannerEnInputRef = React.useRef(null);
+
+  // Live banners first, so the ones actually showing on the site are on page 1
+  // whatever order they were created in.
+  const sortedBanners = useMemo(() => {
+    return [...banners].sort((a, b) => Number(Boolean(b.isActive)) - Number(Boolean(a.isActive)));
+  }, [banners]);
+  const bannerPageCount = Math.max(1, Math.ceil(sortedBanners.length / BANNERS_PER_PAGE));
+  // Deleting the last banner on page 3 must not leave you staring at an empty
+  // page 3.
+  const currentBannerPage = Math.min(bannerPage, bannerPageCount);
+  const visibleBanners = sortedBanners.slice(
+    (currentBannerPage - 1) * BANNERS_PER_PAGE,
+    currentBannerPage * BANNERS_PER_PAGE,
+  );
+  const liveBannerCount = banners.filter((b) => b.isActive).length;
+
+  // A half-typed date in the picker is not a date. Parsed defensively so the
+  // panel cannot throw while somebody is still filling the box in.
+  const scheduledAtCr = useMemo(() => {
+    if (!scheduledAt) return '';
+    const when = new Date(scheduledAt);
+    if (Number.isNaN(when.getTime())) return '';
+    return formatCrInstant(when.toISOString());
+  }, [scheduledAt]);
 
   const handleCreateOrUpdateBanner = () => {
     if (!newBannerEn || !newBannerEs) return alert('Please fill both EN and ES text');
@@ -147,14 +178,30 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     setEditingBannerId(null);
   };
 
-  const handleDeleteBanner = (id) => {
+  // Deleting a banner goes through its own route so the wording is snapshotted
+  // into the Bin first. Rewriting the whole array without it — which is what
+  // this used to do — left nothing to restore.
+  const handleDeleteBanner = async (id) => {
     const banner = banners.find((b) => b.id === id);
     if (!confirmDelete('banner', [
       banner?.textEn,
       banner?.textEs,
       banner?.isActive ? 'Currently live on the site' : 'Not active',
-    ])) return;
-    saveBanners(banners.filter(b => b.id !== id));
+    ], { recoverable: true })) return;
+
+    try {
+      const res = await adminFetch(`/api/admin/banners?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setResult({ success: false, text: data.error || 'Could not delete that banner.' });
+        return;
+      }
+      setBanners(Array.isArray(data.banners) ? data.banners : banners.filter(b => b.id !== id));
+      if (editingBannerId === id) cancelEditBanner();
+      setResult({ success: true, text: data.message || 'Banner moved to the Bin.' });
+    } catch (err) {
+      setResult({ success: false, text: err.message });
+    }
   };
 
   const handleToggleBanner = (id) => {
@@ -353,7 +400,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
       item?.scheduled_at && `Scheduled for ${new Date(item.scheduled_at).toLocaleString()}`,
       item?.audience && `Audience: ${String(item.audience).replace(/_/g, ' ')}`,
       item?.message && `"${String(item.message).slice(0, 80)}"`,
-    ])) return;
+    ], { recoverable: true })) return;
     try {
       const res = await adminFetch(`/api/admin/broadcast?id=${id}`, { method: 'DELETE' });
       if (res.ok) fetchScheduled();
@@ -488,25 +535,25 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
         <div>
           <h2 className="admin-section-title" style={{ fontSize: '1.75rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Send size={28} color="#38bdf8" />
-            One-Time Announcements
+            Announcements
           </h2>
           <p className="admin-page-subtitle" style={{ margin: 0, fontSize: '0.95rem' }}>
-            Send one-off email or WhatsApp announcements. Durable campaigns, journeys, and lifecycle automation belong in Marketing Studio.
+            Send an email or WhatsApp announcement now, or schedule it for later.
           </p>
         </div>
-      </div>
-
-      <div className="broadcast-positioning-note">
-        <strong>Use this for one-time sends only.</strong>
-        <span>For reusable promos, saved journeys, or attribution-heavy campaigns, use Marketing Studio and Promo Codes.</span>
       </div>
 
       {/* Announcement Banners Section */}
       <div className="admin-broadcasts-section" style={{ background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
         <h3 style={{ margin: '0 0 16px', fontSize: '1.05rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Sparkles size={18} /> Announcement Banners Manager
+          <Sparkles size={18} /> Site Announcement Banners
         </h3>
-        
+        <p className="banner-section-help">
+          The strip of text across the top of the catalog. Write it in both languages —
+          each visitor sees the one matching the language they are browsing in. More than
+          one can be live at a time — they are joined into a single line, separated by a dot.
+        </p>
+
         {/* Create Banner */}
         <div style={{ display: 'grid', gap: '12px', marginBottom: '20px', background: 'rgba(0,0,0,0.2)', padding: '16px', borderRadius: '12px' }}>
           <div>
@@ -530,28 +577,85 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
         </div>
 
         {/* List Banners */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '300px', overflowY: 'auto' }}>
-          {bannersLoading ? <p style={{ color: '#94a3b8' }}>Loading banners...</p> : banners.length === 0 ? <p style={{ color: '#94a3b8' }}>No banners saved.</p> : banners.map(banner => (
-            <div key={banner.id} className="admin-broadcasts-banner-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: `1px solid ${banner.isActive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.05)'}` }}>
-              <div>
-                <div style={{ color: '#f8fafc', fontSize: '0.9rem', marginBottom: '4px' }}>🇺🇸 {banner.textEn}</div>
-                <div style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>🇪🇸 {banner.textEs}</div>
-                {banner.isActive && <div style={{ display: 'inline-block', marginTop: '8px', padding: '2px 8px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 'bold' }}>LIVE ON SITE</div>}
+        <div className="banner-list-head">
+          <span className="banner-list-count">
+            {bannersLoading ? 'Loading…' : `${sortedBanners.length} banner${sortedBanners.length === 1 ? '' : 's'} saved`}
+            {liveBannerCount > 0 && ` · ${liveBannerCount} live on the site`}
+          </span>
+          {bannerPageCount > 1 && (
+            <span className="banner-list-count">Page {currentBannerPage} of {bannerPageCount}</span>
+          )}
+        </div>
+
+        <div className="banner-list">
+          {bannersLoading ? (
+            <p className="banner-list-empty">Loading banners…</p>
+          ) : sortedBanners.length === 0 ? (
+            <p className="banner-list-empty">No banners saved yet. Write one above to get started.</p>
+          ) : visibleBanners.map(banner => (
+            <div key={banner.id} className={`banner-card${banner.isActive ? ' is-live' : ''}`}>
+              <div className="banner-card-text">
+                <div className="banner-card-status">
+                  <span className={`banner-dot${banner.isActive ? ' is-live' : ''}`} />
+                  {banner.isActive ? 'Live on the site' : 'Not showing'}
+                </div>
+                <p className="banner-card-line"><span className="banner-card-lang">EN</span>{banner.textEn}</p>
+                <p className="banner-card-line banner-card-line-muted"><span className="banner-card-lang">ES</span>{banner.textEs}</p>
               </div>
-              <div className="admin-broadcasts-banner-actions" style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" onClick={() => handleToggleBanner(banner.id)} style={{ padding: '8px', background: banner.isActive ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.05)', color: banner.isActive ? '#10b981' : '#94a3b8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                  {banner.isActive ? 'Deactivate' : 'Set Active'}
+              <div className="banner-card-actions">
+                <button
+                  type="button"
+                  onClick={() => handleToggleBanner(banner.id)}
+                  className={`banner-btn${banner.isActive ? ' banner-btn-live' : ' banner-btn-primary'}`}
+                >
+                  {banner.isActive ? 'Turn off' : 'Show on site'}
                 </button>
-                <button type="button" onClick={() => startEditBanner(banner)} style={{ padding: '8px', background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+                <button type="button" onClick={() => startEditBanner(banner)} className="banner-btn">
                   Edit
                 </button>
-                <button type="button" onClick={() => handleDeleteBanner(banner.id)} style={{ padding: '8px', background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
-                  <Trash2 size={16} />
+                <button
+                  type="button"
+                  onClick={() => handleDeleteBanner(banner.id)}
+                  className="banner-btn banner-btn-danger"
+                  title="Move this banner to the Bin"
+                >
+                  <Trash2 size={15} /> Bin
                 </button>
               </div>
             </div>
           ))}
         </div>
+
+        {bannerPageCount > 1 && (
+          <div className="banner-pager">
+            <button
+              type="button"
+              className="banner-pager-btn"
+              onClick={() => setBannerPage(Math.max(1, currentBannerPage - 1))}
+              disabled={currentBannerPage <= 1}
+            >
+              ‹ Back
+            </button>
+            {Array.from({ length: bannerPageCount }, (_, i) => i + 1).map(page => (
+              <button
+                key={page}
+                type="button"
+                className={`banner-pager-btn${page === currentBannerPage ? ' is-current' : ''}`}
+                onClick={() => setBannerPage(page)}
+              >
+                {page}
+              </button>
+            ))}
+            <button
+              type="button"
+              className="banner-pager-btn"
+              onClick={() => setBannerPage(Math.min(bannerPageCount, currentBannerPage + 1))}
+              disabled={currentBannerPage >= bannerPageCount}
+            >
+              Next ›
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Flash Sale Generator Section */}
@@ -906,7 +1010,22 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
               style={{ flexGrow: 1, background: 'transparent', border: 'none', color: '#f8fafc', padding: 0 }}
             />
           </div>
-          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>Leave empty to blast immediately. Note: Large lists (&gt;200) will be safely auto-batched over multiple days to protect your Meta API limits.</p>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '6px' }}>
+            Leave this empty to send straight away. Pick a date and time and the button below
+            changes to <strong>Schedule</strong> — nothing goes out until then. A checker runs
+            every 5 minutes, so a send can start up to 5 minutes after the time you pick.
+            Large lists (&gt;200) are auto-batched over several runs to protect your Meta limits.
+          </p>
+          {scheduledAtCr && (
+            // The picker reads the clock of whoever is filling it in. Omer is
+            // 11 hours ahead of Costa Rica, so "9am" here is the night before
+            // there — which is a customer's phone buzzing at 10pm.
+            <p style={{ fontSize: '0.8rem', color: '#fbbf24', marginTop: '6px' }}>
+              That is <strong>{scheduledAtCr}</strong>{' '}
+              in Costa Rica — the time your customers will get it. The box above uses your own
+              computer&apos;s clock.
+            </p>
+          )}
         </div>
 
       </div>
@@ -1146,7 +1265,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           disabled={isSending || (!message && !channels.whatsappTemplateName && !hasEmailHtml) || (!channels.whatsapp && !channels.email)}
           style={{ background: '#0ea5e9', color: '#fff', border: 'none', padding: '12px 32px', fontSize: '1rem', fontWeight: 'bold', borderRadius: '8px', boxShadow: '0 4px 14px rgba(14, 165, 233, 0.3)' }}
         >
-          {isSending ? (scheduledAt ? 'Scheduling...' : 'Sending...') : (scheduledAt ? 'Schedule Once' : 'Send One-Time Announcement')}
+          {isSending ? (scheduledAt ? 'Scheduling...' : 'Sending...') : (scheduledAt ? 'Schedule Announcement' : 'Send Announcement Now')}
         </button>
       </div>
 
@@ -1171,15 +1290,20 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
       {scheduledBroadcasts.length > 0 && (
         <div style={{ marginTop: '32px', padding: '24px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
           <h3 style={{ margin: '0 0 16px', fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={18} color="#38bdf8" /> Scheduled One-Time Announcements
+            <Calendar size={18} color="#38bdf8" /> Scheduled Announcements
           </h3>
+          <p className="banner-section-help" style={{ marginTop: '-8px' }}>
+            Announcements you set a time for, waiting to go out. They send on their own —
+            a checker runs every 5 minutes and picks up anything whose time has passed.
+            Times are Costa Rica time. Bin one to call it off before it sends.
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {scheduledBroadcasts.map(sb => (
               <div key={sb.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#0f172a', padding: '12px 16px', borderRadius: '8px', border: '1px solid #334155' }}>
                 <div style={{ flexGrow: 1, overflow: 'hidden' }}>
                   <div style={{ display: 'flex', gap: '12px', marginBottom: '6px' }}>
                     <span style={{ fontWeight: 'bold', color: '#38bdf8', fontSize: '0.9rem' }}>
-                      {new Date(sb.scheduled_at).toLocaleString()}
+                      {formatCrInstant(sb.scheduled_at)}
                     </span>
                     <span style={{ color: '#94a3b8', fontSize: '0.85rem', textTransform: 'capitalize' }}>
                       To: {sb.audience.replace('_', ' ')} {sb.channels?.whatsapp ? '(WA)' : ''} {sb.channels?.email ? '(Email)' : ''}
@@ -1197,7 +1321,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
                 <button 
                   onClick={() => handleDeleteScheduled(sb.id)}
                   style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer', padding: '8px' }}
-                  title="Delete Scheduled Broadcast"
+                  title="Cancel this scheduled announcement (it moves to the Bin)"
                 >
                   <Trash2 size={18} />
                 </button>

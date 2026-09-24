@@ -124,6 +124,19 @@ export const BIN_TABLES = {
     permission: 'broadcasts',
     labelFields: ['name', 'title', 'message'],
   },
+  // Not a table. The announcement banners are one JSON array stored under a
+  // single `site_settings` row, so a banner has no row of its own to snapshot
+  // and no row to insert back on restore. `settingsListId` marks that: the Bin
+  // still lists and restores it like anything else, but the delete and the
+  // restore take an item out of / put an item back into that array instead of
+  // touching a table. Before this, deleting a banner simply rewrote the array
+  // without it and the wording was gone for good.
+  announcement_banners: {
+    type: 'Announcement banner',
+    permission: 'broadcasts',
+    labelFields: ['textEn', 'textEs'],
+    settingsListId: 'announcement_banners',
+  },
   marketing_journeys: {
     type: 'Journey',
     permission: 'marketing',
@@ -175,6 +188,23 @@ export const BIN_TABLES = {
 /** Is this a table the Bin knows how to hold and restore? */
 export function isBinnableTable(table) {
   return Object.prototype.hasOwnProperty.call(BIN_TABLES, String(table || ''));
+}
+
+/**
+ * Is this entry an item inside a `site_settings` list rather than a table row?
+ *
+ * The generic delete route and `moveToBin` both refuse these: reading
+ * `from('announcement_banners')` would fail with "relation does not exist", and
+ * a restore that inserted into it would fail the same way. They are binned and
+ * restored by the screen that owns the list.
+ */
+export function isVirtualBinTable(table) {
+  return Boolean(binTableConfig(table)?.settingsListId);
+}
+
+/** The `site_settings.id` holding this virtual table's list, or null. */
+export function settingsListIdFor(table) {
+  return binTableConfig(table)?.settingsListId || null;
 }
 
 /**

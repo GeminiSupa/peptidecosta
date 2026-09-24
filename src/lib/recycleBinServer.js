@@ -18,9 +18,11 @@ import {
   describeRecord,
   isAllowedIdColumn,
   isBinnableTable,
+  isVirtualBinTable,
   readRetention,
   recordTypeFor,
   selectExpired,
+  settingsListIdFor,
 } from '@/lib/recycleBin.mjs';
 
 /** Postgres says why it refused; pass that on instead of a bare message. */
@@ -108,6 +110,12 @@ export async function moveToBin(
     // Refused rather than silently deleted: a table missing from the registry
     // is a table whose restore nobody has thought about yet.
     return { ok: false, error: `${sourceTable || 'That table'} is not covered by the Bin.` };
+  }
+  if (isVirtualBinTable(sourceTable)) {
+    // There is no such table to read or delete from — see the note on
+    // `settingsListId` in recycleBin.mjs. Refused here rather than allowed to
+    // fail as "relation does not exist" halfway through.
+    return { ok: false, error: `A ${recordTypeFor(sourceTable).toLowerCase()} is deleted from its own screen.` };
   }
   if (targetIds.length === 0) {
     return { ok: false, error: 'Nothing was selected to delete.' };
@@ -209,6 +217,111 @@ export async function moveToBin(
 }
 
 /**
+ * Read one of the JSON lists kept in `site_settings` (the announcement
+ * banners, today). A missing row reads as an empty list, which is what a
+ * dashboard that has never saved one actually has.
+ */
+async function readSettingsList(settingsId, supabase) {
+  const { data, error } = await supabase
+    .from('site_settings')
+    .select('value')
+    .eq('id', settingsId)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    return { ok: false, error: describeDbError(error, `Could not read ${settingsId}`) };
+  }
+  return { ok: true, list: Array.isArray(data?.value) ? data.value : [] };
+}
+
+async function writeSettingsList(settingsId, list, supabase) {
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ id: settingsId, value: list }, { onConflict: 'id' });
+
+  if (error) return { ok: false, error: describeDbError(error, `Could not save ${settingsId}`) };
+  return { ok: true };
+}
+
+/**
+ * Bin one item out of a `site_settings` JSON list.
+ *
+ * Same order of operations as moveToBin, and for the same reason: the snapshot
+ * is written first, and if the list cannot be saved afterwards the snapshot is
+ * removed again, so the Bin never offers to restore something still live on
+ * the site.
+ */
+export async function moveSettingsItemToBin(
+  { table, id, actor, reason = null },
+  supabase = getSupabaseAdmin(),
+) {
+  const sourceTable = String(table || '').trim();
+  const settingsId = settingsListIdFor(sourceTable);
+  if (!settingsId) {
+    return { ok: false, error: `${sourceTable || 'That item'} is not held as a settings list.` };
+  }
+
+  const read = await readSettingsList(settingsId, supabase);
+  if (!read.ok) return read;
+
+  const target = read.list.find((item) => String(item?.id) === String(id));
+  if (!target) return { ok: false, error: 'That item no longer exists.', notFound: true };
+
+  const { data: written, error: binError } = await supabase
+    .from('deleted_records')
+    .insert({
+      source_table: sourceTable,
+      source_id: String(target.id),
+      record_type: recordTypeFor(sourceTable),
+      label: describeRecord(sourceTable, target),
+      payload: target,
+      related: {},
+      deleted_by_name: actor?.name || null,
+      deleted_by_email: actor?.email || null,
+      delete_reason: reason,
+    })
+    .select('id')
+    .single();
+
+  if (binError) {
+    return { ok: false, error: describeDbError(binError, 'Could not write to the Bin') };
+  }
+
+  const remaining = read.list.filter((item) => String(item?.id) !== String(id));
+  const saved = await writeSettingsList(settingsId, remaining, supabase);
+  if (!saved.ok) {
+    await supabase.from('deleted_records').delete().eq('id', written.id);
+    return saved;
+  }
+
+  return { ok: true, moved: 1, entries: [written.id], list: remaining, row: target };
+}
+
+/**
+ * Put a binned item back into its `site_settings` list.
+ *
+ * Appended at the end rather than at its old position: the array has no stable
+ * ordering to restore to, and the banner screen sorts what it shows anyway. An
+ * id that has come back into use is refused, matching the table restore.
+ */
+async function restoreSettingsItem(entry, supabase) {
+  const settingsId = settingsListIdFor(entry.source_table);
+  if (!settingsId) return { ok: false, error: 'That item cannot be restored.' };
+
+  const read = await readSettingsList(settingsId, supabase);
+  if (!read.ok) return read;
+
+  if (read.list.some((item) => String(item?.id) === String(entry.source_id))) {
+    return {
+      ok: false,
+      error: `A ${entry.record_type.toLowerCase()} with this id already exists — it was recreated while this sat in the Bin. Nothing was changed.`,
+    };
+  }
+
+  return writeSettingsList(settingsId, [...read.list, entry.payload], supabase);
+}
+
+/**
  * Put a binned row back in its own table.
  *
  * The id goes back with it, so anything that pointed at the row by id lines up
@@ -229,6 +342,32 @@ export async function restoreFromBin({ entryId, actor }, supabase = getSupabaseA
   if (!entry) return { ok: false, error: 'That item is no longer in the Bin.' };
   if (entry.restored_at) {
     return { ok: false, error: 'That item has already been restored.' };
+  }
+
+  // An item out of a settings list goes back into that list, not into a table
+  // of its own — there isn't one.
+  if (isVirtualBinTable(entry.source_table)) {
+    const putBack = await restoreSettingsItem(entry, supabase);
+    if (!putBack.ok) return putBack;
+
+    const { error: markSettingsError } = await supabase
+      .from('deleted_records')
+      .update({
+        restored_at: new Date().toISOString(),
+        restored_by_name: actor?.name || null,
+        restored_by_email: actor?.email || null,
+      })
+      .eq('id', entryId);
+
+    if (markSettingsError) {
+      console.error('[recycle-bin] restored but could not mark the entry', entryId, markSettingsError);
+    }
+
+    return {
+      ok: true,
+      restored: { table: entry.source_table, id: entry.source_id, label: entry.label },
+      warnings: [],
+    };
   }
 
   const { error: insertError } = await supabase

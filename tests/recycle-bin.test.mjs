@@ -8,10 +8,12 @@ import {
   describeRecord,
   isBinnableTable,
   isMissingDeletedRecordsTable,
+  isVirtualBinTable,
   purgeDateFor,
   readRetention,
   recordTypeFor,
   selectExpired,
+  settingsListIdFor,
   summarizeEntry,
   validateRetention,
 } from '../src/lib/recycleBin.mjs';
@@ -150,4 +152,25 @@ test('only registered tables are binnable, and each has a friendly type name', (
     assert.ok(config.labelFields?.length, `${table} needs label fields`);
     assert.equal(recordTypeFor(table), config.type);
   }
+});
+
+test('an announcement banner is binnable, but not as a table', () => {
+  // It lives as one item inside a site_settings JSON array. Letting the generic
+  // delete route near it would have it read from a table that does not exist.
+  assert.equal(isBinnableTable('announcement_banners'), true);
+  assert.equal(isVirtualBinTable('announcement_banners'), true);
+  assert.equal(settingsListIdFor('announcement_banners'), 'announcement_banners');
+
+  assert.equal(isVirtualBinTable('orders'), false, 'a real table must not be treated as a settings list');
+  assert.equal(settingsListIdFor('orders'), null);
+});
+
+test('a binned banner is described by its wording, in both languages', () => {
+  const label = describeRecord('announcement_banners', {
+    id: '7',
+    textEn: 'Free shipping this week',
+    textEs: 'Envio gratis esta semana',
+    isActive: true,
+  });
+  assert.equal(label, 'Free shipping this week — Envio gratis esta semana');
 });
