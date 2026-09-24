@@ -6060,7 +6060,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           />
         )}
 
-        {/* TAB: One-Time Announcements */}
+        {/* TAB: Announcements */}
         {activeTab === 'broadcasts' && (
           <BroadcastsPanel
             products={products}

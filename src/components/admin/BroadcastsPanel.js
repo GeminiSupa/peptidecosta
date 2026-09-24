@@ -585,16 +585,14 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
 
   return (
     <div className="admin-panel admin-broadcasts-panel admin-tab-panel">
+      {/* No heading of its own: the tab chrome already prints "Announcements"
+          as the page title directly above this, so a second one said the same
+          words twice. The line explaining the tab is worth keeping. */}
       <div className="admin-section-header" style={{ marginBottom: '24px' }}>
-        <div>
-          <h2 className="admin-section-title" style={{ fontSize: '1.75rem', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Send size={28} color="#38bdf8" />
-            Announcements
-          </h2>
-          <p className="admin-page-subtitle" style={{ margin: 0, fontSize: '0.95rem' }}>
-            Send an email or WhatsApp announcement now, or schedule it for later.
-          </p>
-        </div>
+        <p className="admin-page-subtitle" style={{ margin: 0, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Send size={18} color="#38bdf8" />
+          Send an email or WhatsApp announcement now, or schedule it for later.
+        </p>
       </div>
 
       {/* Announcement Banners Section */}
