@@ -37,6 +37,7 @@ import {
 } from '@/lib/orderWhatsAppAlerts';
 import {
   applySalesAgentReferral,
+  salesAgentReferralRate,
   isEligibleSalesAgentProfile,
   isSalesAgentAffiliate,
 } from '@/lib/salesAgentAffiliate.mjs';
@@ -143,7 +144,9 @@ async function applyAffiliateAttribution(supabase, row, promo, explicitAffiliate
   if (!isEligibleSalesAgentProfile(profile)) {
     return { ...attributed, affiliate_commission_usd: 0, affiliate_commission_crc: 0 };
   }
-  return applySalesAgentReferral(attributed, profile);
+  return applySalesAgentReferral(attributed, profile, {
+    rate: salesAgentReferralRate(affiliate),
+  });
 }
 
 export async function POST(request) {

@@ -14,8 +14,70 @@ Webster holds money authority — never ask Omer to approve payouts.
   cannot do that yet", say that in one line, then say what you will do about it.
 - **Do not offer manual workarounds in place of the thing he asked for.** He has
   said outright that being handed "lame ways" instead of a fix is not acceptable.
+- **Write for a vibe coder, in plain English.** Omer's skill is describing a
+  problem — his own or a client's — and asking an agent to fix it. He does not
+  have the vocabulary for our terminology, and he wants to learn, so explain
+  rather than name-drop. No jargon unless you define it in the same breath, in
+  ordinary words. No walls of text, no tables of internal function names, no
+  "as designed" as if that settles anything. If you must name a file or a
+  column, say in one short line what it is for.
+- **Always answer in this shape:** what the problem actually is, what you
+  changed, why you changed it, and what could be affected. Short. Numbered.
+  He should never have to decode an answer to find out whether he is safe.
+- **He is frustrated by long, expensive, circling answers.** Do the
+  investigation quietly and hand him the conclusion. A wrong guess he can
+  correct in one line beats a thorough essay he has to read twice.
+- **He wants the real fix, not an explanation of why it is hard.** If something
+  truly cannot be fixed without a bigger change, say that in one line and say
+  what the bigger change is.
+
 - **He will tell you when he has pushed.** You may be blocked from pushing; if a
   push is refused, commit, say so plainly, and give him the one command to run.
+
+# Do not break nine things fixing one
+
+This has happened often enough to be the standing rule: a change lands, and
+things nobody asked about stop working. Scope is not a suggestion here.
+
+- **Change only what was asked for.** Do not refactor, rename, tidy, reformat
+  or "improve" code you happened to open. If you spot something else wrong,
+  say so in one line and leave it alone until he says to touch it.
+- **Find every place the thing you are changing is used before you change it.**
+  Grep for the function, the column, the string, the offer type, the status
+  value. This codebase prices the cart twice, describes deals in seven places
+  and pays commission down two separate paths. One edit is almost never one
+  place. The offer-type checklist below is what "look at all the related
+  pieces" means in practice.
+- **Two implementations of the same rule must move together.** Browser vs
+  server pricing, catalog vs deal page copy, affiliate payout vs sales-agent
+  payout. Touching one side only is how a customer gets shown one price and
+  charged another.
+- **Prefer the narrow fix.** A one-line guard that solves the reported problem
+  beats a rewrite that solves it more elegantly and breaks two other callers.
+- **Never delete or overwrite data, rows or files to make a problem go away.**
+  Diagnose first. Read the row before you write it.
+- **Say what you did not test.** Listing green tests while a surface went
+  unexercised is how the last three breakages were reported as done.
+
+If the correct fix genuinely is large, say that plainly and wait for him to
+agree before you start — do not begin a wide change on your own judgement.
+
+# What "done" means for the admin portal
+
+Omer's standard, in his words: good software is **easy to use** and **does what
+it promises**. The admin portal exists to make someone's job easier. It has
+drifted the other way — too static, too confusing, screens that state facts
+instead of letting a person act on them.
+
+So when you touch the admin:
+
+- If the portal cannot do the thing he asked for, the answer is to **build it
+  there**, not to hand him a link to paste or a database row to edit by hand.
+- A screen that shows a number but no way to change it is unfinished. So is one
+  that needs him to already know which of two reports a person appears on.
+- Two ways to do the same job, where one silently does less (a link that
+  attributes a sale but cannot discount it), is a bug in the portal even when
+  every line of code is behaving as written.
 
 # QA: the rule that matters most
 

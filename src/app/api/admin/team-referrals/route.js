@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { buildReferralLink, catalogBaseUrl, referralQrFilename } from '@/lib/referralLink.mjs';
+import { chooseRepReferralCode } from '@/lib/repReferralCode.mjs';
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
 import { missingColumnFrom } from '@/lib/optionalColumns.mjs';
 
@@ -45,6 +46,33 @@ export async function GET(request) {
 
     const base = catalogBaseUrl(process.env);
 
+    // A rep's own discount code, so the card they print discounts as well as
+    // credits. Loaded in two queries and joined here rather than one lookup per
+    // rep, because this runs for the whole team at once. A failure costs the
+    // codes, never the links.
+    const codeByUserId = new Map();
+    try {
+      const [{ data: affiliates }, { data: promos }] = await Promise.all([
+        supabaseAdmin.from('affiliates').select('id, admin_profile_user_id').not('admin_profile_user_id', 'is', null),
+        supabaseAdmin.from('promo_codes')
+          .select('code, affiliate_id, is_active, auto_issued, hidden, valid_from, valid_until, usage_limit, usage_count, created_at')
+          .not('affiliate_id', 'is', null),
+      ]);
+
+      const promosByAffiliate = new Map();
+      for (const promo of promos || []) {
+        const list = promosByAffiliate.get(promo.affiliate_id) || [];
+        list.push(promo);
+        promosByAffiliate.set(promo.affiliate_id, list);
+      }
+      for (const affiliate of affiliates || []) {
+        const code = chooseRepReferralCode(promosByAffiliate.get(affiliate.id) || []);
+        if (code) codeByUserId.set(affiliate.admin_profile_user_id, code);
+      }
+    } catch (err) {
+      console.warn('[team-referrals] could not load rep codes:', err?.message);
+    }
+
     const reps = (profiles || [])
       // A name is what orders.sales_agent matches on, so someone without one
       // cannot be credited and must not be handed a card.
@@ -59,7 +87,8 @@ export async function GET(request) {
           active: isActiveProfile(profile),
           commission_rate: Number(profile.commission_rate || 0),
           is_superadmin: Boolean(profile.is_superadmin),
-          link: buildReferralLink(name, base),
+          promo_code: codeByUserId.get(profile.user_id) || null,
+          link: buildReferralLink(name, base, { promoCode: codeByUserId.get(profile.user_id) }),
           filename: referralQrFilename(name),
         };
       });

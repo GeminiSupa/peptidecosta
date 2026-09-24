@@ -27,6 +27,7 @@ import {
 } from '@/lib/adminOrderTotals.mjs';
 import {
   applySalesAgentReferral,
+  salesAgentReferralRate,
   isEligibleSalesAgentProfile,
   isSalesAgentAffiliate,
 } from '@/lib/salesAgentAffiliate.mjs';
@@ -331,7 +332,9 @@ export async function PATCH(request) {
         if (!isEligibleSalesAgentProfile(linkedProfile)) {
           return NextResponse.json({ error: 'This sales-agent affiliate is not active.' }, { status: 400 });
         }
-        const combined = applySalesAgentReferral({ ...currentOrder, ...patch }, linkedProfile);
+        const combined = applySalesAgentReferral({ ...currentOrder, ...patch }, linkedProfile, {
+          rate: salesAgentReferralRate(affiliate),
+        });
         Object.assign(patch, {
           sales_agent: combined.sales_agent,
           agent_commission_rate_override: combined.agent_commission_rate_override,

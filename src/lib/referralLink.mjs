@@ -40,7 +40,24 @@ export function slugify(value) {
     .replace(/(^-|-$)/g, '');
 }
 
-export function buildReferralLink(name, baseUrl = DEFAULT_CATALOG_BASE_URL) {
+/**
+ * @param {string} name the rep's admin_profiles name
+ * @param {string} [baseUrl]
+ * @param {object} [options]
+ * @param {string} [options.promoCode] the rep's own discount code, when they
+ *        have one.
+ *
+ * `sales_agent` decides who gets paid. It does NOT change the price — nothing
+ * in the pricing path reads it — so a link with a name and no code credits the
+ * rep while their customer pays full price. That gap is what made a rep's link
+ * look broken: it was attributing correctly and discounting nothing.
+ *
+ * Adding the code puts both on one link, so there is no longer a "wrong" link
+ * to hand out by mistake. Whether a rep's link discounts is therefore decided
+ * by whether a code is linked to them in the Affiliates tab — a setting, not a
+ * value in this file.
+ */
+export function buildReferralLink(name, baseUrl = DEFAULT_CATALOG_BASE_URL, { promoCode } = {}) {
   const url = new URL(baseUrl);
   if (!url.searchParams.get('lang')) url.searchParams.set('lang', 'es');
   url.searchParams.set('sales_agent', name);
@@ -49,6 +66,10 @@ export function buildReferralLink(name, baseUrl = DEFAULT_CATALOG_BASE_URL) {
   url.searchParams.set('utm_campaign', slugify(name) || 'rep');
   url.searchParams.set('referral', name);
   url.searchParams.set('gate', 'skip');
+
+  const code = String(promoCode || '').trim();
+  if (code) url.searchParams.set('promo_code', code);
+
   return url.toString();
 }
 

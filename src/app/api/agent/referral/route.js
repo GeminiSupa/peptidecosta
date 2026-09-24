@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { agentMatchKeys, orderBelongsToAgent, getOrderSalesAmounts } from '@/lib/agentOrders';
 import { buildReferralLink, catalogBaseUrl } from '@/lib/referralLink.mjs';
+import { findRepReferralCode } from '@/lib/repReferralCode.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,9 +45,22 @@ export async function GET(request) {
     const url = new URL(request.url);
     const days = Math.min(MAX_DAYS, Math.max(1, Number(url.searchParams.get('days')) || 30));
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    const link = buildReferralLink(name, catalogBaseUrl(process.env));
 
     const supabase = getSupabaseAdmin();
+
+    // This page used to hand the rep a link that credited them but could not
+    // discount anything, because nothing in the pricing path reads
+    // `sales_agent`. Their own code goes on it here, so the link they copy is
+    // the one that does both and there is no second, weaker link to pick by
+    // mistake. No code linked to them means the link is exactly as before.
+    const { data: ownAffiliate } = await supabase
+      .from('affiliates')
+      .select('id')
+      .eq('admin_profile_user_id', profile.user_id)
+      .maybeSingle();
+
+    const promoCode = await findRepReferralCode(supabase, ownAffiliate?.id || null);
+    const link = buildReferralLink(name, catalogBaseUrl(process.env), { promoCode });
     const keys = agentMatchKeys(profile);
     const matchesMe = (value) => {
       const key = norm(value);
@@ -110,6 +124,9 @@ export async function GET(request) {
       ok: true,
       name,
       link,
+      // So the portal can tell the rep what their customer actually gets,
+      // instead of leaving them to find out at checkout.
+      promoCode: promoCode || null,
       days,
       migrationRequired,
       stats: {

@@ -284,9 +284,10 @@ export default function AffiliatesManager({ products = [] }) {
         name: editingAffiliate.name.trim(),
         email: editingAffiliate.email.trim(),
         whatsapp: editingAffiliate.whatsapp?.trim() || null,
-        commission_rate: isSalesAgentAffiliate(editingAffiliate)
-          ? 0.20
-          : Number(editingAffiliate.commission_rate || 0)
+        // Used to be forced to 0.20 here for sales agents, which threw away
+        // whatever was chosen above and made the rate un-editable in practice.
+        // The referral now reads this column, so what is saved is what pays.
+        commission_rate: Number(editingAffiliate.commission_rate || 0)
       };
 
       const { data, error } = await supabase
@@ -520,7 +521,9 @@ export default function AffiliatesManager({ products = [] }) {
                     <div style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '1rem' }}>{aff.name}</div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>{aff.email}</div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', marginTop: '8px' }}>
-                      {isSalesAgentAffiliate(aff) ? 'Sales agent affiliate · combined 20%' : `${(aff.commission_rate * 100).toFixed(0)}% Payout Rate`}
+                      {isSalesAgentAffiliate(aff)
+                        ? `Sales agent · ${(Number(aff.commission_rate || 0) * 100).toFixed(0)}% commission`
+                        : `${(aff.commission_rate * 100).toFixed(0)}% Payout Rate`}
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -1048,7 +1051,6 @@ export default function AffiliatesManager({ products = [] }) {
               <input disabled={isSalesAgentAffiliate(editingAffiliate)} required type="email" placeholder="Email" value={editingAffiliate.email || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, email: e.target.value })} style={inputStyle} />
               <input placeholder="WhatsApp (Optional)" value={editingAffiliate.whatsapp || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, whatsapp: e.target.value })} style={inputStyle} />
               <select
-                disabled={isSalesAgentAffiliate(editingAffiliate)}
                 value={getCommissionSelectValue(editingAffiliate.commission_rate)}
                 onChange={e => setEditingAffiliate({
                   ...editingAffiliate,
@@ -1064,7 +1066,6 @@ export default function AffiliatesManager({ products = [] }) {
                 )}
               </select>
               <input
-                disabled={isSalesAgentAffiliate(editingAffiliate)}
                 type="number"
                 min="0"
                 max="100"
@@ -1074,6 +1075,11 @@ export default function AffiliatesManager({ products = [] }) {
                 onChange={e => setEditingAffiliate({ ...editingAffiliate, commission_rate: parseCommissionPercent(e.target.value) })}
                 style={inputStyle}
               />
+              <p style={{ margin: 0, fontSize: '0.78rem', color: '#94a3b8', lineHeight: 1.5 }}>
+                {isSalesAgentAffiliate(editingAffiliate)
+                  ? 'This is what the sales agent earns on every order from their link or code. It is paid on the sales-agent commission report, not the affiliate payout run.'
+                  : 'This is what the affiliate earns on the goods in each order, before shipping. It is paid on the affiliate payout run.'}
+              </p>
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>

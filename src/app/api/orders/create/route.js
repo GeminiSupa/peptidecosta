@@ -53,6 +53,7 @@ import {
   applySalesAgentReferral,
   isEligibleSalesAgentProfile,
   isSalesAgentAffiliate,
+  salesAgentReferralRate,
 } from '@/lib/salesAgentAffiliate.mjs';
 import {
   WHATSAPP_TIMEOUT_MS,
@@ -104,7 +105,9 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
       .maybeSingle();
 
     if (isEligibleSalesAgentProfile(profile)) {
-      return applySalesAgentReferral(order, profile);
+      return applySalesAgentReferral(order, profile, {
+        rate: salesAgentReferralRate(affiliate),
+      });
     }
 
     // A suspended or otherwise invalid linked agent must not fall through to
@@ -132,7 +135,7 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
   return applySalesAgentReferral({
     ...order,
     affiliate_id: linkedAffiliate?.id || order.affiliate_id || null,
-  }, profile);
+  }, profile, { rate: salesAgentReferralRate(linkedAffiliate) });
 }
 
 /**
