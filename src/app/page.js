@@ -348,7 +348,7 @@ export default function LandingPage() {
               <h2>{copy(settings, 'proofTitle', lang)}</h2>
               <p>{copy(settings, 'proofText', lang)}</p>
             </div>
-            <img src={settings.proofImageUrl || '/customer_transformation.webp'} alt="Customer experience" />
+            <img src={settings.proofImageUrl || '/science_lab_about.webp'} alt="Peptides Costa Rica lab standards" />
           </div>
         </section>
 
