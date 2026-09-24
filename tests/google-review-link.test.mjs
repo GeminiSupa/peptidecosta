@@ -32,6 +32,11 @@ test('a listing url saved as the review link is upgraded', () => {
   assert.equal(empty.googleReviewUrl, GOOGLE_REVIEW_URL);
 });
 
+test('the retired direct review link is upgraded too', () => {
+  const fixed = normalizeBusinessLinks({ googleReviewUrl: 'https://g.page/r/Cda41I2_XToeEBM/review' });
+  assert.equal(fixed.googleReviewUrl, 'https://g.page/r/CfFdfEu7WZOHEBM/review');
+});
+
 test('a real review link set in the CMS still wins', () => {
   const custom = 'https://g.page/r/SomethingElse/review';
   assert.equal(normalizeBusinessLinks({ googleReviewUrl: custom }).googleReviewUrl, custom);
