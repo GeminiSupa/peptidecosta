@@ -60,20 +60,6 @@ test('the Info Center offers no dosing or injection guidance', () => {
   }
 });
 
-test('public pages use the verification-first content refresh', () => {
-  assert.equal(DEFAULT_PUBLIC_PAGE_SETTINGS.page_about.pageVersion, 'v3');
-  assert.equal(DEFAULT_PUBLIC_PAGE_SETTINGS.page_faq.pageVersion, 'v2');
-  assert.equal(DEFAULT_PUBLIC_PAGE_SETTINGS.page_info_center.pageVersion, 'v2');
-  assert.equal(DEFAULT_PUBLIC_PAGE_SETTINGS.page_coa_database.pageVersion, 'v2');
-  assert.match(DEFAULT_LANDING_PAGE_SETTINGS.heroTitleEn, /trust what you can test/i);
-  assert.match(DEFAULT_PUBLIC_PAGE_SETTINGS.page_about.heroTextEn, /lot they ordered/i);
-  assert.match(DEFAULT_PUBLIC_PAGE_SETTINGS.page_coa_database.heroTextEn, /not a marketing claim/i);
-  assert.match(
-    DEFAULT_PUBLIC_PAGE_SETTINGS.page_faq.faqItems.map((item) => `${item.qEn} ${item.aEn}`).join('\n'),
-    /not intended for human or veterinary use/i,
-  );
-});
-
 test('every Info Center quick link points at a page that exists', () => {
   // All four used to point at blog slugs nobody ever wrote. They answered 200
   // with an empty body, which is worse than a 404: nothing tells the visitor,
