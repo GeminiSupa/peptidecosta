@@ -448,19 +448,28 @@ export async function POST(request) {
     }
     order.customer_name = nameCheck.name;
 
-    // What the fields say, now that the name is normalized. The limiters above
-    // count requests, which is no help against somebody filling this form by
-    // hand every few minutes — that is exactly how three "test / 8888 8888 /
-    // f@b.com" orders reached the team's phones on 23 Sep 2026. Scored rather
-    // than pattern-matched so no single odd-looking field can turn away a real
-    // customer; see checkoutJunkGuard.mjs for what each signal is worth.
+    // What the fields say, now that the name is normalized.
+    //
+    // This USED to refuse an order whose name, phone, email and address scored
+    // as made-up. It no longer does: the team tests the live checkout with
+    // deliberately fake details, and being turned away for it cost more than
+    // the junk orders did. The score is still computed and still logged, so a
+    // run of junk can be read back out of the logs, but it never stops anyone.
+    //
+    // The hidden field is the one exception and still refuses on its own. No
+    // customer and no person testing can see it or type into it, so anything
+    // in there came from a script filling every input on the page.
     const junk = scoreJunkOrder(order);
+    const honeypotFilled = (junk.signals || []).some((entry) => entry.signal === 'honeypotFilled');
     // The hidden field never belongs on the row. Nothing whitelists the order
     // fields before the insert, so leaving it here is an unknown column and a
     // failed order for the real customers who never filled it in.
     delete order[HONEYPOT_FIELD];
-    if (junk.blocked) {
-      console.warn(`[orders/create] Refused junk order from ${ip}: ${junkOrderSummary(junk)}`);
+    if (junk.score > 0) {
+      console.warn(`[orders/create] Junk signals from ${ip}: ${junkOrderSummary(junk)}`);
+    }
+    if (honeypotFilled) {
+      console.warn(`[orders/create] Refused bot order from ${ip}: honeypot filled`);
       return NextResponse.json(
         { error: junkOrderMessage(orderLang), errorCode: 'details_not_verified' },
         { status: 400 },
