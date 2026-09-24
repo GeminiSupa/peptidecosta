@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
+import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
 
 import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
 import {
@@ -176,6 +176,35 @@ export default function ProductsManager({
   const mobileEditIndex = mobileEditProduct
     ? products.findIndex((p) => p.id === mobileEditProduct.id)
     : -1;
+  const getProductsAfterMove = (fromIndex, toIndex) => {
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= products.length || toIndex >= products.length || fromIndex === toIndex) {
+      return null;
+    }
+    const updated = [...products];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    return updated.map((product, index) => ({ ...product, priority: index }));
+  };
+  const moveProductToIndex = (fromIndex, toIndex) => {
+    if (productSearch !== '') return;
+    const nextProducts = getProductsAfterMove(fromIndex, toIndex);
+    if (!nextProducts) return;
+    handleMoveRow(fromIndex, toIndex - fromIndex);
+  };
+  const moveProductToPosition = (fromIndex, rawPosition) => {
+    if (productSearch !== '') return;
+    const parsed = Number.parseInt(String(rawPosition), 10);
+    if (!Number.isFinite(parsed)) return;
+    const targetIndex = Math.min(products.length - 1, Math.max(0, parsed - 1));
+    moveProductToIndex(fromIndex, targetIndex);
+  };
+  const moveMobileProductToIndex = async (toIndex) => {
+    if (!mobileEditProduct || mobileEditIndex < 0 || productSearch !== '') return;
+    const nextProducts = getProductsAfterMove(mobileEditIndex, toIndex);
+    if (!nextProducts) return;
+    handleMoveRow(mobileEditIndex, toIndex - mobileEditIndex);
+    await handleSaveChanges(nextProducts);
+  };
   const openMobileDescriptionEditor = () => {
     if (!mobileEditProduct) return;
     setEditDescProduct(mobileEditProduct);
@@ -190,14 +219,7 @@ export default function ProductsManager({
   };
   const moveMobileProduct = async (direction) => {
     if (!mobileEditProduct || mobileEditIndex < 0) return;
-    const newIndex = mobileEditIndex + direction;
-    if (newIndex < 0 || newIndex >= products.length) return;
-    const updated = [...products];
-    const [moved] = updated.splice(mobileEditIndex, 1);
-    updated.splice(newIndex, 0, moved);
-    const withPriority = updated.map((product, index) => ({ ...product, priority: index }));
-    handleMoveRow(mobileEditIndex, direction);
-    await handleSaveChanges(withPriority);
+    await moveMobileProductToIndex(mobileEditIndex + direction);
   };
   const deleteMobileProduct = async () => {
     if (!mobileEditProduct) return;
@@ -382,7 +404,7 @@ export default function ProductsManager({
                 <th style={{ width: '120px', textAlign: 'center' }}>Info/Blog</th>
                 <th style={{ minWidth: '200px' }}>Free BAC Water Gift</th>
                 <th style={{ width: '110px', textAlign: 'center' }}>Catalog Visibility</th>
-                <th style={{ width: '100px', textAlign: 'center' }}>Action</th>
+                <th style={{ minWidth: '190px', textAlign: 'center' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -919,11 +941,39 @@ export default function ProductsManager({
 
                   {/* Actions */}
                   <td data-label="Action" style={{ textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px' }}>
+                    <div className="product-order-actions">
+                      <label className="product-position-control" title={productSearch ? 'Clear search before reordering products' : 'Move to position'}>
+                        <span>Move to</span>
+                        <input
+                          key={`${p.id || p.product}-${idx}`}
+                          type="number"
+                          min="1"
+                          max={products.length}
+                          defaultValue={idx + 1}
+                          disabled={productSearch !== ''}
+                          aria-label={`Move ${p.product || 'product'} to position`}
+                          onFocus={(e) => e.target.select()}
+                          onBlur={(e) => moveProductToPosition(idx, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }}
+                        />
+                      </label>
                       <button
                         className="admin-move-btn"
-                        title="Move Up"
-                        onClick={() => handleMoveRow(idx, -1)}
+                        title="Move to top"
+                        onClick={() => moveProductToIndex(idx, 0)}
+                        disabled={idx === 0 || productSearch !== ''}
+                        style={{ opacity: (idx === 0 || productSearch !== '') ? 0.25 : 1 }}
+                      >
+                        <ChevronsUp size={14} />
+                      </button>
+                      <button
+                        className="admin-move-btn"
+                        title="Move up"
+                        onClick={() => moveProductToIndex(idx, idx - 1)}
                         disabled={idx === 0 || productSearch !== ''}
                         style={{ opacity: (idx === 0 || productSearch !== '') ? 0.25 : 1 }}
                       >
@@ -931,12 +981,21 @@ export default function ProductsManager({
                       </button>
                       <button
                         className="admin-move-btn"
-                        title="Move Down"
-                        onClick={() => handleMoveRow(idx, 1)}
+                        title="Move down"
+                        onClick={() => moveProductToIndex(idx, idx + 1)}
                         disabled={idx === products.length - 1 || productSearch !== ''}
                         style={{ opacity: (idx === products.length - 1 || productSearch !== '') ? 0.25 : 1 }}
                       >
                         <ChevronDown size={14} />
+                      </button>
+                      <button
+                        className="admin-move-btn"
+                        title="Move to bottom"
+                        onClick={() => moveProductToIndex(idx, products.length - 1)}
+                        disabled={idx === products.length - 1 || productSearch !== ''}
+                        style={{ opacity: (idx === products.length - 1 || productSearch !== '') ? 0.25 : 1 }}
+                      >
+                        <ChevronsDown size={14} />
                       </button>
                       <button className="admin-delete-btn" onClick={() => handleDeleteRow(p.id)}>
                         <Trash2 size={14} />
@@ -1128,6 +1187,15 @@ export default function ProductsManager({
                 <button
                   type="button"
                   className="admin-btn"
+                  onClick={() => moveMobileProductToIndex(0)}
+                  disabled={saveLoading || mobileEditIndex <= 0 || productSearch !== ''}
+                >
+                  <ChevronsUp size={14} />
+                  Top
+                </button>
+                <button
+                  type="button"
+                  className="admin-btn"
                   onClick={() => moveMobileProduct(-1)}
                   disabled={saveLoading || mobileEditIndex <= 0 || productSearch !== ''}
                 >
@@ -1143,6 +1211,33 @@ export default function ProductsManager({
                   <ChevronDown size={14} />
                   Move down
                 </button>
+                <button
+                  type="button"
+                  className="admin-btn"
+                  onClick={() => moveMobileProductToIndex(products.length - 1)}
+                  disabled={saveLoading || mobileEditIndex < 0 || mobileEditIndex >= products.length - 1 || productSearch !== ''}
+                >
+                  <ChevronsDown size={14} />
+                  Bottom
+                </button>
+                <label className="product-mobile-position-control" title={productSearch ? 'Clear search before reordering products' : 'Move to position'}>
+                  <span>Move to #</span>
+                  <input
+                    key={`mobile-position-${mobileEditProduct.id}-${mobileEditIndex}`}
+                    type="number"
+                    min="1"
+                    max={products.length}
+                    defaultValue={mobileEditIndex + 1}
+                    disabled={saveLoading || mobileEditIndex < 0 || productSearch !== ''}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={(e) => moveMobileProductToIndex(Math.min(products.length - 1, Math.max(0, (Number.parseInt(e.target.value, 10) || mobileEditIndex + 1) - 1)))}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }}
+                  />
+                </label>
                 <button type="button" className="admin-btn product-mobile-danger" onClick={deleteMobileProduct} disabled={saveLoading}>
                   <Trash2 size={14} />
                   Delete
@@ -1272,6 +1367,62 @@ export default function ProductsManager({
       )}
 
       <style>{`
+        .product-order-actions {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 4px;
+          flex-wrap: wrap;
+          min-width: 176px;
+        }
+        .product-position-control {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 6px;
+          border-radius: 7px;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          background: rgba(15, 23, 42, 0.7);
+          color: #94a3b8;
+          font-size: 0.68rem;
+          font-weight: 700;
+          white-space: nowrap;
+        }
+        .product-position-control input,
+        .product-mobile-position-control input {
+          width: 54px;
+          border: 1px solid rgba(148, 163, 184, 0.35);
+          border-radius: 6px;
+          background: rgba(2, 6, 23, 0.72);
+          color: #e2e8f0;
+          font-size: 0.78rem;
+          font-weight: 800;
+          text-align: center;
+          outline: none;
+        }
+        .product-position-control input:focus,
+        .product-mobile-position-control input:focus {
+          border-color: rgba(56, 189, 248, 0.8);
+          box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18);
+        }
+        .product-position-control input:disabled,
+        .product-mobile-position-control input:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+        }
+        .product-mobile-position-control {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 34px;
+          padding: 0 12px;
+          border-radius: 8px;
+          border: 1px solid rgba(148, 163, 184, 0.24);
+          background: rgba(15, 23, 42, 0.45);
+          color: #cbd5e1;
+          font-size: 0.78rem;
+          font-weight: 800;
+        }
         .pm-pending-count {
           display: inline-flex;
           align-items: center;

@@ -94,3 +94,11 @@ test('an edited row is remembered, and forgotten once it is saved', () => {
   assert.match(admin, /setChangedProductIds\(new Set\(\)\); \/\/ the pending list is now written/);
   assert.match(admin, /changedProductIds=\{changedProductIds\}/);
 });
+
+test('long product lists can be reordered without repeated arrow clicks', () => {
+  assert.match(grid, /moveProductToPosition\(idx, e\.target\.value\)/);
+  assert.match(grid, /title="Move to top"/);
+  assert.match(grid, /title="Move to bottom"/);
+  assert.match(grid, /moveMobileProductToIndex\(0\)/);
+  assert.match(grid, /Move to #/);
+});
