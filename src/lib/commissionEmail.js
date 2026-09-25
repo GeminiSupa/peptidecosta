@@ -35,7 +35,7 @@ export function buildAgentCommissionEmail({
   totalPayoutUsd,
   totalPayoutCrc,
   orders = [],
-  // A staff member's 2% on orders her sub-users brought in. Broken out rather
+  // A staff member's share on orders her sub-users brought in. Broken out rather
   // than folded into commission, so the number is explainable.
   overrideRate = 0,
   overrideUsd = 0,
@@ -59,7 +59,7 @@ export function buildAgentCommissionEmail({
         <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f172a;">${escapeHtml(row.name || 'Sub-user')}</td>
         <td align="center" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#475569;">${Number(row.ordersCount || 0)}</td>
         <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#475569;white-space:nowrap;">${Number(row.salesUsd) > 0 ? formatMoney(row.salesUsd, 'USD') : formatMoney(row.salesCrc, 'CRC')}</td>
-        <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#0f172a;white-space:nowrap;">${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}</td>
+        <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#0f172a;white-space:nowrap;">${Number(row.overrideRate || 0)}% · ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}</td>
       </tr>`).join('');
   const orderRows = sortedOrders.map((order, index) => {
     const isUsd = String(order.currency || '').toUpperCase() === 'USD';
@@ -128,7 +128,7 @@ export function buildAgentCommissionEmail({
             </div>` : ''}
 
             ${hasOverride ? `
-            <div style="font:700 14px Arial,sans-serif;color:#0f172a;margin:24px 0 10px;">My team &middot; ${Number(overrideRate || 0)}% of what they sold</div>
+            <div style="font:700 14px Arial,sans-serif;color:#0f172a;margin:24px 0 10px;">My team &middot; from your ${Number(overrideRate || 0)}% budget</div>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #dbe3ee;">
               <tr bgcolor="#e8eef6">
                 <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Person</th>
@@ -144,7 +144,7 @@ export function buildAgentCommissionEmail({
                 </td>
               </tr>
             </table>
-            <div style="font:12px Arial,sans-serif;color:#64748b;margin-top:8px;">Each of your people keeps their own share of these orders. Your ${Number(overrideRate || 0)}% comes out of the same commission, not on top of it.</div>
+            <div style="font:12px Arial,sans-serif;color:#64748b;margin-top:8px;">Each of your people keeps the share you assigned them. What you earn is the remainder of your ${Number(overrideRate || 0)}% budget, not an extra commission on top.</div>
             ` : ''}
 
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;">
@@ -192,8 +192,8 @@ export function buildAgentCommissionEmail({
     ...(hasOverride
       ? [
         '',
-        `My team (${Number(overrideRate || 0)}% of what they sold): ${formatMoney(overrideUsd, 'USD')} OR ${formatMoney(overrideCrc, 'CRC')}`,
-        ...overrideList.map((row) => `${row.name} · ${row.ordersCount} order${row.ordersCount === 1 ? '' : 's'} · you earned ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}`),
+        `My team (from your ${Number(overrideRate || 0)}% budget): ${formatMoney(overrideUsd, 'USD')} OR ${formatMoney(overrideCrc, 'CRC')}`,
+        ...overrideList.map((row) => `${row.name} · ${row.ordersCount} order${row.ordersCount === 1 ? '' : 's'} · ${Number(row.overrideRate || 0)}% remainder · you earned ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}`),
       ]
       : []),
   ].join('\n');

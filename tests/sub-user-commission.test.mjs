@@ -5,6 +5,8 @@ import {
   computeOverrideAmounts,
   hasBeenPaid,
   overrideRateFor,
+  overrideRateForChild,
+  parentCommissionBudgetFor,
   payableChildrenOf,
   splitOrderCommission,
   subUserRateFor,
@@ -77,6 +79,27 @@ test('a week of sales converts to an override in both currencies', () => {
   });
   assert.equal(overrideUsd, 62.4);
   assert.equal(overrideCrc, 32000);
+});
+
+test("a parent decides the child's share from her own commission budget", () => {
+  const korinne = { ...MARIA, name: 'Korinne', commission_rate: 10 };
+  const edgar = { ...LUIS, name: 'Edgar', commission_rate: 6 };
+
+  assert.equal(parentCommissionBudgetFor(korinne), 10);
+  assert.equal(subUserRateFor(edgar), 6);
+  assert.equal(overrideRateForChild(korinne, edgar), 4);
+
+  const split = splitOrderCommission({
+    amount: 1000,
+    subUserRate: subUserRateFor(edgar),
+    overrideRate: overrideRateForChild(korinne, edgar),
+  });
+  assert.deepEqual(split, { subUser: 60, override: 40, total: 100 });
+});
+
+test('the legacy 8/2 split is the fallback when the parent has no explicit budget', () => {
+  assert.equal(parentCommissionBudgetFor(MARIA), 10);
+  assert.equal(overrideRateForChild(MARIA, LUIS), 2);
 });
 
 // ---------------------------------------------------------------------------

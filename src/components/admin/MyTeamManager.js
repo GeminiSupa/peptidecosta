@@ -69,6 +69,9 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
   const [formEmail, setFormEmail] = useState('');
   const [formWhatsApp, setFormWhatsApp] = useState('');
   const [formParent, setFormParent] = useState('');
+  const [formRate, setFormRate] = useState('8');
+  const [editingRate, setEditingRate] = useState(null);
+  const [editingRateValue, setEditingRateValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const [approving, setApproving] = useState(null);
@@ -104,8 +107,17 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
 
   const overrideRate = Number(data?.overrideRate ?? 2);
   const subRate = Number(data?.defaultSubUserRate ?? 8);
+  const commissionBudgetRate = Number(data?.commissionBudgetRate ?? (subRate + overrideRate));
   const spotsUsed = Number(data?.spotsUsed ?? 0);
   const cap = Number(data?.cap ?? 5);
+  const selectedParent = isOwner && formParent
+    ? data?.staff?.find((member) => member.user_id === formParent)
+    : null;
+  const inviteBudgetRate = selectedParent
+    ? Number(selectedParent.commission_rate || commissionBudgetRate)
+    : commissionBudgetRate;
+  const inviteSubRate = Number(formRate || subRate);
+  const inviteParentRemainder = Math.max(0, inviteBudgetRate - inviteSubRate);
 
   const flash = (message) => {
     setNotice(message);
@@ -123,13 +135,14 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
           name: formName,
           email: formEmail,
           whatsapp_number: formWhatsApp,
+          commission_rate: Number(formRate || subRate),
           ...(isOwner && formParent ? { parent_agent_id: formParent } : {}),
         }),
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Could not send the invite');
       setSheetOpen(false);
-      setFormName(''); setFormEmail(''); setFormWhatsApp(''); setFormParent('');
+      setFormName(''); setFormEmail(''); setFormWhatsApp(''); setFormParent(''); setFormRate(String(subRate));
       flash(isOwner ? `${json.subUser.name} added — approve them below to switch on their link.` : 'Sent. The owner will approve them shortly.');
       await load();
       onTeamChanged?.();
@@ -164,6 +177,8 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
       setMoving(null);
       setMoveTarget('');
       setMoveWarning(null);
+      setEditingRate(null);
+      setEditingRateValue('');
       if (action === 'reassign') {
         flash(`${json.subUser?.name || 'They'} now report to ${json.movedTo}.`);
       }
@@ -187,9 +202,9 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
       padding: '10px 14px', borderRadius: 10, fontSize: '0.82rem',
       background: 'rgba(56,189,248,0.07)', border: '1px solid rgba(56,189,248,0.18)', color: '#93a2b6',
     }}>
-      <span>They earn <strong style={{ color: '#38bdf8' }}>{subRate}%</strong> of an order they bring</span>
+      <span>You have <strong style={{ color: '#fbbf24' }}>{commissionBudgetRate}%</strong> to split on their orders</span>
       <span style={{ opacity: 0.4 }}>·</span>
-      <span>you earn <strong style={{ color: '#4ade80' }}>{overrideRate}%</strong> of the same order</span>
+      <span>they get what you assign, you keep the rest</span>
     </div>
   );
 
@@ -233,8 +248,8 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
               <DollarSign size={20} />
             </div>
             <div>
-              <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>{overrideRate}%</div>
-              <div className="dashboard-kpi-label">My cut of their orders</div>
+              <div className="dashboard-kpi-value" style={{ fontSize: '1.1rem' }}>{commissionBudgetRate}%</div>
+              <div className="dashboard-kpi-label">My split budget</div>
               <div className="dashboard-mini-sub">Paid with your weekly report</div>
             </div>
           </div>
@@ -323,11 +338,11 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                       fontFamily: 'ui-monospace, monospace',
                       background: 'rgba(56,189,248,0.07)', border: '1px solid rgba(56,189,248,0.16)', color: '#93a2b6',
                     }}>
-                      <strong style={{ color: '#38bdf8' }}>{subRate}%</strong> to {person.name}
+                      <strong style={{ color: '#38bdf8' }}>{Number(person.commission_rate ?? subRate)}%</strong> to {person.name}
                       {' · '}
-                      <strong style={{ color: '#4ade80' }}>{overrideRate}%</strong> to {person.parent_name || 'their staff member'}
+                      <strong style={{ color: '#4ade80' }}>{Math.max(0, commissionBudgetRate - Number(person.commission_rate ?? subRate))}%</strong> to {person.parent_name || 'their staff member'}
                       {' · '}
-                      <strong style={{ color: '#f87171' }}>{subRate + overrideRate}% total</strong>
+                      <strong style={{ color: '#f87171' }}>{commissionBudgetRate}% total</strong>
                     </div>
                     <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
                       <button
@@ -429,8 +444,63 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                         </button>
                       </>
                     )}
+                    {!isOwner && (
+                      <button
+                        type="button"
+                        className="admin-btn admin-btn-secondary"
+                        title="Set their commission"
+                        disabled={busyId === person.id}
+                        style={{ padding: '6px 9px' }}
+                        onClick={() => {
+                          setEditingRate(editingRate === person.id ? null : person.id);
+                          setEditingRateValue(String(Number(person.commission_rate ?? subRate)));
+                        }}
+                      >
+                        <DollarSign size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {editingRate === person.id && (
+                  <div style={{
+                    marginTop: 6, padding: '12px 13px', borderRadius: 11,
+                    background: 'rgba(74,222,128,0.05)', border: '1px solid rgba(74,222,128,0.22)',
+                    display: 'flex', flexDirection: 'column', gap: 9,
+                  }}>
+                    <div className="dashboard-mini-title">Set {person.name}&apos;s share</div>
+                    <div className="dashboard-mini-sub">
+                      They receive this percent from your {commissionBudgetRate}% budget. You keep the remainder.
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={commissionBudgetRate}
+                      step="0.5"
+                      value={editingRateValue}
+                      onChange={(e) => setEditingRateValue(e.target.value)}
+                      className="admin-input"
+                      style={{ padding: '10px 12px', borderRadius: 9, fontSize: '0.9rem', background: '#0c141f', border: '1px solid rgba(255,255,255,0.1)', color: '#e7edf5' }}
+                    />
+                    <div className="dashboard-mini-sub">
+                      {person.name} gets {Number(editingRateValue || 0)}% · you keep {Math.max(0, commissionBudgetRate - Number(editingRateValue || 0))}%
+                    </div>
+                    <div style={{ display: 'flex', gap: 7 }}>
+                      <button
+                        type="button"
+                        className="admin-btn"
+                        disabled={busyId === person.id}
+                        style={{ flex: 1, background: 'linear-gradient(135deg,#4ade80,#16a34a)', color: '#04240f', fontWeight: 800 }}
+                        onClick={() => act(person.id, 'set_rates', { commission_rate: Number(editingRateValue || 0) })}
+                      >
+                        Save split
+                      </button>
+                      <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setEditingRate(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {isOwner && moving === person.id && (
                   <div style={{
@@ -442,7 +512,7 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                       <div className="dashboard-mini-title">Move {person.name}</div>
                       <div className="dashboard-mini-sub">
                         They keep their {Number(person.commission_rate ?? subRate)}%, their link and their login.
-                        Only who earns the {overrideRate}% changes.
+                        Only who keeps the remainder changes.
                       </div>
                     </div>
 
@@ -620,14 +690,29 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                 </div>
               )}
 
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label className="dashboard-mini-sub" htmlFor="su-rate">THEIR COMMISSION %</label>
+                <input
+                  id="su-rate"
+                  type="number"
+                  min="0"
+                  max={inviteBudgetRate}
+                  step="0.5"
+                  required
+                  value={formRate}
+                  onChange={(e) => setFormRate(e.target.value)}
+                  style={{ padding: '11px 12px', borderRadius: 9, fontSize: '0.95rem', background: '#0c141f', border: '1px solid rgba(255,255,255,0.1)', color: '#e7edf5' }}
+                />
+              </div>
+
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', borderRadius: 9,
                 fontSize: '0.82rem', background: 'rgba(74,222,128,0.07)',
                 border: '1px solid rgba(74,222,128,0.2)', color: '#93a2b6',
               }}>
-                {formName || 'They'} get <strong style={{ color: '#4ade80' }}>{subRate}%</strong>
+                {formName || 'They'} get <strong style={{ color: '#4ade80' }}>{inviteSubRate || 0}%</strong>
                 {' · '}
-                {isOwner ? 'their staff member gets' : 'you get'} <strong style={{ color: '#4ade80' }}>{overrideRate}%</strong>
+                {isOwner ? 'their staff member keeps' : 'you keep'} <strong style={{ color: '#4ade80' }}>{inviteParentRemainder}%</strong>
               </div>
 
               {error && <p style={{ color: '#f87171', fontSize: '0.85rem' }}>{error}</p>}

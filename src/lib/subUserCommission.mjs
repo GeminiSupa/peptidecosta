@@ -42,6 +42,17 @@ export function overrideRateFor(profile) {
   return Number.isFinite(rate) && rate >= 0 ? rate : DEFAULT_OVERRIDE_RATE;
 }
 
+export function parentCommissionBudgetFor(profile) {
+  const rate = Number(profile?.commission_rate);
+  return Number.isFinite(rate) && rate > 0
+    ? rate
+    : DEFAULT_SUB_USER_RATE + overrideRateFor(profile);
+}
+
+export function overrideRateForChild(parentProfile, childProfile) {
+  return Math.max(0, parentCommissionBudgetFor(parentProfile) - subUserRateFor(childProfile));
+}
+
 /**
  * One order, split three ways. `total` is what the order costs the business in
  * commission — the invariant worth protecting is subUser + override === total.

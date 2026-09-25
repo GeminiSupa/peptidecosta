@@ -3,7 +3,6 @@ import { withoutExcludedOrders } from '@/lib/orderRevenue.mjs';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
-  DEFAULT_OVERRIDE_RATE,
   DEFAULT_SUB_USER_RATE,
   assertCanInvite,
   canBecomeSubUser,
@@ -17,7 +16,8 @@ import {
   buildPaidOrderIndex,
   computeOverrideAmounts,
   hasBeenPaid,
-  overrideRateFor,
+  overrideRateForChild,
+  parentCommissionBudgetFor,
 } from '@/lib/subUserCommission.mjs';
 import {
   COMMISSION_ELIGIBLE_ORDER_STATUSES,
@@ -82,6 +82,10 @@ const PROFILE_FIELDS = '*';
 
 const cleanText = (value) => (value == null ? null : String(value).trim() || null);
 const normEmail = (value) => String(value || '').trim().toLowerCase();
+const parsePercent = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 /**
  * The audit columns arrive with add-sub-user-reassignment.sql. Moving someone
@@ -168,7 +172,7 @@ async function outstandingOverrideFor(supabaseAdmin, subUser, currentParent) {
   const { overrideUsd, overrideCrc } = computeOverrideAmounts({
     usdSales: salesUsd,
     crcSales: salesCrc,
-    overrideRate: overrideRateFor(currentParent),
+    overrideRate: overrideRateForChild(currentParent, subUser),
   });
 
   return {
@@ -224,9 +228,15 @@ export async function GET(request) {
       spotsUsed: subUserSpotsUsed(auth.profile, all),
       cap: subUserCapFor(auth.profile),
       defaultSubUserRate: DEFAULT_SUB_USER_RATE,
-      overrideRate: Number(auth.profile.override_rate ?? DEFAULT_OVERRIDE_RATE),
+      commissionBudgetRate: parentCommissionBudgetFor(auth.profile),
+      overrideRate: parentCommissionBudgetFor(auth.profile) - DEFAULT_SUB_USER_RATE,
       staff: isOwner
-        ? all.filter((row) => !isSubUser(row)).map((row) => ({ user_id: row.user_id, name: row.name, email: row.email }))
+        ? all.filter((row) => !isSubUser(row)).map((row) => ({
+          user_id: row.user_id,
+          name: row.name,
+          email: row.email,
+          commission_rate: row.commission_rate,
+        }))
         : [],
     });
   } catch (err) {
@@ -305,6 +315,15 @@ export async function POST(request) {
       );
     }
 
+    const parentBudget = parentCommissionBudgetFor(parent);
+    const commissionRate = parsePercent(body.commission_rate, DEFAULT_SUB_USER_RATE);
+    if (commissionRate < 0 || commissionRate > parentBudget) {
+      return NextResponse.json(
+        { error: `Sub-user commission must be between 0% and ${parentBudget}%.` },
+        { status: 400 }
+      );
+    }
+
     // whatsapp_number is one of the optional notification columns, so the write
     // goes through the same helper member creation uses — an invite must not
     // fail just because add-notification-preferences-to-profiles.sql is missing.
@@ -318,7 +337,7 @@ export async function POST(request) {
         parent_agent_id: parentId,
         permissions: [],
         is_superadmin: false,
-        commission_rate: DEFAULT_SUB_USER_RATE,
+        commission_rate: commissionRate,
         // A sub-user is commission-only. No salary, ever.
         weekly_salary: 0,
         salary_currency: 'USD',
@@ -486,6 +505,26 @@ export async function PATCH(request) {
       const rate = Number(body.commission_rate);
       if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
         return NextResponse.json({ error: 'Commission rate must be between 0 and 100.' }, { status: 400 });
+      }
+      const { data: allProfiles, error: profilesError } = await supabaseAdmin
+        .from('admin_profiles')
+        .select(PROFILE_FIELDS);
+      if (profilesError) {
+        console.error('[sub-users] Could not load profiles for rate change:', profilesError);
+        return NextResponse.json({ error: 'Could not load the team' }, { status: 500 });
+      }
+      const all = allProfiles || [];
+      const parent = all.find((row) => row.user_id === subUser.parent_agent_id);
+      const parentBudget = parentCommissionBudgetFor(parent);
+      const canEdit = auth.profile.is_superadmin || subUser.parent_agent_id === auth.profile.user_id;
+      if (!canEdit) {
+        return NextResponse.json({ error: 'You can only set commission for your own sub-users.' }, { status: 403 });
+      }
+      if (rate > parentBudget) {
+        return NextResponse.json(
+          { error: `Sub-user commission cannot be higher than ${parentBudget}%, which is the staff member's budget.` },
+          { status: 400 }
+        );
       }
       const { data, error } = await supabaseAdmin
         .from('admin_profiles')

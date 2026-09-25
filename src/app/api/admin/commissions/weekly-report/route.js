@@ -14,7 +14,8 @@ import {
   buildPaidOrderIndex,
   computeOverrideAmounts,
   hasBeenPaid,
-  overrideRateFor,
+  overrideRateForChild,
+  parentCommissionBudgetFor,
   payableChildrenOf,
 } from '@/lib/subUserCommission.mjs';
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
@@ -245,7 +246,7 @@ export async function GET(request) {
       // Their orders carry the sub-user's name as sales_agent, so they are never
       // matched by orderBelongsToAgent above — which is exactly why a staff
       // member cannot earn both her own rate and the override on one order.
-      const overrideRate = overrideRateFor(agent);
+      const parentBudgetRate = parentCommissionBudgetFor(agent);
       const children = payableChildrenOf(agent, payableProfiles);
 
       // Broken down per person, so her statement can answer "why is my number
@@ -254,6 +255,8 @@ export async function GET(request) {
       const overrideBreakdown = [];
       let overrideSalesUsd = 0;
       let overrideSalesCrc = 0;
+      let overrideUsd = 0;
+      let overrideCrc = 0;
 
       for (const child of children) {
         const childOrders = (orders || []).filter((order) => {
@@ -270,32 +273,32 @@ export async function GET(request) {
           childCrc += amounts.crc;
         }
 
+        const childOverrideRate = overrideRateForChild(agent, child);
         const childShare = computeOverrideAmounts({
           usdSales: childUsd,
           crcSales: childCrc,
-          overrideRate,
+          overrideRate: childOverrideRate,
         });
 
         overrideOrders.push(...childOrders);
         overrideSalesUsd += childUsd;
         overrideSalesCrc += childCrc;
+        overrideUsd += childShare.overrideUsd;
+        overrideCrc += childShare.overrideCrc;
         overrideBreakdown.push({
           name: child.name || child.email,
           ordersCount: childOrders.length,
           salesUsd: childUsd,
           salesCrc: childCrc,
+          overrideRate: childOverrideRate,
           overrideUsd: childShare.overrideUsd,
           overrideCrc: childShare.overrideCrc,
         });
       }
 
       overrideOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-      const { overrideUsd, overrideCrc } = computeOverrideAmounts({
-        usdSales: overrideSalesUsd,
-        crcSales: overrideSalesCrc,
-        overrideRate,
-      });
+      overrideUsd = Math.round(overrideUsd * 100) / 100;
+      overrideCrc = Math.round(overrideCrc * 100) / 100;
 
       const commissionSummary = summarizeOrderCommissions(
         agentOrders,
@@ -381,7 +384,7 @@ export async function GET(request) {
         totalPayoutUsd,
         totalPayoutCrc,
         orders: reportedAgentOrders,
-        overrideRate,
+        overrideRate: parentBudgetRate,
         overrideUsd,
         overrideCrc,
         overrideBreakdown,
@@ -441,7 +444,7 @@ export async function GET(request) {
         orders_data: reportedAgentOrders,
         // Kept separate from orders_data so approving this payout marks these
         // orders paid for THIS agent only, leaving the sub-user's own 8% intact.
-        override_rate: overrideRate,
+        override_rate: parentBudgetRate,
         override_usd: overrideUsd,
         override_crc: overrideCrc,
         override_sales_usd: overrideSalesUsd,
@@ -515,7 +518,7 @@ export async function GET(request) {
         usdCommission: formatMoney(usdCommission, 'USD'),
         crcCommission: formatMoney(crcCommission, 'CRC'),
         tier: profileTier(agent),
-        overrideRate: `${overrideRate}%`,
+        overrideRate: `${parentBudgetRate}% budget`,
         overrideOrdersCount: overrideOrders.length,
         overrideUsd: formatMoney(overrideUsd, 'USD'),
         overrideCrc: formatMoney(overrideCrc, 'CRC'),
