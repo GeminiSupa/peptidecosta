@@ -192,7 +192,7 @@ async function createLogin({ supabaseAdmin, affiliate, current, body, actor }) {
 
   return NextResponse.json({
     ok: true,
-    message: `${affiliate.name || email} can now sign in at /affiliate.`,
+    message: `${affiliate.name || email} can now sign in at /affiliate-dashboard.`,
   });
 }
 

@@ -1992,7 +1992,7 @@ Core Rules:
   // /admin sees their own dashboard instead of an empty staff shell.
   useEffect(() => {
     if (!mounted || !adminProfile || profileLoading) return;
-    if (isAffiliateTier(adminProfile)) router.replace('/affiliate');
+    if (isAffiliateTier(adminProfile)) router.replace('/affiliate-dashboard');
   }, [mounted, adminProfile, profileLoading, router]);
 
   // Resolve ?tab= from URL once admin profile is loaded
