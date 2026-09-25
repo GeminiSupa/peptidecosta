@@ -27,15 +27,20 @@ const TABS = [
   { id: 'my_account', label: 'My Details' },
 ];
 
+/**
+ * Near-monochrome on purpose. Colour is reserved for the two things a partner
+ * is actually here to read — money that is settled (green) and money that is
+ * still waiting (amber). Everything else is greys, so those two stand out.
+ */
 const COLORS = {
-  bg: '#0f172a',
-  panel: '#1e293b',
-  border: '#334155',
-  text: '#e2e8f0',
-  muted: '#94a3b8',
-  accent: '#38bdf8',
+  bg: '#0b1120',
+  panel: '#151d2e',
+  panelRaised: '#1c2438',
+  border: '#2a3348',
+  text: '#e8ecf4',
+  muted: '#93a0b5',
   good: '#4ade80',
-  warn: '#fbbf24',
+  warn: '#f0b429',
   bad: '#f87171',
 };
 
@@ -196,9 +201,9 @@ export default function AffiliateDashboard() {
             onClick={() => setTab(item.id)}
             style={{
               ...ghostButton,
-              background: tab === item.id ? COLORS.accent : 'transparent',
-              color: tab === item.id ? '#0f172a' : COLORS.text,
-              borderColor: tab === item.id ? COLORS.accent : COLORS.border,
+              background: tab === item.id ? COLORS.panelRaised : 'transparent',
+              color: tab === item.id ? COLORS.text : COLORS.muted,
+              borderColor: tab === item.id ? COLORS.text : COLORS.border,
               fontWeight: tab === item.id ? 700 : 500,
             }}
           >
@@ -407,24 +412,43 @@ function AccountTab({ me, onSaved }) {
       <label style={{ ...label, marginTop: 14 }}>Email</label>
       <input style={input} value={email} disabled={readOnly} onChange={(e) => setEmail(e.target.value)} />
       <p style={{ ...muted, marginTop: 6 }}>
-        Your email is how you sign in and where payout notices go, so a change has to be approved by us first.
-        Your current address keeps working until then.
+        This is the address you sign in with, and the one Peptides Costa Rica sends your
+        payout notices to. Changing it has to be checked by Peptides Costa Rica first.
       </p>
+
+      {/* The old version of this said only "Waiting for approval: x@y.com", which
+          answered none of the three questions somebody actually has: what did I
+          ask for, what is happening now, and which address am I using meanwhile. */}
       {pendingEmail && (
-        <p style={{ ...muted, color: COLORS.warn }}>
-          Waiting for approval: {pendingEmail.requested_value}
-        </p>
+        <div style={pendingBox}>
+          <strong style={{ display: 'block', marginBottom: 6, color: COLORS.warn, fontSize: '0.85rem' }}>
+            Your email change has not happened yet
+          </strong>
+          <p style={{ margin: '0 0 6px', fontSize: '0.85rem', lineHeight: 1.6 }}>
+            You asked to change it to <strong>{pendingEmail.requested_value}</strong>.
+            Peptides Costa Rica has to approve that before it takes effect, because your
+            payouts are announced to this address.
+          </p>
+          <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.6 }}>
+            Until then nothing has changed — keep signing in with{' '}
+            <strong>{me.affiliate.email}</strong>.
+          </p>
+        </div>
       )}
 
       <div style={{ marginTop: 16 }}>
         <label style={label}>Commission rate</label>
         <p style={{ ...muted, margin: '4px 0 0' }}>
-          {Math.round(Number(me.affiliate.commissionRate || 0) * 100)}% — set by us. Talk to us if you think it is wrong.
+          {Math.round(Number(me.affiliate.commissionRate || 0) * 100)}% — set by Peptides Costa Rica.
+          Get in touch if you think it is wrong.
         </p>
       </div>
 
       {readOnly ? (
-        <p style={{ ...muted, marginTop: 16 }}>Your account is view-only. Message us and we will update your details.</p>
+        <p style={{ ...muted, marginTop: 16 }}>
+          Your account is view-only, so these cannot be edited here. Contact Peptides Costa
+          Rica and they will update them for you.
+        </p>
       ) : (
         <button style={{ ...primaryButton, marginTop: 18 }} disabled={saving} onClick={save}>
           {saving ? 'Saving…' : 'Save'}
@@ -501,12 +525,13 @@ function Stat({ label: text, value, tone }) {
 }
 
 const panel = { background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 18 };
-const h3 = { margin: '0 0 12px', fontSize: '0.95rem', color: COLORS.accent };
+const h3 = { margin: '0 0 12px', fontSize: '0.95rem', color: COLORS.text, fontWeight: 700 };
 const muted = { color: COLORS.muted, fontSize: '0.85rem', lineHeight: 1.6 };
 const label = { display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.6, color: COLORS.muted, marginBottom: 6 };
 const input = { width: '100%', padding: '10px 12px', borderRadius: 8, border: `1px solid ${COLORS.border}`, background: '#0b1220', color: COLORS.text, fontSize: '0.95rem' };
-const primaryButton = { padding: '10px 16px', borderRadius: 8, border: 'none', background: COLORS.accent, color: '#0f172a', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' };
+const primaryButton = { padding: '10px 16px', borderRadius: 8, border: `1px solid ${COLORS.border}`, background: COLORS.panelRaised, color: COLORS.text, fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem' };
 const ghostButton = { padding: '8px 14px', borderRadius: 8, border: `1px solid ${COLORS.border}`, background: 'transparent', color: COLORS.text, cursor: 'pointer', fontSize: '0.85rem' };
+const pendingBox = { marginTop: 10, padding: '12px 14px', borderRadius: 8, border: `1px solid ${COLORS.warn}55`, background: 'rgba(240,180,41,0.07)', color: COLORS.text };
 const table = { width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' };
 const th = { textAlign: 'left', padding: '8px 10px', borderBottom: `1px solid ${COLORS.border}`, color: COLORS.muted, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5 };
 const td = { padding: '10px', borderBottom: `1px solid ${COLORS.border}` };

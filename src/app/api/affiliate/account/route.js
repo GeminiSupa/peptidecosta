@@ -32,7 +32,7 @@ export async function PATCH(request) {
 
   if (!affiliateCanWrite(profile)) {
     return NextResponse.json(
-      { ok: false, error: 'Your account is view-only. Ask us to update your details.' },
+      { ok: false, error: 'Your account is view-only. Contact Peptides Costa Rica and they will update your details.' },
       { status: 403 }
     );
   }
@@ -90,7 +90,7 @@ export async function PATCH(request) {
             ok: true,
             ...results,
             requested: [...results.requested, 'email'],
-            message: 'You already have an email change waiting for approval.',
+            message: 'You have already asked for that. Peptides Costa Rica has not approved it yet.',
           });
         }
         if (/relation .* does not exist/i.test(error.message || '')) {
@@ -114,7 +114,7 @@ export async function PATCH(request) {
     return NextResponse.json({
       ok: true,
       ...results,
-      message: 'Nothing changed. You can update your WhatsApp number and ask us to change your email — everything else is set by us.',
+      message: 'Nothing changed. You can update your WhatsApp number here and ask for an email change — everything else is set by Peptides Costa Rica.',
     });
   }
 
@@ -122,7 +122,7 @@ export async function PATCH(request) {
     ok: true,
     ...results,
     message: results.requested.includes('email')
-      ? 'Saved. Your email change has been sent for approval — your current address stays in use until then.'
+      ? 'Sent. Peptides Costa Rica has to approve your new email before it takes effect — keep signing in with your current address until then.'
       : 'Saved.',
   });
 }
