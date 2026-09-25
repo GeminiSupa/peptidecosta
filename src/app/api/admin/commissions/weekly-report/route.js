@@ -8,6 +8,7 @@ import {
   getOrderSalesAmounts,
   orderBelongsToAgent,
 } from '@/lib/agentOrders';
+import { AFFILIATE_HANDLER_COMMISSION_RATE } from '@/lib/affiliateCommission.mjs';
 import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import {
@@ -182,6 +183,9 @@ export async function GET(request) {
     }
 
     const adminRecipients = buildCommissionAdminRecipients(profiles, ADMIN_CC_EMAILS);
+    const { data: affiliates } = await supabaseAdmin
+      .from('affiliates')
+      .select('*');
 
     const reportResults = [];
     const skippedNoPay = [];
@@ -234,10 +238,15 @@ export async function GET(request) {
       const rate = Number(agent.commission_rate || 0);
       const weeklySalary = Number(agent.weekly_salary || 0);
       const salaryCurrency = agent.salary_currency || 'USD';
+      const handledAffiliates = (affiliates || []).filter(
+        (affiliate) => affiliate?.handling_agent_id === agent.user_id
+      );
+      const handledAffiliateIds = new Set(handledAffiliates.map((affiliate) => affiliate.id).filter(Boolean));
       
       const agentOrders = (orders || [])
         .filter((order) => {
           if (hasBeenPaid(paidIndex, agent.email, order.id)) return false;
+          if (order.affiliate_id && handledAffiliateIds.has(order.affiliate_id)) return false;
           return orderBelongsToAgent(order, agent);
         })
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -293,6 +302,46 @@ export async function GET(request) {
           overrideRate: childOverrideRate,
           overrideUsd: childShare.overrideUsd,
           overrideCrc: childShare.overrideCrc,
+        });
+      }
+
+      for (const affiliate of handledAffiliates) {
+        const affiliateOrders = (orders || []).filter((order) => {
+          if (hasBeenPaid(paidIndex, agent.email, order.id)) return false;
+          if (order.affiliate_id !== affiliate.id) return false;
+          const creditedAgent = String(order.sales_agent || '').trim();
+          return !creditedAgent || orderBelongsToAgent(order, agent);
+        });
+        if (affiliateOrders.length === 0) continue;
+
+        let affiliateUsd = 0;
+        let affiliateCrc = 0;
+        for (const order of affiliateOrders) {
+          const amounts = getOrderSalesAmounts(order, currentExchangeRate);
+          affiliateUsd += amounts.usd;
+          affiliateCrc += amounts.crc;
+        }
+
+        const handlerShare = computeOverrideAmounts({
+          usdSales: affiliateUsd,
+          crcSales: affiliateCrc,
+          overrideRate: AFFILIATE_HANDLER_COMMISSION_RATE,
+        });
+
+        overrideOrders.push(...affiliateOrders);
+        overrideSalesUsd += affiliateUsd;
+        overrideSalesCrc += affiliateCrc;
+        overrideUsd += handlerShare.overrideUsd;
+        overrideCrc += handlerShare.overrideCrc;
+        overrideBreakdown.push({
+          name: affiliate.name || affiliate.email || 'Affiliate',
+          kind: 'affiliate_handler',
+          ordersCount: affiliateOrders.length,
+          salesUsd: affiliateUsd,
+          salesCrc: affiliateCrc,
+          overrideRate: AFFILIATE_HANDLER_COMMISSION_RATE,
+          overrideUsd: handlerShare.overrideUsd,
+          overrideCrc: handlerShare.overrideCrc,
         });
       }
 

@@ -7,7 +7,7 @@ import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCh
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
-import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
+import { affiliateCommissionPatch, affiliateHandlingAgentName } from '@/lib/affiliateCommission.mjs';
 import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
 import { ORDER_RESEARCH_ACK_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
@@ -117,6 +117,16 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
       affiliate_commission_usd: 0,
       affiliate_commission_crc: 0,
     };
+  }
+
+  if (affiliate && !String(order.sales_agent || '').trim()) {
+    const { data: profiles } = await supabase
+      .from('admin_profiles')
+      .select('user_id, name, email, tier, status');
+    const handlingAgent = affiliateHandlingAgentName(affiliate, profiles || []);
+    if (handlingAgent) {
+      order.sales_agent = handlingAgent;
+    }
   }
 
   const requestedAgent = String(order.sales_agent || '').trim().toLowerCase();

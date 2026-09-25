@@ -56,7 +56,7 @@ export function buildAgentCommissionEmail({
     : `${Number(commissionRate || 0)}%`;
   const overrideRows = overrideList.map((row, index) => `
       <tr bgcolor="${index % 2 === 0 ? '#ffffff' : '#f8fafc'}">
-        <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f172a;">${escapeHtml(row.name || 'Sub-user')}</td>
+        <td style="padding:12px 10px;border-top:1px solid #e2e8f0;font:600 12px Arial,sans-serif;color:#0f172a;">${escapeHtml(row.name || 'Partner')}${row.kind === 'affiliate_handler' ? '<br><span style="font:10px Arial,sans-serif;color:#64748b;text-transform:uppercase;">Affiliate handling</span>' : ''}</td>
         <td align="center" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#475569;">${Number(row.ordersCount || 0)}</td>
         <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:12px Arial,sans-serif;color:#475569;white-space:nowrap;">${Number(row.salesUsd) > 0 ? formatMoney(row.salesUsd, 'USD') : formatMoney(row.salesCrc, 'CRC')}</td>
         <td align="right" style="padding:12px 10px;border-top:1px solid #e2e8f0;font:700 12px Arial,sans-serif;color:#0f172a;white-space:nowrap;">${Number(row.overrideRate || 0)}% · ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}</td>
@@ -128,7 +128,7 @@ export function buildAgentCommissionEmail({
             </div>` : ''}
 
             ${hasOverride ? `
-            <div style="font:700 14px Arial,sans-serif;color:#0f172a;margin:24px 0 10px;">My team &middot; from your ${Number(overrideRate || 0)}% budget</div>
+            <div style="font:700 14px Arial,sans-serif;color:#0f172a;margin:24px 0 10px;">Team and affiliate handling</div>
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #dbe3ee;">
               <tr bgcolor="#e8eef6">
                 <th align="left" style="padding:10px;font:700 10px Arial,sans-serif;color:#475569;text-transform:uppercase;">Person</th>
@@ -144,7 +144,7 @@ export function buildAgentCommissionEmail({
                 </td>
               </tr>
             </table>
-            <div style="font:12px Arial,sans-serif;color:#64748b;margin-top:8px;">Each of your people keeps the share you assigned them. What you earn is the remainder of your ${Number(overrideRate || 0)}% budget, not an extra commission on top.</div>
+            <div style="font:12px Arial,sans-serif;color:#64748b;margin-top:8px;">Sub-user rows are paid from your budget remainder. Affiliate handling rows are a fixed 5% operations commission for the affiliate orders assigned to you.</div>
             ` : ''}
 
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:18px;">
@@ -192,8 +192,8 @@ export function buildAgentCommissionEmail({
     ...(hasOverride
       ? [
         '',
-        `My team (from your ${Number(overrideRate || 0)}% budget): ${formatMoney(overrideUsd, 'USD')} OR ${formatMoney(overrideCrc, 'CRC')}`,
-        ...overrideList.map((row) => `${row.name} · ${row.ordersCount} order${row.ordersCount === 1 ? '' : 's'} · ${Number(row.overrideRate || 0)}% remainder · you earned ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}`),
+        `Team and affiliate handling: ${formatMoney(overrideUsd, 'USD')} OR ${formatMoney(overrideCrc, 'CRC')}`,
+        ...overrideList.map((row) => `${row.name} · ${row.ordersCount} order${row.ordersCount === 1 ? '' : 's'} · ${Number(row.overrideRate || 0)}% ${row.kind === 'affiliate_handler' ? 'affiliate handling' : 'remainder'} · you earned ${Number(row.overrideUsd) > 0 ? formatMoney(row.overrideUsd, 'USD') : formatMoney(row.overrideCrc, 'CRC')}`),
       ]
       : []),
   ].join('\n');

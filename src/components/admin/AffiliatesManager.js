@@ -62,7 +62,7 @@ const parseCommissionPercent = (value) => {
   return Math.max(0, Math.min(100, pct)) / 100;
 };
 
-export default function AffiliatesManager({ products = [] }) {
+export default function AffiliatesManager({ products = [], agentProfiles = [] }) {
   const [affiliates, setAffiliates] = useState([]);
   const [promoCodes, setPromoCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -83,7 +83,7 @@ export default function AffiliatesManager({ products = [] }) {
   const [settlementPayout, setSettlementPayout] = useState(null);
 
   // Forms State
-  const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
+  const [newAffiliate, setNewAffiliate] = useState({ name: '', email: '', whatsapp: '', commission_rate: 0.10, handling_agent_id: '' });
   const [newPromo, setNewPromo] = useState(EMPTY_PROMO);
   const [editingAffiliate, setEditingAffiliate] = useState(null);
   const [editingPromo, setEditingPromo] = useState(null);
@@ -102,6 +102,17 @@ export default function AffiliatesManager({ products = [] }) {
     url.searchParams.set('gate', 'skip');
 
     return url.toString();
+  };
+
+  const handlingAgents = (agentProfiles || []).filter((profile) => {
+    const tier = String(profile?.tier || 'staff').trim().toLowerCase();
+    const status = String(profile?.status || 'active').trim().toLowerCase();
+    return profile?.user_id && tier !== 'sub_user' && status !== 'pending' && status !== 'suspended';
+  });
+
+  const agentNameFor = (userId) => {
+    const profile = handlingAgents.find((agent) => agent.user_id === userId);
+    return profile?.name || profile?.email || '';
   };
 
   const handleOpenQr = async (promo) => {
@@ -263,13 +274,16 @@ export default function AffiliatesManager({ products = [] }) {
     try {
       const { data, error } = await supabase
         .from('affiliates')
-        .insert([newAffiliate])
+        .insert([{
+          ...newAffiliate,
+          handling_agent_id: newAffiliate.handling_agent_id || null,
+        }])
         .select();
         
       if (error) throw error;
       
       setAffiliates([data[0], ...affiliates]);
-      setNewAffiliate({ name: '', email: '', whatsapp: '', commission_rate: 0.10 });
+      setNewAffiliate({ name: '', email: '', whatsapp: '', commission_rate: 0.10, handling_agent_id: '' });
     } catch (err) {
       alert('Error creating affiliate: ' + err.message);
     }
@@ -284,6 +298,7 @@ export default function AffiliatesManager({ products = [] }) {
         name: editingAffiliate.name.trim(),
         email: editingAffiliate.email.trim(),
         whatsapp: editingAffiliate.whatsapp?.trim() || null,
+        handling_agent_id: editingAffiliate.handling_agent_id || null,
         // Used to be forced to 0.20 here for sales agents, which threw away
         // whatever was chosen above and made the rate un-editable in practice.
         // The referral now reads this column, so what is saved is what pays.
@@ -486,6 +501,18 @@ export default function AffiliatesManager({ products = [] }) {
                 <input required type="email" placeholder="Email" value={newAffiliate.email} onChange={e => setNewAffiliate({...newAffiliate, email: e.target.value})} style={inputStyle} />
                 <input placeholder="WhatsApp (Optional)" value={newAffiliate.whatsapp} onChange={e => setNewAffiliate({...newAffiliate, whatsapp: e.target.value})} style={inputStyle} />
                 <select
+                  value={newAffiliate.handling_agent_id}
+                  onChange={e => setNewAffiliate({ ...newAffiliate, handling_agent_id: e.target.value })}
+                  style={{ ...inputStyle, color: newAffiliate.handling_agent_id ? '#f8fafc' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#0f172a' }}>No main agent yet</option>
+                  {handlingAgents.map(agent => (
+                    <option key={agent.user_id} value={agent.user_id} style={{ color: '#0f172a' }}>
+                      {agent.name || agent.email}
+                    </option>
+                  ))}
+                </select>
+                <select
                   value={getCommissionSelectValue(newAffiliate.commission_rate)}
                   onChange={e => setNewAffiliate({
                     ...newAffiliate,
@@ -520,6 +547,11 @@ export default function AffiliatesManager({ products = [] }) {
                   <div>
                     <div style={{ fontWeight: 'bold', color: '#f8fafc', fontSize: '1rem' }}>{aff.name}</div>
                     <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>{aff.email}</div>
+                    {aff.handling_agent_id && (
+                      <div style={{ fontSize: '0.78rem', color: '#38bdf8', marginTop: '5px' }}>
+                        Main agent: {agentNameFor(aff.handling_agent_id) || 'Assigned'}
+                      </div>
+                    )}
                     <div style={{ fontSize: '0.75rem', fontWeight: 'bold', color: '#34d399', background: 'rgba(52, 211, 153, 0.1)', padding: '2px 8px', borderRadius: '12px', display: 'inline-block', marginTop: '8px' }}>
                       {isSalesAgentAffiliate(aff)
                         ? `Sales agent · ${(Number(aff.commission_rate || 0) * 100).toFixed(0)}% commission`
@@ -1050,6 +1082,20 @@ export default function AffiliatesManager({ products = [] }) {
               <input disabled={isSalesAgentAffiliate(editingAffiliate)} required placeholder="Name" value={editingAffiliate.name || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, name: e.target.value })} style={inputStyle} />
               <input disabled={isSalesAgentAffiliate(editingAffiliate)} required type="email" placeholder="Email" value={editingAffiliate.email || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, email: e.target.value })} style={inputStyle} />
               <input placeholder="WhatsApp (Optional)" value={editingAffiliate.whatsapp || ''} onChange={e => setEditingAffiliate({ ...editingAffiliate, whatsapp: e.target.value })} style={inputStyle} />
+              {!isSalesAgentAffiliate(editingAffiliate) && (
+                <select
+                  value={editingAffiliate.handling_agent_id || ''}
+                  onChange={e => setEditingAffiliate({ ...editingAffiliate, handling_agent_id: e.target.value })}
+                  style={{ ...inputStyle, color: editingAffiliate.handling_agent_id ? '#f8fafc' : '#94a3b8' }}
+                >
+                  <option value="" style={{ color: '#0f172a' }}>No main agent yet</option>
+                  {handlingAgents.map(agent => (
+                    <option key={agent.user_id} value={agent.user_id} style={{ color: '#0f172a' }}>
+                      {agent.name || agent.email}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 value={getCommissionSelectValue(editingAffiliate.commission_rate)}
                 onChange={e => setEditingAffiliate({

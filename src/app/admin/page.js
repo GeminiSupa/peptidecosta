@@ -2426,7 +2426,7 @@ Core Rules:
       try {
         const { data: agentData, error: agentError } = await supabase
           .from('admin_profiles')
-          .select('name, email')
+          .select('user_id, name, email, tier, status')
           .order('name', { ascending: true });
         
         if (!agentError && agentData) {
@@ -7273,7 +7273,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {activeTab === 'affiliates' && (
           <div className="admin-orders-tab" style={{ padding: '20px 0' }}>
-            <AffiliatesManager products={products} />
+            <AffiliatesManager products={products} agentProfiles={agentProfiles} />
           </div>
         )}
 

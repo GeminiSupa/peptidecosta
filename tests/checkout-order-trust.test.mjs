@@ -21,7 +21,11 @@ import {
   CHECKOUT_DEFAULT_STATUS,
   checkoutOrderStatus,
 } from '../src/lib/checkoutOrderStatus.mjs';
-import { affiliateCommissionPatch } from '../src/lib/affiliateCommission.mjs';
+import {
+  AFFILIATE_HANDLER_COMMISSION_RATE,
+  affiliateCommissionPatch,
+  affiliateHandlingAgentName,
+} from '../src/lib/affiliateCommission.mjs';
 
 test('a card order opens waiting for the gateway', () => {
   assert.equal(checkoutOrderStatus('card'), CHECKOUT_CARD_STATUS);
@@ -115,9 +119,49 @@ test('a negative base cannot produce a negative commission', () => {
   assert.equal(patch.affiliate_commission_usd, 0);
 });
 
+test('an affiliate can be assigned to a main agent for order handling', () => {
+  const handler = affiliateHandlingAgentName(
+    { handling_agent_id: 'korinne-user-id' },
+    [
+      { user_id: 'edgar-user-id', name: 'Edgar', tier: 'sub_user', status: 'active' },
+      { user_id: 'korinne-user-id', name: 'Korinne', tier: 'staff', status: 'active' },
+    ],
+  );
+
+  assert.equal(handler, 'Korinne');
+});
+
+test('affiliate handling commission is a fixed 5 percent operations override', () => {
+  assert.equal(AFFILIATE_HANDLER_COMMISSION_RATE, 5);
+});
+
+test('affiliate handling ignores suspended handlers and sub-users', () => {
+  assert.equal(affiliateHandlingAgentName(
+    { handling_agent_id: 'edgar-user-id' },
+    [{ user_id: 'edgar-user-id', name: 'Edgar', tier: 'sub_user', status: 'active' }],
+  ), null);
+  assert.equal(affiliateHandlingAgentName(
+    { handling_agent_id: 'korinne-user-id' },
+    [{ user_id: 'korinne-user-id', name: 'Korinne', tier: 'staff', status: 'suspended' }],
+  ), null);
+});
+
 test('the checkout route overwrites the posted commission fields', () => {
   const route = fs.readFileSync('src/app/api/orders/create/route.js', 'utf8');
   assert.match(route, /Object\.assign\(order, affiliateCommissionPatch\(order, affiliate\)\)/);
+});
+
+test('the checkout route assigns affiliate orders to the affiliate handling agent', () => {
+  const route = fs.readFileSync('src/app/api/orders/create/route.js', 'utf8');
+  assert.match(route, /affiliateHandlingAgentName\(affiliate, profiles \|\| \[\]\)/);
+  assert.match(route, /order\.sales_agent = handlingAgent/);
+});
+
+test('the team payout scan pays affiliate handlers separately from normal agent commission', () => {
+  const route = fs.readFileSync('src/app/api/admin/commissions/weekly-report/route.js', 'utf8');
+  assert.match(route, /AFFILIATE_HANDLER_COMMISSION_RATE/);
+  assert.match(route, /handledAffiliateIds\.has\(order\.affiliate_id\)/);
+  assert.match(route, /kind: 'affiliate_handler'/);
 });
 
 test('both routes share one commission formula', () => {

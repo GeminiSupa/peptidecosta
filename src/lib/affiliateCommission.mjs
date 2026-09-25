@@ -18,6 +18,8 @@
  * Kept free of '@/lib' imports so tests/ can load it under `node --test`.
  */
 
+export const AFFILIATE_HANDLER_COMMISSION_RATE = 5;
+
 /**
  * Commission is earned on merchandise the customer kept.
  *
@@ -59,4 +61,18 @@ export function affiliateCommissionPatch(order, affiliate) {
     affiliate_commission_usd: Number((usdBase * rate).toFixed(2)),
     affiliate_commission_crc: Math.round(crcBase * rate),
   };
+}
+
+const norm = (value) => String(value ?? '').trim().toLowerCase();
+
+export function affiliateHandlingAgentName(affiliate, profiles = []) {
+  const handlerId = affiliate?.handling_agent_id || affiliate?.main_agent_id || affiliate?.parent_agent_id;
+  if (!handlerId) return null;
+
+  const profile = (profiles || []).find((row) => row?.user_id === handlerId);
+  if (!profile) return null;
+  if (norm(profile.tier) === 'sub_user') return null;
+  if (['pending', 'suspended'].includes(norm(profile.status))) return null;
+
+  return String(profile.name || profile.email || '').trim() || null;
 }
