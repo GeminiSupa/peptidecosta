@@ -207,7 +207,9 @@ export default function AffiliateDashboard() {
         ))}
       </nav>
 
-      {loading && <p style={{ color: COLORS.muted }}>Loading…</p>}
+      {/* Only before there is anything to show. A refresh after the first load
+          used to print "Loading…" above content that was already on screen. */}
+      {loading && !me && <p style={{ color: COLORS.muted }}>Loading…</p>}
 
       {tab === 'my_links' && <LinksTab me={me} qr={qr} />}
       {tab === 'my_sales' && <OrdersTab orders={orders} />}

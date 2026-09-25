@@ -106,6 +106,18 @@ export async function PATCH(request) {
     }
   }
 
+  // Fields this route does not own — commission_rate, amounts, anything with
+  // money on it — are simply not read above. Saying "Saved." to a request that
+  // changed nothing would tell someone their new commission rate had taken,
+  // so a call that saved nothing says so.
+  if (results.saved.length === 0 && results.requested.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      ...results,
+      message: 'Nothing changed. You can update your WhatsApp number and ask us to change your email — everything else is set by us.',
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     ...results,
