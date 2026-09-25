@@ -76,7 +76,15 @@ export default function EntryDisclaimer() {
   // one inside the frame gates a box a few hundred pixels tall, and on decline
   // it used to navigate the iframe to Google, which refuses to be framed and
   // left a broken rectangle sitting on someone else's page.
-  const isExemptRoute = pathname.startsWith('/admin') || pathname.startsWith('/embed');
+  // /affiliate is the affiliate's own dashboard — a login, not a shop front.
+  // Asking a partner to confirm they are 21 before they can read their own
+  // commission makes no sense and looks broken.
+  // Exactly /affiliate, NOT /affiliate-program — that one is a public page for
+  // recruiting affiliates and keeps its gate like any other shop front.
+  const isAffiliateDashboard = pathname === '/affiliate' || pathname.startsWith('/affiliate/');
+  const isExemptRoute = pathname.startsWith('/admin')
+    || isAffiliateDashboard
+    || pathname.startsWith('/embed');
 
   useEffect(() => {
     if (isExemptRoute) return;

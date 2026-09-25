@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { isActiveProfile, isPendingApproval, isSubUser } from '@/lib/subUserTier.mjs';
+import { isActiveProfile, isAffiliateTier, isPendingApproval, isSubUser } from '@/lib/subUserTier.mjs';
 import {
   adminPermissionsForPath,
   profileHasAnyAdminPermission,
@@ -22,12 +22,19 @@ import {
  * Pending and suspended accounts are rejected for everyone, sub-user or staff,
  * so approval really does gate access and suspending someone takes effect at
  * once rather than at their next login.
+ *
+ * Affiliates are refused the same way, and for a sharper reason: an affiliate
+ * login belongs to somebody outside the business. The four routes behind their
+ * dashboard opt in with { allowAffiliate: true }; every other route in the app
+ * refuses them without being edited, which is the only version of this that
+ * stays true as routes get added.
  */
 export async function verifyAdminSession(
   request,
   {
     requireSuperadmin = false,
     allowSubUser = false,
+    allowAffiliate = false,
     requirePermission = null,
     requireAnyPermission = null,
     skipPathPermission = false,
@@ -76,6 +83,17 @@ export async function verifyAdminSession(
 
   if (isSubUser(profile) && !allowSubUser) {
     return { error: NextResponse.json({ error: 'Forbidden: not available to sub-users' }, { status: 403 }) };
+  }
+
+  if (isAffiliateTier(profile) && !allowAffiliate) {
+    return { error: NextResponse.json({ error: 'Forbidden: not available to affiliates' }, { status: 403 }) };
+  }
+
+  // An affiliate is never a superadmin and never holds an admin permission, so
+  // the two checks below would refuse them anyway. Kept explicit rather than
+  // relied upon: allowAffiliate must not become a way past them.
+  if (isAffiliateTier(profile) && (requireSuperadmin || requirePermission || requireAnyPermission)) {
+    return { error: NextResponse.json({ error: 'Forbidden: not available to affiliates' }, { status: 403 }) };
   }
 
   if (requireSuperadmin && !profile.is_superadmin) {

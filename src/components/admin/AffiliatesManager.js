@@ -9,6 +9,7 @@ import { crWallToIso, isoToCrWall, formatCrWall, formatCrInstant, formatCrDate }
 import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
+import AffiliateAccessPanel from '@/components/admin/AffiliateAccessPanel';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -479,7 +480,24 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
         >
           Commission Payouts
         </button>
+        <button
+          onClick={() => setActiveSubTab('access')}
+          className="admin-btn"
+          style={{
+            background: activeSubTab === 'access' ? '#38bdf8' : 'rgba(255,255,255,0.02)',
+            color: activeSubTab === 'access' ? '#0e1626' : '#94a3b8',
+            border: '1px solid rgba(255,255,255,0.05)',
+            fontWeight: 'bold',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            cursor: 'pointer'
+          }}
+        >
+          Logins &amp; Access
+        </button>
       </div>
+
+      {activeSubTab === 'access' && <AffiliateAccessPanel />}
 
       {activeSubTab === 'partners' ? (
       <>

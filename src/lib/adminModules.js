@@ -3,8 +3,10 @@
 import {
   SUB_USER_TAB_IDS,
   isActiveProfile,
+  isAffiliateTier,
   isSubUser,
 } from './subUserTier.mjs';
+import { AFFILIATE_TAB_IDS } from './affiliateAccess.mjs';
 
 export const ADMIN_MODULES = [
   { id: 'home', label: 'Today (Home)', title: 'Today', group: 'Overview', alwaysAvailable: true },
@@ -68,6 +70,11 @@ export const ADMIN_MODULES = [
   { id: 'whatsapp_ai', label: 'Sales WhatsApp', title: 'Sales WhatsApp', group: 'System & AI' },
   { id: 'wa_session', label: 'WhatsApp Device', title: 'WhatsApp Device', group: 'System & AI' },
   { id: 'team', label: 'Team Management', title: 'Team Management', group: 'System & AI', superadminOnly: true },
+  // Everything waiting on the owner's yes. Superadmin-only because that is who
+  // answers: order owner changes and affiliate email changes both move money
+  // or credit for it. It replaces the panel that used to sit inside Orders —
+  // one list, so an answered request cannot linger in a second place.
+  { id: 'requests', label: 'Requests', title: 'Requests', group: 'Overview', superadminOnly: true },
   // Anything a person deletes lands here first — see src/lib/recycleBin.mjs.
   // Assignable rather than superadmin-only so whoever deleted something can put
   // it back without chasing the owner. The tab shows only the modules that
@@ -90,10 +97,20 @@ export const ADMIN_MODULES = [
   // sub-user on a phone with no way back to their own earnings screen. Staff
   // never see it regardless, because resolveAdminTabAccess gates it by tier.
   { id: 'my_earnings', label: 'My Earnings', title: 'My Earnings', group: 'Overview', subUserOnly: true },
+  // The affiliate dashboard. Four screens, shown to the affiliate tier and to
+  // nobody else — staff and superadmins read the same numbers in the Affiliates
+  // tab, so there is no reason for these to be assignable to a team member.
+  { id: 'my_links', label: 'My Link & QR', title: 'My Link & QR', group: 'Overview', affiliateOnly: true },
+  { id: 'my_sales', label: 'My Orders', title: 'My Orders', group: 'Overview', affiliateOnly: true },
+  { id: 'my_payouts', label: 'My Payouts', title: 'My Payouts', group: 'Overview', affiliateOnly: true },
+  { id: 'my_account', label: 'My Details', title: 'My Details', group: 'Overview', affiliateOnly: true },
 ];
 
 export const ASSIGNABLE_ADMIN_MODULES = ADMIN_MODULES.filter(
-  (module) => !module.alwaysAvailable && !module.superadminOnly && !module.subUserOnly
+  (module) => !module.alwaysAvailable
+    && !module.superadminOnly
+    && !module.subUserOnly
+    && !module.affiliateOnly
 );
 
 export const ASSIGNABLE_ADMIN_MODULE_IDS = new Set(
@@ -128,8 +145,12 @@ export const SUB_USER_ONLY_TAB_IDS = new Set(
   ADMIN_MODULES.filter((module) => module.subUserOnly).map((module) => module.id)
 );
 
+export const AFFILIATE_ONLY_TAB_IDS = new Set(
+  ADMIN_MODULES.filter((module) => module.affiliateOnly).map((module) => module.id)
+);
+
 // Re-exported so callers have one import for tab access questions.
-export { SUB_USER_TAB_IDS };
+export { SUB_USER_TAB_IDS, AFFILIATE_TAB_IDS };
 
 export function resolveAdminTabAccess(tabId, profile) {
   if (!profile || !ADMIN_TAB_IDS.has(tabId)) return false;
@@ -148,12 +169,19 @@ export function resolveAdminTabAccess(tabId, profile) {
   // a sub-user has no invite button to find.
   if (isSubUser(profile)) return SUB_USER_TAB_IDS.has(tabId);
 
+  // Same ordering rule as sub-users, and the same reason: home, my_qr,
+  // my_team, messenger and team_chat are alwaysAvailable, so testing that
+  // first would drop an outside affiliate into the Facebook inbox and the
+  // team's internal chat.
+  if (isAffiliateTier(profile)) return AFFILIATE_TAB_IDS.has(tabId);
+
   if (ALWAYS_AVAILABLE_TAB_IDS.has(tabId)) return true;
   if (SUPERADMIN_ONLY_TAB_IDS.has(tabId)) return Boolean(profile.is_superadmin);
 
   // my_earnings is the sub-user screen; staff and superadmins read the same
   // numbers on Today/My Pay.
   if (SUB_USER_ONLY_TAB_IDS.has(tabId)) return false;
+  if (AFFILIATE_ONLY_TAB_IDS.has(tabId)) return false;
 
   if (profile.is_superadmin) return true;
 
@@ -163,6 +191,9 @@ export function resolveAdminTabAccess(tabId, profile) {
 export function getDefaultAdminTab(profile) {
   if (!profile) return 'home';
   if (isSubUser(profile)) return 'my_earnings';
+  // Never 'home' for an affiliate — they cannot reach it, and landing them on
+  // a tab they are refused would look like a broken login.
+  if (isAffiliateTier(profile)) return 'my_links';
   if (profile.is_superadmin) return 'home';
   if (Array.isArray(profile.permissions) && profile.permissions.includes('home')) return 'home';
   const firstAllowedPermission = Array.isArray(profile.permissions)

@@ -20,6 +20,16 @@
 
 export const TIER_STAFF = 'staff';
 export const TIER_SUB_USER = 'sub_user';
+/**
+ * An outside affiliate who has a login but is not on the team. Everything in
+ * the admin is refused to this tier by default — see verifyAdminSession — and
+ * the four screens they are meant to reach opt in one at a time.
+ *
+ * The tier is set by hand in the Affiliates tab, never inferred. affiliate_kind
+ * and "has a login" were both filled in by bulk updates and neither records
+ * what a person actually is, so nothing here reads them to decide access.
+ */
+export const TIER_AFFILIATE = 'affiliate';
 
 export const STATUS_PENDING = 'pending';
 export const STATUS_ACTIVE = 'active';
@@ -37,11 +47,29 @@ const norm = (value) => String(value ?? '').trim().toLowerCase();
 
 /** A row with no tier column yet is staff — see the note at the top. */
 export function profileTier(profile) {
-  return norm(profile?.tier) === TIER_SUB_USER ? TIER_SUB_USER : TIER_STAFF;
+  const tier = norm(profile?.tier);
+  if (tier === TIER_SUB_USER) return TIER_SUB_USER;
+  if (tier === TIER_AFFILIATE) return TIER_AFFILIATE;
+  return TIER_STAFF;
 }
 
 export function isSubUser(profile) {
   return profileTier(profile) === TIER_SUB_USER;
+}
+
+export function isAffiliateTier(profile) {
+  return profileTier(profile) === TIER_AFFILIATE;
+}
+
+/**
+ * Someone who works here, as opposed to an outside affiliate with a login.
+ *
+ * Used where a list of real people is being built — who can own a lead, who
+ * can be assigned a chat. Those places used to ask `!isSubUser(profile)`, which
+ * would have quietly counted an affiliate as an agent.
+ */
+export function isInternalStaff(profile) {
+  return !isAffiliateTier(profile);
 }
 
 export function isStaff(profile) {

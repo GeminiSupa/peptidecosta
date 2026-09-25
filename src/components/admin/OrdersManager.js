@@ -12,7 +12,6 @@ import {
 } from '@/lib/orderAgentFilter.mjs';
 import { AWAITING_PAYMENT_STATUSES, isAwaitingPayment } from '@/lib/orderAwaitingPayment.mjs';
 import OrderOwnerDialog from './OrderOwnerDialog';
-import OwnerRequestsPanel from './OwnerRequestsPanel';
 
 const ORDER_STATUS_OPTIONS = [
   'Pending',
@@ -345,7 +344,6 @@ export default function OrdersManager({
   // their agent, claims close once an order is paid, and any other change by
   // staff waits for a superadmin. This screen only offers the matching buttons.
   const [ownerDialog, setOwnerDialog] = useState(null);
-  const [ownerRequestsKey, setOwnerRequestsKey] = useState(0);
   const openOwnerRequest = (order) => setOwnerDialog({ order, mode: 'request', target: '' });
 
   const claimOrder = async (order) => {
@@ -372,9 +370,9 @@ export default function OrdersManager({
   const submitOwnerDialog = async ({ salesAgent, reason }) => {
     const { order, mode } = ownerDialog;
     const result = await handleOrderOwnerAction(order.id, { action: mode, salesAgent, reason });
-    if (result.ok) {
-      setOwnerRequestsKey((key) => key + 1);
-      if (mode === 'request') alert(result.message || 'Request sent. A superadmin will approve or reject it.');
+    if (result.ok && mode === 'request') {
+      // Answered in the Requests tab now, so there is no local list to refresh.
+      alert(result.message || 'Request sent. A superadmin will approve or reject it.');
     }
     return result;
   };
@@ -404,14 +402,6 @@ export default function OrdersManager({
           }
         }
       `}} />
-      {isSuperadmin && (
-        <OwnerRequestsPanel
-          orders={orders}
-          refreshKey={ownerRequestsKey}
-          onOrderUpdated={onOrderUpdated}
-          onOpenOrder={setSelectedOrderDetails}
-        />
-      )}
       <div className="admin-toolbar" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
           <h3>{isStaffAgent ? 'Team Orders' : 'Customer Orders Log Ledger'}</h3>

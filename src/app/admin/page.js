@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import SocialReviewsSettings from '@/components/admin/SocialReviewsSettings';
+import RequestsManager from '@/components/admin/RequestsManager';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { getWhatsAppMessageSource } from '@/lib/whatsappMessageLog';
 import { APPROVED_WHATSAPP_AGENT_TEMPLATES } from '@/lib/whatsappTemplates.mjs';
@@ -82,7 +83,7 @@ import {
   getDefaultAdminTab,
   resolveAdminTabAccess,
 } from '@/lib/adminModules';
-import { isSubUser } from '@/lib/subUserTier.mjs';
+import { isAffiliateTier, isSubUser } from '@/lib/subUserTier.mjs';
 import {
   DEFAULT_LANDING_PAGE_SETTINGS,
   DEFAULT_PUBLIC_PAGE_SETTINGS,
@@ -1622,6 +1623,9 @@ Core Rules:
     }
   };
 
+  // Anything waiting on a superadmin's yes — shown on the Requests tab badge.
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+
   // RBAC Profile State
   const [adminProfile, setAdminProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -1836,6 +1840,14 @@ Core Rules:
       label: 'Team',
       icon: <Shield size={iconSize} />,
     },
+    // Badged because the whole reason this tab exists is that requests buried
+    // inside Orders went unnoticed.
+    requests: {
+      label: 'Requests',
+      icon: <Bell size={iconSize} />,
+      badge: pendingRequestCount,
+      badgeTone: 'warning',
+    },
     recycle_bin: {
       label: 'Bin',
       icon: <Trash2 size={iconSize} />,
@@ -1975,9 +1987,18 @@ Core Rules:
     return () => document.body.classList.remove(cls);
   }, [activeTab]);
 
+  // An affiliate login has no business here. The API refuses them on every
+  // route regardless, so this is not the lock — it is so a partner who lands on
+  // /admin sees their own dashboard instead of an empty staff shell.
+  useEffect(() => {
+    if (!mounted || !adminProfile || profileLoading) return;
+    if (isAffiliateTier(adminProfile)) router.replace('/affiliate');
+  }, [mounted, adminProfile, profileLoading, router]);
+
   // Resolve ?tab= from URL once admin profile is loaded
   useEffect(() => {
     if (!mounted || !adminProfile || profileLoading) return;
+    if (isAffiliateTier(adminProfile)) return;
 
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
@@ -7196,6 +7217,12 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {activeTab === 'team' && (
           <div className="admin-orders-tab admin-tab-panel">
             <TeamManagement currentUserProfile={adminProfile} currentUserEmail={loggedInEmail.current} onTeamChanged={fetchAgents} />
+          </div>
+        )}
+
+        {activeTab === 'requests' && (
+          <div className="admin-orders-tab admin-tab-panel">
+            <RequestsManager onCountChange={setPendingRequestCount} />
           </div>
         )}
 
