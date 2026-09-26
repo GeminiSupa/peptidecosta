@@ -13,10 +13,12 @@ import { getPeriodLabel, recalcPayoutAmounts } from '@/lib/commissionPayouts';
 import { applyCommissionAdjustments } from '@/lib/orderRefund.mjs';
 import {
   buildPaidOrderIndex,
-  computeOverrideAmounts,
+  buildOverrideBreakdown,
   hasBeenPaid,
   overrideRateForChild,
   parentCommissionBudgetFor,
+  priceStampedOverrideOrders,
+  stampOverrideOrder,
   payableChildrenOf,
 } from '@/lib/subUserCommission.mjs';
 import { isActiveProfile, profileTier } from '@/lib/subUserTier.mjs';
@@ -258,14 +260,10 @@ export async function GET(request) {
       const parentBudgetRate = parentCommissionBudgetFor(agent);
       const children = payableChildrenOf(agent, payableProfiles);
 
-      // Broken down per person, so her statement can answer "why is my number
-      // this?" without anyone having to reopen the dashboard.
+      // Each order keeps the rate it was scored at. Approval re-reads the live
+      // order later (a refund must drop off) and prices from this stamp.
+      // Without it, every line was paid at her whole budget, normally 10%.
       const overrideOrders = [];
-      const overrideBreakdown = [];
-      let overrideSalesUsd = 0;
-      let overrideSalesCrc = 0;
-      let overrideUsd = 0;
-      let overrideCrc = 0;
 
       for (const child of children) {
         const childOrders = (orders || []).filter((order) => {
@@ -274,35 +272,13 @@ export async function GET(request) {
         });
         if (childOrders.length === 0) continue;
 
-        let childUsd = 0;
-        let childCrc = 0;
-        for (const order of childOrders) {
-          const amounts = getOrderSalesAmounts(order, currentExchangeRate);
-          childUsd += amounts.usd;
-          childCrc += amounts.crc;
-        }
-
         const childOverrideRate = overrideRateForChild(agent, child);
-        const childShare = computeOverrideAmounts({
-          usdSales: childUsd,
-          crcSales: childCrc,
-          overrideRate: childOverrideRate,
-        });
-
-        overrideOrders.push(...childOrders);
-        overrideSalesUsd += childUsd;
-        overrideSalesCrc += childCrc;
-        overrideUsd += childShare.overrideUsd;
-        overrideCrc += childShare.overrideCrc;
-        overrideBreakdown.push({
-          name: child.name || child.email,
-          ordersCount: childOrders.length,
-          salesUsd: childUsd,
-          salesCrc: childCrc,
-          overrideRate: childOverrideRate,
-          overrideUsd: childShare.overrideUsd,
-          overrideCrc: childShare.overrideCrc,
-        });
+        for (const order of childOrders) {
+          overrideOrders.push(stampOverrideOrder(order, {
+            rate: childOverrideRate,
+            name: child.name || child.email,
+          }));
+        }
       }
 
       for (const affiliate of handledAffiliates) {
@@ -314,40 +290,23 @@ export async function GET(request) {
         });
         if (affiliateOrders.length === 0) continue;
 
-        let affiliateUsd = 0;
-        let affiliateCrc = 0;
         for (const order of affiliateOrders) {
-          const amounts = getOrderSalesAmounts(order, currentExchangeRate);
-          affiliateUsd += amounts.usd;
-          affiliateCrc += amounts.crc;
+          overrideOrders.push(stampOverrideOrder(order, {
+            rate: AFFILIATE_HANDLER_COMMISSION_RATE,
+            name: affiliate.name || affiliate.email || 'Affiliate',
+            kind: 'affiliate_handler',
+          }));
         }
-
-        const handlerShare = computeOverrideAmounts({
-          usdSales: affiliateUsd,
-          crcSales: affiliateCrc,
-          overrideRate: AFFILIATE_HANDLER_COMMISSION_RATE,
-        });
-
-        overrideOrders.push(...affiliateOrders);
-        overrideSalesUsd += affiliateUsd;
-        overrideSalesCrc += affiliateCrc;
-        overrideUsd += handlerShare.overrideUsd;
-        overrideCrc += handlerShare.overrideCrc;
-        overrideBreakdown.push({
-          name: affiliate.name || affiliate.email || 'Affiliate',
-          kind: 'affiliate_handler',
-          ordersCount: affiliateOrders.length,
-          salesUsd: affiliateUsd,
-          salesCrc: affiliateCrc,
-          overrideRate: AFFILIATE_HANDLER_COMMISSION_RATE,
-          overrideUsd: handlerShare.overrideUsd,
-          overrideCrc: handlerShare.overrideCrc,
-        });
       }
 
       overrideOrders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      overrideUsd = Math.round(overrideUsd * 100) / 100;
-      overrideCrc = Math.round(overrideCrc * 100) / 100;
+      const amountFor = (order) => getOrderSalesAmounts(order, currentExchangeRate);
+      const pricedOverride = priceStampedOverrideOrders(overrideOrders, amountFor);
+      const overrideSalesUsd = pricedOverride.salesUsd;
+      const overrideSalesCrc = pricedOverride.salesCrc;
+      const overrideUsd = pricedOverride.overrideUsd;
+      const overrideCrc = pricedOverride.overrideCrc;
+      const overrideBreakdown = buildOverrideBreakdown(overrideOrders, amountFor);
 
       const commissionSummary = summarizeOrderCommissions(
         agentOrders,
@@ -493,6 +452,8 @@ export async function GET(request) {
         orders_data: reportedAgentOrders,
         // Kept separate from orders_data so approving this payout marks these
         // orders paid for THIS agent only, leaving the sub-user's own 8% intact.
+        // This column is her whole budget (normally 10%). It is not the rate
+        // to pay. Each order in override_orders_data carries its own rate.
         override_rate: parentBudgetRate,
         override_usd: overrideUsd,
         override_crc: overrideCrc,

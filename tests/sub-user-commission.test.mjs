@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildOverrideBreakdown,
   buildPaidOrderIndex,
   computeOverrideAmounts,
   hasBeenPaid,
@@ -8,7 +9,10 @@ import {
   overrideRateForChild,
   parentCommissionBudgetFor,
   payableChildrenOf,
+  priceStampedOverrideOrders,
+  reattachOverrideStamps,
   splitOrderCommission,
+  stampOverrideOrder,
   subUserRateFor,
 } from '../src/lib/subUserCommission.mjs';
 
@@ -244,6 +248,72 @@ test('a payout with unusable dates is never treated as the current period', () =
   }];
   const index = buildPaidOrderIndex(approved, { excludePeriod: WEEK });
   assert.equal(hasBeenPaid(index, 'luis@example.com', 'order-902'), true);
+});
+
+// ---------------------------------------------------------------------------
+// Approval must pay each extra cut at the rate it was scored at
+// ---------------------------------------------------------------------------
+
+const TEAM_ORDER = { id: 'luis-1000', total_usd: 1000, total_crc: 500000, sales_agent: 'Luis' };
+const AFFILIATE_ORDER = { id: 'ana-1000', total_usd: 1000, total_crc: 500000, sales_agent: 'María' };
+
+test('a team-member cut and an affiliate cut are not both paid at the 10% budget', () => {
+  const saved = [
+    stampOverrideOrder(TEAM_ORDER, { rate: 2, name: 'Luis' }),
+    stampOverrideOrder(AFFILIATE_ORDER, { rate: 5, name: 'Ana', kind: 'affiliate_handler' }),
+  ];
+
+  const priced = priceStampedOverrideOrders(saved);
+  // $20 for Luis + $50 for Ana. The old approval did 10% of the $2,000 pile.
+  assert.equal(priced.ok, true);
+  assert.equal(priced.overrideUsd, 70);
+  assert.equal(priced.overrideCrc, 35000);
+  assert.equal(computeOverrideAmounts({ usdSales: 2000, crcSales: 1000000, overrideRate: 10 }).overrideUsd, 200);
+  assert.notEqual(priced.overrideUsd, 200);
+});
+
+test('a refunded order drops off at its own rate and leaves the other line alone', () => {
+  const saved = [
+    stampOverrideOrder(TEAM_ORDER, { rate: 2, name: 'Luis' }),
+    stampOverrideOrder(AFFILIATE_ORDER, { rate: 5, name: 'Ana', kind: 'affiliate_handler' }),
+  ];
+  const stillOwed = saved.filter((order) => order.id !== 'ana-1000');
+  const priced = priceStampedOverrideOrders(stillOwed);
+  assert.equal(priced.overrideUsd, 20);
+  assert.equal(priced.salesUsd, 1000);
+});
+
+test('a fresh order from the database picks the rate back up from the saved copy', () => {
+  const saved = [stampOverrideOrder(TEAM_ORDER, { rate: 2, name: 'Luis' })];
+  const freshFromDatabase = [{ id: 'luis-1000', total_usd: 1000, total_crc: 500000, status: 'Completed' }];
+  const reattached = reattachOverrideStamps(freshFromDatabase, saved);
+  const priced = priceStampedOverrideOrders(reattached);
+  assert.equal(priced.overrideUsd, 20);
+  assert.equal(reattached[0].status, 'Completed');
+});
+
+test('an order with no saved rate is refused rather than guessed', () => {
+  const priced = priceStampedOverrideOrders([TEAM_ORDER]);
+  assert.equal(priced.ok, false);
+  assert.deepEqual(priced.missingRateOrderIds, ['luis-1000']);
+  assert.equal(priced.overrideUsd, 0);
+});
+
+test('the statement lines show 2% and 5% and add up to the amount paid', () => {
+  const saved = [
+    stampOverrideOrder(TEAM_ORDER, { rate: 2, name: 'Luis' }),
+    stampOverrideOrder(AFFILIATE_ORDER, { rate: 5, name: 'Ana', kind: 'affiliate_handler' }),
+  ];
+  const lines = buildOverrideBreakdown(saved);
+  const luis = lines.find((row) => row.name === 'Luis');
+  const ana = lines.find((row) => row.name === 'Ana');
+  assert.equal(luis.overrideRate, 2);
+  assert.equal(luis.overrideUsd, 20);
+  assert.equal(ana.overrideRate, 5);
+  assert.equal(ana.kind, 'affiliate_handler');
+  assert.equal(ana.overrideUsd, 50);
+  const lineTotal = lines.reduce((sum, row) => sum + row.overrideUsd, 0);
+  assert.equal(lineTotal, priceStampedOverrideOrders(saved).overrideUsd);
 });
 
 test('the override bucket is excluded on a rescan too, not just direct orders', () => {

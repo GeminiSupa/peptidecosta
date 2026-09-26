@@ -9,7 +9,11 @@ import {
   isCommissionEligibleOrder,
 } from '@/lib/agentOrders';
 import { formatPayoutPeriod, recalcPayoutAmounts } from '@/lib/commissionPayouts';
-import { buildOverrideBreakdown, computeOverrideAmounts } from '@/lib/subUserCommission.mjs';
+import {
+  buildOverrideBreakdown,
+  priceStampedOverrideOrders,
+  reattachOverrideStamps,
+} from '@/lib/subUserCommission.mjs';
 import { SUB_USER_PAYOUT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { buildAgentCommissionEmail } from '@/lib/commissionEmail';
 import {
@@ -127,9 +131,12 @@ export async function POST(request) {
       commissionSourceLabel
     ));
 
-    // The 2% override on sub-users' orders gets the same treatment as her own
-    // sales: re-check eligibility at approval time so an order that slipped back
-    // to pending since the scan is not paid on.
+    // Re-check eligibility at approval time so an order that slipped back to
+    // pending, or was refunded, since the scan is not paid on. The live order
+    // does not carry the rate, so copy it back from the saved snapshot. Each
+    // line keeps its own rate (2% for a team member, 5% for an affiliate she
+    // handles). payout.override_rate is her whole budget, normally 10%, and
+    // must not be used here.
     const savedOverrideOrders = Array.isArray(payout.override_orders_data)
       ? payout.override_orders_data
       : [];
@@ -151,18 +158,17 @@ export async function POST(request) {
       }
     }
 
-    let overrideSalesUsd = 0;
-    let overrideSalesCrc = 0;
-    for (const order of eligibleOverrideOrders) {
-      const amounts = getOrderSalesAmounts(order, currentExchangeRate);
-      overrideSalesUsd += amounts.usd;
-      overrideSalesCrc += amounts.crc;
+    eligibleOverrideOrders = reattachOverrideStamps(eligibleOverrideOrders, savedOverrideOrders);
+    const amountFor = (order) => getOrderSalesAmounts(order, currentExchangeRate);
+    const pricedOverride = priceStampedOverrideOrders(eligibleOverrideOrders, amountFor);
+    if (!pricedOverride.ok) {
+      return NextResponse.json({
+        error: 'This payout was saved before each team and affiliate cut kept its own rate. Run the weekly commission report again, then approve.',
+      }, { status: 409 });
     }
-    const { overrideUsd, overrideCrc } = computeOverrideAmounts({
-      usdSales: overrideSalesUsd,
-      crcSales: overrideSalesCrc,
-      overrideRate: payout.override_rate,
-    });
+    const overrideSalesUsd = pricedOverride.salesUsd;
+    const overrideSalesCrc = pricedOverride.salesCrc;
+    const { overrideUsd, overrideCrc } = pricedOverride;
 
     const recalculated = recalcPayoutAmounts({
       usdSales,
@@ -190,14 +196,9 @@ export async function POST(request) {
       totalPayoutUsd: recalculated.total_payout_usd,
       totalPayoutCrc: recalculated.total_payout_crc,
       orders: reportedOrders,
-      overrideRate: payout.override_rate,
       overrideUsd,
       overrideCrc,
-      overrideBreakdown: buildOverrideBreakdown(
-        eligibleOverrideOrders,
-        payout.override_rate,
-        (order) => getOrderSalesAmounts(order, currentExchangeRate)
-      ),
+      overrideBreakdown: buildOverrideBreakdown(eligibleOverrideOrders, amountFor),
     });
 
     // 3. Handle Approval & Outbound Email

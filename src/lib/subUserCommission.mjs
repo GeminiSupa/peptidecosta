@@ -88,6 +88,94 @@ export function computeOverrideAmounts({ usdSales = 0, crcSales = 0, overrideRat
 }
 
 /**
+ * The rate this extra cut was scored at, kept on the payout's copy of the
+ * order. Approval re-reads the live order (a refund must drop off) and would
+ * otherwise lose the rate. A sub-user line is usually 2%. An affiliate the
+ * staff member handles is 5%. Those are not the same number.
+ */
+export function stampOverrideOrder(order, { rate, name, kind } = {}) {
+  const parsed = Number(rate);
+  return {
+    ...order,
+    commission_override_rate: Number.isFinite(parsed) ? parsed : null,
+    commission_override_name: name || null,
+    commission_override_kind: kind || null,
+  };
+}
+
+export function readOverrideStamp(order) {
+  const rate = Number(order?.commission_override_rate);
+  if (!Number.isFinite(rate) || rate < 0) return null;
+  return {
+    rate,
+    name: order.commission_override_name || null,
+    kind: order.commission_override_kind || null,
+  };
+}
+
+/** Copy the saved rate onto a freshly loaded order. The live row does not have it. */
+export function reattachOverrideStamps(freshOrders, savedOrders) {
+  const savedById = new Map();
+  for (const saved of savedOrders || []) {
+    if (saved?.id) savedById.set(saved.id, saved);
+  }
+  return (freshOrders || []).map((order) => {
+    const stamp = readOverrideStamp(savedById.get(order?.id));
+    if (!stamp) return order;
+    return stampOverrideOrder(order, stamp);
+  });
+}
+
+const resolveOverrideAmounts = (getAmounts) => (
+  typeof getAmounts === 'function'
+    ? getAmounts
+    : (order) => ({ usd: num(order?.total_usd), crc: num(order?.total_crc) })
+);
+
+/**
+ * Price each order at the rate stored on it, then add. One rate for the whole
+ * list is how a 2% line and a 5% line both got paid at 10%.
+ * `ok` is false when any order has no rate — those must not be guessed.
+ */
+export function priceStampedOverrideOrders(orders, getAmounts) {
+  const resolve = resolveOverrideAmounts(getAmounts);
+  let overrideUsd = 0;
+  let overrideCrc = 0;
+  let salesUsd = 0;
+  let salesCrc = 0;
+  const missingRateOrderIds = [];
+
+  for (const order of orders || []) {
+    const stamp = readOverrideStamp(order);
+    if (!stamp) {
+      missingRateOrderIds.push(order?.id || null);
+      continue;
+    }
+    const amounts = resolve(order) || {};
+    const usd = num(amounts.usd);
+    const crc = num(amounts.crc);
+    salesUsd += usd;
+    salesCrc += crc;
+    const share = computeOverrideAmounts({
+      usdSales: usd,
+      crcSales: crc,
+      overrideRate: stamp.rate,
+    });
+    overrideUsd += share.overrideUsd;
+    overrideCrc += share.overrideCrc;
+  }
+
+  return {
+    ok: missingRateOrderIds.length === 0,
+    missingRateOrderIds,
+    overrideUsd: round2(overrideUsd),
+    overrideCrc: round2(overrideCrc),
+    salesUsd: round2(salesUsd),
+    salesCrc: round2(salesCrc),
+  };
+}
+
+/**
  * The sub-users a staff member currently earns an override on. Pending and
  * suspended children are excluded, which is what makes approval the gate on
  * money rather than merely on login.
@@ -171,37 +259,56 @@ export function hasBeenPaid(index, agentEmail, orderId) {
 }
 
 /**
- * Group a flat list of sub-user orders by who brought them in, so a statement
- * can show "Luis · 7 orders · you earned $38.80" instead of one lump sum.
+ * Group the extra-cut orders by person, so a statement can show
+ * "Luis · 7 orders · 2% · you earned $20" instead of one lump sum.
+ * Each order is priced at its own saved rate. Lines are not averaged.
  *
  * `getAmounts` is injected rather than imported because resolving an order to
  * USD/CRC needs the live exchange rate, which lives behind an aliased import
  * this module deliberately avoids.
  */
-export function buildOverrideBreakdown(orders = [], overrideRate = DEFAULT_OVERRIDE_RATE, getAmounts) {
-  const resolve = typeof getAmounts === 'function'
-    ? getAmounts
-    : (order) => ({ usd: num(order?.total_usd), crc: num(order?.total_crc) });
-
+export function buildOverrideBreakdown(orders = [], getAmounts) {
+  const resolve = resolveOverrideAmounts(getAmounts);
   const byPerson = new Map();
+
   for (const order of orders || []) {
-    const name = String(order?.sales_agent || '').trim() || 'Sub-user';
+    const stamp = readOverrideStamp(order);
+    if (!stamp) continue;
+    const name = stamp.name || String(order?.sales_agent || '').trim() || 'Sub-user';
+    const key = `${stamp.kind || ''}::${name}::${stamp.rate}`;
     const amounts = resolve(order) || {};
-    const row = byPerson.get(name) || { name, ordersCount: 0, salesUsd: 0, salesCrc: 0 };
+    const usd = num(amounts.usd);
+    const crc = num(amounts.crc);
+    const share = computeOverrideAmounts({
+      usdSales: usd,
+      crcSales: crc,
+      overrideRate: stamp.rate,
+    });
+    const row = byPerson.get(key) || {
+      name,
+      kind: stamp.kind,
+      overrideRate: stamp.rate,
+      ordersCount: 0,
+      salesUsd: 0,
+      salesCrc: 0,
+      overrideUsd: 0,
+      overrideCrc: 0,
+    };
     row.ordersCount += 1;
-    row.salesUsd += num(amounts.usd);
-    row.salesCrc += num(amounts.crc);
-    byPerson.set(name, row);
+    row.salesUsd += usd;
+    row.salesCrc += crc;
+    row.overrideUsd += share.overrideUsd;
+    row.overrideCrc += share.overrideCrc;
+    byPerson.set(key, row);
   }
 
   return [...byPerson.values()]
-    .map((row) => {
-      const share = computeOverrideAmounts({
-        usdSales: row.salesUsd,
-        crcSales: row.salesCrc,
-        overrideRate,
-      });
-      return { ...row, overrideUsd: share.overrideUsd, overrideCrc: share.overrideCrc };
-    })
+    .map((row) => ({
+      ...row,
+      salesUsd: round2(row.salesUsd),
+      salesCrc: round2(row.salesCrc),
+      overrideUsd: round2(row.overrideUsd),
+      overrideCrc: round2(row.overrideCrc),
+    }))
     .sort((a, b) => b.overrideUsd - a.overrideUsd);
 }
