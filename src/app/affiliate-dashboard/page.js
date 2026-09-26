@@ -19,6 +19,7 @@ import QRCode from 'qrcode';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { adminFetch } from '@/lib/adminApi';
 import { formatCrDate } from '@/lib/crTime.mjs';
+import { Eye, EyeOff } from 'lucide-react';
 
 const TABS = [
   { id: 'my_links', label: 'My Link & QR' },
@@ -585,28 +586,31 @@ function SignIn({ onDone }) {
         <label style={label}>Email</label>
         <input style={input} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <label style={{ ...label, marginTop: 12 }}>Password</label>
+        <label style={{ ...label, marginTop: 12 }}>Password</label>
+        <div style={{ position: 'relative' }}>
+          <input
+            style={{ ...input, paddingRight: 44 }}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
           <button
             type="button"
             onClick={() => setShowPassword((on) => !on)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            title={showPassword ? 'Hide password' : 'Show password'}
             style={{
-              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-              color: COLORS.muted, fontSize: '0.72rem', letterSpacing: 0.5,
-              textTransform: 'uppercase', fontWeight: 700,
+              position: 'absolute', top: 0, bottom: 0, right: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, background: 'none', border: 'none', padding: 0,
+              cursor: 'pointer', color: COLORS.muted,
             }}
           >
-            {showPassword ? 'Hide' : 'Show'}
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
-        <input
-          style={input}
-          type={showPassword ? 'text' : 'password'}
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
 
         {error && <p style={{ color: COLORS.bad, fontSize: '0.85rem', marginTop: 10 }}>{error}</p>}
 

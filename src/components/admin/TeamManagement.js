@@ -8,6 +8,7 @@ import { formatPayoutPeriod, getOrderCount, recalcPayoutAmounts } from '@/lib/co
 import { getOrderSalesAmounts, isCommissionEligibleOrder, orderBelongsToAgent } from '@/lib/agentOrders';
 import { ADMIN_MODULE_LABELS, ASSIGNABLE_ADMIN_MODULE_IDS, ASSIGNABLE_ADMIN_MODULES } from '@/lib/adminModules';
 import { payoutMatchesPeriod } from '@/lib/commissionScan.mjs';
+import { isAffiliateTier } from '@/lib/subUserTier.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
 
 /**
@@ -346,7 +347,12 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
     setLoading(true);
     try {
       const { data, error } = await supabase.from('admin_profiles').select('*').order('created_at', { ascending: false });
-      if (data) setUsers(data);
+      // Partner logins are not team members. They were showing up here as
+      // "Staff" on 0% while their dashboard showed their real 20% — the rate
+      // lives on the affiliates row, not on this one, so this screen can only
+      // ever print a wrong number for them. They are managed in Affiliates →
+      // Logins & Access, which knows about both halves.
+      if (data) setUsers(data.filter((row) => !isAffiliateTier(row)));
     } catch (err) {
       console.error(err);
     }
@@ -956,6 +962,9 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
         <div>
           <h2 className="admin-section-title" style={{ fontSize: '1.5rem' }}>Team Management</h2>
           <p className="admin-page-subtitle">Manage admin users, commission rates, and payouts.</p>
+          <p className="admin-page-subtitle" style={{ fontSize: '0.8rem', opacity: 0.75 }}>
+            Partner logins are not listed here — they live in Affiliates, under Logins &amp; Access.
+          </p>
         </div>
         {activeSubTab === 'members' ? (
           <button className="admin-btn admin-btn-primary" onClick={() => handleOpenModal()} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
