@@ -386,6 +386,11 @@ export default function CatalogPage() {
   // at once rather than one tall row each. Anyone who picks list keeps it.
   const [viewMode, setViewMode] = useState('grid'); // 'list', 'grid'
 
+  // Checkout runs one step at a time: 1 is the cart, 2 is who you are and
+  // where it goes. Both steps stay in the DOM — the hidden one is only hidden,
+  // so nothing about the form, its autosave or its validation changes.
+  const [checkoutStep, setCheckoutStep] = useState(1);
+
   // How many vials the product page will add. It is not the cart quantity —
   // the cart still owns that — just what the Add to cart button sends.
   const [detailQty, setDetailQty] = useState(1);
@@ -2148,6 +2153,16 @@ export default function CatalogPage() {
       }
     }
   };
+
+  // Every visit to the drawer starts at the cart, and emptying it drops back
+  // there too — step 2 with nothing to buy is a dead end.
+  useEffect(() => {
+    if (isCartOpen) setCheckoutStep(1);
+  }, [isCartOpen]);
+
+  useEffect(() => {
+    if (!cart.length) setCheckoutStep(1);
+  }, [cart.length]);
 
   // A product is a page: it gets its own URL, so it can be shared, linked to
   // and counted, and the quantity resets each time a new one opens.
@@ -4908,13 +4923,27 @@ export default function CatalogPage() {
       ></div>
 
       {/* Cart Drawer */}
-      <div className={`cart-drawer ${isCartOpen ? 'active' : ''}`}>
+      <div className={`cart-drawer ${isCartOpen ? 'active' : ''} checkout-step-${checkoutStep}`}>
         <div className="cart-header">
-          <h2>{lang === 'en' ? 'Shopping Cart' : 'Carrito de Compras'}</h2>
+          <h2>
+            {checkoutStep === 1
+              ? (lang === 'en' ? 'Shopping Cart' : 'Carrito de Compras')
+              : (lang === 'en' ? 'Your details' : 'Tus datos')}
+          </h2>
           <button className="cart-close-btn" onClick={() => setIsCartOpen(false)}>
             <X size={24} />
           </button>
         </div>
+
+        {/* Where the shopper is, and how far there is to go. */}
+        <ol className="checkout-steps" aria-label={lang === 'en' ? 'Checkout steps' : 'Pasos del pedido'}>
+          <li className={checkoutStep === 1 ? 'is-current' : 'is-done'}>
+            <span>1</span>{lang === 'en' ? 'Cart' : 'Carrito'}
+          </li>
+          <li className={checkoutStep === 2 ? 'is-current' : ''}>
+            <span>2</span>{lang === 'en' ? 'Your details' : 'Tus datos'}
+          </li>
+        </ol>
 
         <div className="cart-body">
           <div className="cart-items-container">
@@ -5181,6 +5210,34 @@ export default function CatalogPage() {
                 </div>
               )}
             </div>}
+
+            {/* End of step 1. The cart never used to show a total at all —
+                the only number was on the submit button, two screens of form
+                away. This is the same renderOrderSummary the form uses, so
+                there is one set of arithmetic, not two. */}
+            {cart.length > 0 && (
+              <div className="checkout-step1-footer">
+                {renderOrderSummary({ showHeading: true, compact: true })}
+                <button
+                  type="button"
+                  className="whatsapp-btn checkout-continue-btn"
+                  onClick={() => setCheckoutStep(2)}
+                >
+                  {lang === 'en' ? 'Continue to details' : 'Continuar con tus datos'}
+                </button>
+              </div>
+            )}
+
+            {cart.length > 0 && (
+              <button
+                type="button"
+                className="checkout-back-btn"
+                onClick={() => setCheckoutStep(1)}
+              >
+                <ArrowLeft size={16} />
+                {lang === 'en' ? 'Back to cart' : 'Volver al carrito'}
+              </button>
+            )}
 
             {/* The research-use gate. Our card processor's bank requires that
                 nobody reaches a payment form without passing this first, so the

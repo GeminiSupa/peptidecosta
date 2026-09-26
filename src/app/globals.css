@@ -7931,3 +7931,96 @@ body:has(.product-grid.grid-view) {
         grid-column: 1 / -1;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Checkout, one step at a time (CRO review, step 5)
+
+   The drawer showed everything at once: items, suggestions, discounts, the
+   research gate, name, email, phone, ID, a five-field address and the submit
+   button, in one scroll. Step 1 is now the cart and its total; step 2 is who
+   you are and where it goes.
+
+   Both steps stay in the DOM and only their visibility changes, so the form's
+   autosave, validation and submit behave exactly as they did.
+--------------------------------------------------------------------------- */
+.cart-drawer.checkout-step-2 .cart-items-container,
+.cart-drawer.checkout-step-2 .cart-suggestions,
+.cart-drawer.checkout-step-2 .checkout-step1-footer {
+    display: none;
+}
+
+.cart-drawer.checkout-step-1 .research-ack-gate,
+.cart-drawer.checkout-step-1 .checkout-form,
+.cart-drawer.checkout-step-1 .checkout-back-btn {
+    display: none;
+}
+
+.checkout-steps {
+    display: flex;
+    gap: 8px;
+    margin: 0;
+    padding: 10px 18px 0;
+    list-style: none;
+}
+
+.checkout-steps li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    padding-top: 8px;
+    border-top: 3px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.checkout-steps li span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    font-size: 0.66rem;
+}
+
+.checkout-steps li.is-current,
+.checkout-steps li.is-done {
+    border-top-color: var(--cta);
+    color: var(--text-main);
+}
+
+.checkout-steps li.is-current span,
+.checkout-steps li.is-done span {
+    background: var(--cta);
+    color: #fff;
+}
+
+.checkout-step1-footer {
+    margin-top: 10px;
+}
+
+.checkout-continue-btn {
+    width: 100%;
+    margin-top: 10px;
+}
+
+.checkout-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checkout-back-btn:hover {
+    color: var(--text-main);
+}
