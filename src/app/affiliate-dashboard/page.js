@@ -580,8 +580,19 @@ function SignIn({ onDone }) {
   return (
     <Shell>
       <form onSubmit={submit} style={{ ...panel, maxWidth: 380, margin: '8vh auto' }}>
-        <h1 style={{ margin: '0 0 4px', fontSize: '1.2rem' }}>Affiliate sign in</h1>
-        <p style={{ ...muted, marginTop: 0 }}>Your link, your orders and your payouts.</p>
+        {/* Same logo the admin login shows, so a partner can see at a glance
+            whose door they are standing at. */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo.png"
+            alt="Peptides Costa Rica"
+            style={{ maxHeight: 60, width: 'auto', objectFit: 'contain', borderRadius: 12, boxShadow: '0 2px 16px rgba(0,0,0,0.25)' }}
+          />
+        </div>
+
+        <h1 style={{ margin: '0 0 4px', fontSize: '1.2rem', textAlign: 'center' }}>Affiliate sign in</h1>
+        <p style={{ ...muted, marginTop: 0, textAlign: 'center' }}>Your link, your orders and your payouts.</p>
 
         <label style={label}>Email</label>
         <input style={input} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
