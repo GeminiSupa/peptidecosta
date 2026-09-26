@@ -4064,10 +4064,16 @@
     .clone-affiliate-btn:active { transform: none; }
 }
 
+/* Scoped to the hero, because `.clone-affiliate-hero p` already sets a margin,
+   a size and a max-width for every paragraph in there — an unscoped rule loses
+   to it and the line ends up sitting flush against the buttons. */
+.clone-affiliate-hero .clone-affiliate-signin,
 .clone-affiliate-signin {
-    margin: 16px 0 0;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.75);
+    max-width: none;
+    margin: 20px 0 0;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.6);
 }
 
 /* The hero styles every anchor inside it as a button, so this plain sentence
@@ -4087,6 +4093,10 @@
     font-weight: 700;
     text-decoration: underline;
     text-underline-offset: 3px;
+}
+
+.clone-affiliate-signin a:hover {
+    color: var(--accent);
 }
 
 /* The Let's Talk button sits centred in its own panel. */
