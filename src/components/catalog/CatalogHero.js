@@ -126,7 +126,7 @@ export default function CatalogHero({ lang = 'es', links = {}, trustpilotRating 
                 )}
                 <span><b>{String(countdown.hours).padStart(2, '0')}</b><em>{en ? 'hrs' : 'hrs'}</em></span>
                 <span><b>{String(countdown.minutes).padStart(2, '0')}</b><em>min</em></span>
-                <span><b>{String(countdown.seconds).padStart(2, '0')}</b><em>seg</em></span>
+                <span><b>{String(countdown.seconds).padStart(2, '0')}</b><em>{en ? 'sec' : 'seg'}</em></span>
               </span>
             )}
           </div>

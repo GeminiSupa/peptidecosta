@@ -7148,9 +7148,19 @@ body:has(.product-grid.grid-view) {
     }
 
     .catalog-press-band .press-band-logo {
-        height: 17px;
-        max-width: 58px;
+        height: 19px;
+        max-width: 64px;
         object-fit: contain;
+    }
+
+    .catalog-press-band .press-band-wordmark {
+        font-size: 0.79rem;
+    }
+
+    /* Dark mode chips the logo with its own padding. Keep that padding short
+       here so a slightly larger logo still fits the existing bar. */
+    [data-theme="dark"] .catalog-press-band .press-band-logo {
+        padding: 1px 6px;
     }
 
     .catalog-press-band .press-band-quote {

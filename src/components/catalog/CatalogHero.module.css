@@ -185,6 +185,23 @@
   color: #15803d;
 }
 
+/* The four lines sit outside the card, on the page. In dark mode that left
+   them on the light surface. Give them the same dark surface as the card. */
+:global([data-theme="dark"]) .benefits {
+  background: #0e1626;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+:global([data-theme="dark"]) .benefit {
+  color: #cbd5e1;
+}
+
+:global([data-theme="dark"]) .benefit svg {
+  color: #4ade80;
+}
+
 @media (max-width: 760px) {
   .card {
     grid-template-columns: minmax(0, 1fr);
