@@ -25,6 +25,15 @@ const EMPTY_PROMO = {
  * Caught here so the admin sees it while typing, rather than a customer
  * discovering it at checkout.
  */
+/**
+ * Dropdown rows were near-black text with no background of their own. On a
+ * dark browser theme the list painted black on black, so the affiliate names
+ * under "General Code (no affiliate)" were invisible — the list looked empty
+ * and the only readable row was whichever one the browser highlighted.
+ * Colour and background together, so the row reads the same everywhere.
+ */
+const optionStyle = { color: '#f8fafc', background: '#0e1626' };
+
 const unitRangeError = (promo) => {
   const min = Number(promo?.min_units) > 0 ? Math.floor(Number(promo.min_units)) : 0;
   const max = Number(promo?.max_units) > 0 ? Math.floor(Number(promo.max_units)) : 0;
@@ -523,9 +532,9 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
                   onChange={e => setNewAffiliate({ ...newAffiliate, handling_agent_id: e.target.value })}
                   style={{ ...inputStyle, color: newAffiliate.handling_agent_id ? '#f8fafc' : '#94a3b8' }}
                 >
-                  <option value="" style={{ color: '#0f172a' }}>No main agent yet</option>
+                  <option value="" style={optionStyle}>No main agent yet</option>
                   {handlingAgents.map(agent => (
-                    <option key={agent.user_id} value={agent.user_id} style={{ color: '#0f172a' }}>
+                    <option key={agent.user_id} value={agent.user_id} style={optionStyle}>
                       {agent.name || agent.email}
                     </option>
                   ))}
@@ -636,8 +645,8 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
                 <div className="admin-form-grid-2">
                   <input required placeholder="Code (e.g. SMITH10)" value={newPromo.code} onChange={e => setNewPromo({...newPromo, code: e.target.value.toUpperCase()})} style={{...inputStyle, textTransform: 'uppercase'}} />
                   <select value={newPromo.affiliate_id} onChange={e => setNewPromo({...newPromo, affiliate_id: e.target.value})} style={{...inputStyle, color: newPromo.affiliate_id ? '#f8fafc' : '#94a3b8'}}>
-                    <option value="" style={{color: '#0f172a'}}>General Code (no affiliate)</option>
-                    {affiliates.map(a => <option key={a.id} value={a.id} style={{color: '#0f172a'}}>{a.name}</option>)}
+                    <option value="" style={optionStyle}>General Code (no affiliate)</option>
+                    {affiliates.map(a => <option key={a.id} value={a.id} style={optionStyle}>{a.name}</option>)}
                   </select>
                   <select value={newPromo.discount_pct} onChange={e => setNewPromo({...newPromo, discount_pct: parseFloat(e.target.value)})} style={inputStyle}>
                     <option value={0.05}>5% Customer Discount</option>
@@ -1106,9 +1115,9 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
                   onChange={e => setEditingAffiliate({ ...editingAffiliate, handling_agent_id: e.target.value })}
                   style={{ ...inputStyle, color: editingAffiliate.handling_agent_id ? '#f8fafc' : '#94a3b8' }}
                 >
-                  <option value="" style={{ color: '#0f172a' }}>No main agent yet</option>
+                  <option value="" style={optionStyle}>No main agent yet</option>
                   {handlingAgents.map(agent => (
-                    <option key={agent.user_id} value={agent.user_id} style={{ color: '#0f172a' }}>
+                    <option key={agent.user_id} value={agent.user_id} style={optionStyle}>
                       {agent.name || agent.email}
                     </option>
                   ))}
