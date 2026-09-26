@@ -23,6 +23,15 @@ import { supabase } from '@/lib/supabase';
 import { formatCrDate } from '@/lib/crTime.mjs';
 import { CUSTOMER_SEGMENTS, getCustomerSegments } from '@/lib/customerSegmentation.mjs';
 
+/**
+ * A dropdown row has to carry BOTH its colour and its background. With only
+ * one of the two, the browser picks the other from its own theme, and a dark
+ * theme paints dark on dark: the list reads as empty apart from the row the
+ * browser highlights. That is what hid every affiliate name behind "General
+ * Code (no affiliate)".
+ */
+const optionStyle = { color: '#f8fafc', background: '#0f172a' };
+
 const takeCustomerHandoffSearch = () => {
   if (typeof window === 'undefined') return '';
   try {
@@ -1492,10 +1501,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
               onChange={(e) => { setAgentFilter(e.target.value); setCurrentPage(1); }}
               style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
             >
-              <option value="all" style={{background: '#0f172a'}}>All Agents</option>
-              <option value="unassigned" style={{background: '#0f172a'}}>Unassigned</option>
+              <option value="all" style={optionStyle}>All Agents</option>
+              <option value="unassigned" style={optionStyle}>Unassigned</option>
               {uniqueAgents.map(agent => (
-                <option key={agent} value={agent} style={{background: '#0f172a'}}>{agent}</option>
+                <option key={agent} value={agent} style={optionStyle}>{agent}</option>
               ))}
             </select>
           </div>
@@ -1506,17 +1515,17 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
             onChange={(e) => setSortField(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
           >
-            <option value="date" style={{background: '#0f172a'}}>Sort by Date</option>
-            <option value="ltv" style={{background: '#0f172a'}}>Sort by Value</option>
-            <option value="orders" style={{background: '#0f172a'}}>Sort by Orders</option>
+            <option value="date" style={optionStyle}>Sort by Date</option>
+            <option value="ltv" style={optionStyle}>Sort by Value</option>
+            <option value="orders" style={optionStyle}>Sort by Orders</option>
           </select>
           <select 
             value={sortDir} 
             onChange={(e) => setSortDir(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
           >
-            <option value="desc" style={{background: '#0f172a'}}>Desc</option>
-            <option value="asc" style={{background: '#0f172a'}}>Asc</option>
+            <option value="desc" style={optionStyle}>Desc</option>
+            <option value="asc" style={optionStyle}>Asc</option>
           </select>
           </div>
         </div>

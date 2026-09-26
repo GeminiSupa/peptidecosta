@@ -20,6 +20,15 @@ import {
 import { formatCrDate } from '@/lib/crTime.mjs';
 import { isAdLandingLead } from '@/lib/adLandingLeads.mjs';
 
+/**
+ * A dropdown row has to carry BOTH its colour and its background. With only
+ * one of the two, the browser picks the other from its own theme, and a dark
+ * theme paints dark on dark: the list reads as empty apart from the row the
+ * browser highlights. That is what hid every affiliate name behind "General
+ * Code (no affiliate)".
+ */
+const optionStyle = { color: '#f8fafc', background: '#0f172a' };
+
 // isAdLandingLead covers /glp-1 (glp1_lp) too; matching on "adwords" alone
 // left every /glp-1 lead out of the Google Ads filter and its alert status.
 const isGoogleAdsLead = (lead) => {
@@ -1073,8 +1082,8 @@ export default function LeadsManager({
             onChange={(e) => setSortDir(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
           >
-            <option value="desc" style={{background: '#0f172a'}}>Newest First</option>
-            <option value="asc" style={{background: '#0f172a'}}>Oldest First</option>
+            <option value="desc" style={optionStyle}>Newest First</option>
+            <option value="asc" style={optionStyle}>Oldest First</option>
           </select>
         </div>
         <div className="admin-view-toggle" aria-label="Leads view mode">

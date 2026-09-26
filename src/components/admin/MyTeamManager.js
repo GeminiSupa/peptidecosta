@@ -7,6 +7,15 @@ import {
 import { adminFetch } from '@/lib/adminApi';
 
 /**
+ * A dropdown row has to carry BOTH its colour and its background. With only
+ * one of the two, the browser picks the other from its own theme, and a dark
+ * theme paints dark on dark: the list reads as empty apart from the row the
+ * browser highlights. That is what hid every affiliate name behind "General
+ * Code (no affiliate)".
+ */
+const optionStyle = { color: '#f8fafc', background: '#0f172a' };
+
+/**
  * My Team — the sub-user tier.
  *
  * Two audiences, one screen:
@@ -531,9 +540,9 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                             background: '#0c141f', border: '1px solid rgba(255,255,255,0.1)', color: '#e7edf5',
                           }}
                         >
-                          <option value="">Choose a staff member…</option>
+                          <option value="" style={optionStyle}>Choose a staff member…</option>
                           {moveOptions(person).map((member) => (
-                            <option key={member.user_id} value={member.user_id} style={{ color: '#0f172a' }}>
+                            <option key={member.user_id} value={member.user_id} style={optionStyle}>
                               {member.name || member.email}
                             </option>
                           ))}
@@ -680,9 +689,9 @@ export default function MyTeamManager({ currentUserProfile, onTeamChanged }) {
                     id="su-parent" required value={formParent} onChange={(e) => setFormParent(e.target.value)}
                     style={{ padding: '11px 12px', borderRadius: 9, fontSize: '0.95rem', background: '#0c141f', border: '1px solid rgba(255,255,255,0.1)', color: '#e7edf5' }}
                   >
-                    <option value="">Choose a staff member…</option>
+                    <option value="" style={optionStyle}>Choose a staff member…</option>
                     {data.staff.map((member) => (
-                      <option key={member.user_id} value={member.user_id} style={{ color: '#0f172a' }}>
+                      <option key={member.user_id} value={member.user_id} style={optionStyle}>
                         {member.name || member.email}
                       </option>
                     ))}

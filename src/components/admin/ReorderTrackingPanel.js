@@ -13,6 +13,15 @@ import {
   buildReorderFollowupScript,
 } from '@/lib/reorderTracking.mjs';
 
+/**
+ * A dropdown row has to carry BOTH its colour and its background. With only
+ * one of the two, the browser picks the other from its own theme, and a dark
+ * theme paints dark on dark: the list reads as empty apart from the row the
+ * browser highlights. That is what hid every affiliate name behind "General
+ * Code (no affiliate)".
+ */
+const optionStyle = { color: '#f8fafc', background: '#0f172a' };
+
 export default function ReorderTrackingPanel({
   orders = [],
   onOpenCustomerProfile,
@@ -301,18 +310,18 @@ export default function ReorderTrackingPanel({
             onChange={(e) => setSortField(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
           >
-            <option value="overdue" style={{ background: '#0f172a' }}>Sort by Urgency</option>
-            <option value="date" style={{ background: '#0f172a' }}>Sort by Last Order Date</option>
-            <option value="interval" style={{ background: '#0f172a' }}>Sort by Cycle Interval</option>
-            <option value="qty" style={{ background: '#0f172a' }}>Sort by Order Qty</option>
+            <option value="overdue" style={optionStyle}>Sort by Urgency</option>
+            <option value="date" style={optionStyle}>Sort by Last Order Date</option>
+            <option value="interval" style={optionStyle}>Sort by Cycle Interval</option>
+            <option value="qty" style={optionStyle}>Sort by Order Qty</option>
           </select>
           <select
             value={sortDir}
             onChange={(e) => setSortDir(e.target.value)}
             style={{ background: 'transparent', border: 'none', color: '#cbd5e1', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
           >
-            <option value="desc" style={{ background: '#0f172a' }}>Desc</option>
-            <option value="asc" style={{ background: '#0f172a' }}>Asc</option>
+            <option value="desc" style={optionStyle}>Desc</option>
+            <option value="asc" style={optionStyle}>Asc</option>
           </select>
         </div>
       </div>
