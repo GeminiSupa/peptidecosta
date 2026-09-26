@@ -288,7 +288,11 @@ function LinksTab({ me, qr }) {
         ) : active.map((code) => (
           <div key={code.code} style={{ marginBottom: 10 }}>
             <strong style={{ fontSize: '1.1rem', letterSpacing: 1 }}>{code.code}</strong>
-            <span style={{ ...muted, marginLeft: 8 }}>{Number(code.discount_pct || 0)}% off for your customer</span>
+            {/* discount_pct is stored as a fraction (0.05 = 5%), matching the
+                promo_codes default. Printed raw it reads "0.05% off". */}
+            <span style={{ ...muted, marginLeft: 8 }}>
+              {Math.round(Number(code.discount_pct || 0) * 100)}% off for your customer
+            </span>
           </div>
         ))}
       </div>
