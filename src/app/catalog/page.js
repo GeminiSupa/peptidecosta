@@ -364,6 +364,8 @@ export default function CatalogPage() {
   const resultsRef = useRef(null);
   const categoryScrollRef = useRef(null);
   const suggestionsScrollRef = useRef(null);
+  const [catalogScrollY, setCatalogScrollY] = useState(null);
+  const productWasOpenRef = useRef(false);
   const autoPromoAppliedRef = useRef(false);
   // The cart a promo code was last tried against. A code waiting for a
   // product is retried when the cart changes, and without this it would be
@@ -2129,6 +2131,9 @@ export default function CatalogPage() {
   };
 
   const handleProductClick = async (product) => {
+    if (!selectedProduct && typeof window !== 'undefined') {
+      setCatalogScrollY(window.scrollY);
+    }
     setSelectedProduct(product);
     
     // Silently track behavioral product view
@@ -2172,6 +2177,8 @@ export default function CatalogPage() {
 
     const url = new URL(window.location.href);
     const current = url.searchParams.get('product');
+    const wasOpen = productWasOpenRef.current;
+    productWasOpenRef.current = Boolean(selectedProduct);
     if (selectedProduct) {
       if (current === selectedProduct.product) return;
       url.searchParams.set('product', selectedProduct.product);
@@ -2183,9 +2190,20 @@ export default function CatalogPage() {
       } else {
         window.history.pushState({ productPage: selectedProduct.product }, '', url);
       }
-    } else if (current) {
-      url.searchParams.delete('product');
-      window.history.replaceState({}, '', url);
+    } else if (wasOpen) {
+      // Only after a product was actually open. On first load the products
+      // have not arrived yet, and stripping ?product= here would throw away a
+      // shared link before the deep-link effect above can open it.
+      if (current) {
+        url.searchParams.delete('product');
+        window.history.replaceState({}, '', url);
+      }
+      // Back from a product lands on the card the shopper opened, not the top
+      // of the catalog. The grid is hidden while the product page is open, so
+      // the browser cannot restore this position by itself.
+      if (catalogScrollY !== null) {
+        window.requestAnimationFrame(() => window.scrollTo({ top: catalogScrollY }));
+      }
     }
   }, [selectedProduct]);
 
