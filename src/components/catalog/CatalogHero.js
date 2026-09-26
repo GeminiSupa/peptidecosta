@@ -6,7 +6,7 @@ import { BadgePercent, Gift, Star, Truck, ShieldCheck, FlaskConical, Users } fro
 import PressBand from '@/components/PressBand';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
-import { getVolumeDiscountPct, FREE_SHIPPING_USD_THRESHOLD } from '@/lib/pricing';
+import { FREE_SHIPPING_USD_THRESHOLD } from '@/lib/pricing';
 import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import styles from './CatalogHero.module.css';
 
@@ -23,8 +23,9 @@ import styles from './CatalogHero.module.css';
  * Week" wording always belong to the same row. A flash sale is a different
  * deal with a different end time and is not described here.
  *
- * Percentages are read from the pricing engine rather than typed in, so the
- * anchor cannot drift away from what the cart actually charges.
+ * The card is the weekly deal and nothing else. It is not drawn when no weekly
+ * deal is live, and the Deal of the Week tab can switch it off even then.
+ * Offer lines come from the offers created in that tab.
  */
 export default function CatalogHero({ lang = 'es', links = {}, trustpilotRating = '4.7', settings }) {
   const en = lang === 'en';
@@ -43,23 +44,13 @@ export default function CatalogHero({ lang = 'es', links = {}, trustpilotRating 
   const thresholdHeadline = en
     ? `${campaign.discountPct}% off ${campaign.minUnits}+ selected vials`
     : `${campaign.discountPct}% de descuento en ${campaign.minUnits}+ viales seleccionados`;
-  const dealLines = campaign.pricingMode === 'offers' ? offerSummaries : [thresholdHeadline];
+  const lines = campaign.pricingMode === 'offers' ? offerSummaries : [thresholdHeadline];
+  const headline = en ? 'Deal of the Week' : 'Oferta de la Semana';
 
-  // The standing volume tiers, shown whether or not a deal is running. With a
-  // deal on they are the anchor the deal is measured against; with no deal
-  // they are the offer.
-  const fivePlus = getVolumeDiscountPct(5);
-  const tenPlus = getVolumeDiscountPct(10);
-  const volumeLines = [
-    en ? `Buy 5+ vials, save ${fivePlus}%` : `Compra 5+ viales, ahorra ${fivePlus}%`,
-    en ? `Buy 10+ vials, save ${tenPlus}%` : `Compra 10+ viales, ahorra ${tenPlus}%`,
-  ];
-
-  const headline = dealLive
-    ? (en ? 'Deal of the Week' : 'Oferta de la Semana')
-    : (en ? 'Volume pricing, every day' : 'Precio por volumen, todos los días');
-
-  const lines = dealLive ? [...dealLines, ...volumeLines] : volumeLines;
+  // Hidden until a weekly deal is live, and hidden when the admin switch is off.
+  // While the deal is still loading, stay hidden so the everyday volume lines
+  // never flash in its place.
+  if (!dealLive || campaign.cardEnabled === false) return null;
 
   const benefits = [
     { icon: Truck, text: en ? `Free shipping over $${FREE_SHIPPING_USD_THRESHOLD}` : `Envío gratis sobre $${FREE_SHIPPING_USD_THRESHOLD}` },

@@ -238,6 +238,8 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
   const [isCancelling, setIsCancelling] = useState(false);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dealCardOn, setDealCardOn] = useState(true);
+  const [dealCardSaving, setDealCardSaving] = useState(false);
 
   const [selected, setSelected] = useState([]);
   const [percent, setPercent] = useState(15);
@@ -362,6 +364,9 @@ export default function DealOfWeekPanel({ products = [], onSendAnnouncement, onP
       setFlash(data.flash || null);
       setScheduled(data.scheduled || null);
       setRecent(data.recent || []);
+      const cardRes = await adminFetch('/api/admin/catalog-deal-card');
+      const cardData = await cardRes.json();
+      if (cardRes.ok) setDealCardOn(cardData.enabled !== false);
       // With a deal live, the only option is to schedule the next one, and
       // the natural start is the moment the live one ends.
       if (data.live) {
@@ -720,6 +725,42 @@ It ends automatically at ${formatCrInstant(flashEndsIso)}.`)) return;
             replace volume pricing and cannot stack with promo codes.
           </p>
         </div>
+      </div>
+
+      <div style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+        <div>
+          <h4 style={{ margin: '0 0 4px', color: '#f8fafc', fontSize: '0.95rem' }}>Catalog deal card</h4>
+          <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0 }}>
+            The big card at the top of the catalog. It only appears while a weekly deal is live,
+            and it disappears on its own when that deal ends. Switch it off to hide it even while a deal is live.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`admin-btn${dealCardOn ? ' primary' : ''}`}
+          disabled={dealCardSaving}
+          onClick={async () => {
+            const next = !dealCardOn;
+            setDealCardOn(next);
+            setDealCardSaving(true);
+            try {
+              const res = await adminFetch('/api/admin/catalog-deal-card', {
+                method: 'POST',
+                body: JSON.stringify({ enabled: next }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || 'Could not save the switch.');
+              setDealCardOn(data.enabled !== false);
+            } catch (err) {
+              setDealCardOn(!next);
+              setPreviewError(err.message);
+            } finally {
+              setDealCardSaving(false);
+            }
+          }}
+        >
+          {dealCardSaving ? 'Saving…' : (dealCardOn ? 'Card on' : 'Card off')}
+        </button>
       </div>
 
       {loading && (
