@@ -69,6 +69,7 @@ import {
   CreditCard, MessageCircle, Share2
 } from 'lucide-react';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
+import { groupCatalogProducts, defaultDoseIndex } from '@/lib/productVariants.mjs';
 import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
@@ -384,6 +385,11 @@ export default function CatalogPage() {
   // Grid is the default: the CRO review asked for several products on screen
   // at once rather than one tall row each. Anyone who picks list keeps it.
   const [viewMode, setViewMode] = useState('grid'); // 'list', 'grid'
+
+  // Which vial size a grouped card is showing, keyed by the group. Only the
+  // sizes a shopper has actually tapped live here; everything else falls back
+  // to the cheapest one in stock.
+  const [selectedDoses, setSelectedDoses] = useState({});
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -3508,6 +3514,13 @@ export default function CatalogPage() {
     });
   }
 
+  // One card per peptide instead of one per vial size. This is a display
+  // grouping: the cart still receives the exact product row the shopper picked,
+  // so pricing and checkout see what they always saw. Bacteriostatic water is
+  // left out because its sizes are priced by their own rules, not as
+  // interchangeable doses.
+  const productRows = groupCatalogProducts(filteredProducts, (item) => isBacWater(item?.product));
+
   // The dropdown is a preview of the actual result set, not a second search
   // with different stock/category/price rules. Ten covers the largest family;
   // the final row submits the search and reveals the complete grid.
@@ -4384,7 +4397,16 @@ export default function CatalogPage() {
         ) : (
           <>
           <div className={`product-grid ${viewMode}-view`}>
-            {filteredProducts.map((p, idx) => {
+            {productRows.map((row, idx) => {
+              // A grouped card shows one dose at a time. Everything below —
+              // image, price, stock, badges, Add to cart — is that dose's own
+              // product row, so the card cannot advertise one size and add
+              // another.
+              const chosenName = selectedDoses[row.key];
+              const chosenIndex = chosenName
+                ? Math.max(0, row.doses.findIndex((dose) => dose.product.product === chosenName))
+                : defaultDoseIndex(row.doses, (item) => isBacWater(item.product) || isInStock(item.status));
+              const p = row.doses[chosenIndex].product;
               const isBac = isBacWater(p.product);
               const isTenMlBac = isBac && getBacWaterSizeMl(p.product) === 10;
               const inStock = isBac || isInStock(p.status);
@@ -4417,7 +4439,7 @@ export default function CatalogPage() {
 
               return (
                 <div 
-                  key={idx} 
+                  key={row.key} 
                   className={cardClass}
                   onClick={() => handleProductClick(p)}
                 >
@@ -4498,7 +4520,7 @@ export default function CatalogPage() {
                         <span>{translateStatus(p.status)}</span>
                       </div>
                     )}
-                    <h3 className="product-name">{p.product}</h3>
+                    <h3 className="product-name">{row.grouped ? row.base : p.product}</h3>
                     {productComposition(p.product, lang) && (
                       <div className="product-composition">{productComposition(p.product, lang)}</div>
                     )}
@@ -4547,6 +4569,45 @@ export default function CatalogPage() {
                         ? <span className="price-sub" style={{ color: '#16a34a', flexBasis: '100%' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
                         : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
+                    {row.grouped && (
+                      <div
+                        className="dose-picker"
+                        role="group"
+                        aria-label={lang === 'en' ? `Vial size for ${row.base}` : `Tamaño de vial para ${row.base}`}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <span className="dose-picker-label">
+                          {lang === 'en' ? 'Select size' : 'Elige el tamaño'}
+                        </span>
+                        <div className="dose-picker-options">
+                          {row.doses.map((dose) => {
+                            const doseInStock = isInStock(dose.product.status);
+                            const isChosen = dose.product.product === p.product;
+                            return (
+                              <button
+                                key={dose.product.product}
+                                type="button"
+                                className={`dose-chip${isChosen ? ' is-chosen' : ''}${doseInStock ? '' : ' is-out'}`}
+                                aria-pressed={isChosen}
+                                // A sold-out size stays visible and readable —
+                                // it tells the shopper the size exists — but it
+                                // cannot be selected into a dead Add button.
+                                disabled={!doseInStock}
+                                title={doseInStock
+                                  ? dose.product.product
+                                  : `${dose.product.product} — ${lang === 'en' ? 'out of stock' : 'agotado'}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedDoses((current) => ({ ...current, [row.key]: dose.product.product }));
+                                }}
+                              >
+                                {dose.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <div className="product-actions">
                       {inStock ? (
                         // The card always shows the Add button; quantity is

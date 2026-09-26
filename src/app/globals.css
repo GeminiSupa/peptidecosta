@@ -7705,3 +7705,67 @@ body:has(.product-grid.grid-view) {
         font-size: 0.78rem;
     }
 }
+
+/* The vial-size picker on a grouped product card (CRO review, step 3).
+   One card per peptide, the sizes as chips; the chosen chip is the product
+   that the Add to cart button adds. A sold-out size stays readable so the
+   shopper can see the size exists. */
+.dose-picker {
+    width: 100%;
+    margin: 0 0 8px;
+}
+
+.dose-picker-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.dose-picker-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.product-grid.grid-view .dose-picker-options {
+    justify-content: center;
+}
+
+.dose-chip {
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-main);
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dose-chip:hover:not(:disabled) {
+    border-color: var(--cta);
+}
+
+.dose-chip.is-chosen {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+}
+
+[data-theme="dark"] .dose-chip.is-chosen {
+    background: var(--text-primary);
+    border-color: var(--text-primary);
+    color: #050b18;
+}
+
+.dose-chip.is-out {
+    opacity: 0.45;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
