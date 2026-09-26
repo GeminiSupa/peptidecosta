@@ -194,3 +194,17 @@ test('an affiliate route never selects a customer contact column', () => {
     }
   }
 });
+
+/**
+ * The desktop sidebar is built from two hand-written lists inside
+ * src/app/admin/page.js, not from ADMIN_NAV_GROUPS — that only feeds the
+ * mobile "More" sheet. So a tab can be permitted, rendered and reachable by
+ * URL, and still be invisible to every superadmin on a desktop. Requests
+ * shipped that way.
+ */
+test('Requests is in the desktop sidebar, not only in the mobile sheet', () => {
+  const page = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/page.js'), 'utf8');
+  const list = page.match(/const desktopPrimaryTabIds = \(([\s\S]*?)\)\.filter/);
+  assert.ok(list, 'desktopPrimaryTabIds should still exist');
+  assert.match(list[1], /'requests'/, 'Requests must be in the desktop sidebar list');
+});

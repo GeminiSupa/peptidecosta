@@ -1875,7 +1875,12 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
+      // 'requests' sits second, right under Home. The desktop sidebar is built
+      // from these two hand-written lists and NOT from ADMIN_NAV_GROUPS, which
+      // only feeds the mobile More sheet — so a tab missing from here is
+      // invisible on a desktop no matter what the permission rules say. That is
+      // exactly what happened to Requests.
+      : ['home', 'requests', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },

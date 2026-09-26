@@ -555,6 +555,10 @@ function SignIn({ onDone }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // Partners are handed a password by somebody else and type it in once. With
+  // no way to see what they typed, a stray space or a wrong character reads as
+  // "these details are wrong" — which is the one thing they cannot check.
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -581,8 +585,28 @@ function SignIn({ onDone }) {
         <label style={label}>Email</label>
         <input style={input} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
 
-        <label style={{ ...label, marginTop: 12 }}>Password</label>
-        <input style={input} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+          <label style={{ ...label, marginTop: 12 }}>Password</label>
+          <button
+            type="button"
+            onClick={() => setShowPassword((on) => !on)}
+            style={{
+              background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              color: COLORS.muted, fontSize: '0.72rem', letterSpacing: 0.5,
+              textTransform: 'uppercase', fontWeight: 700,
+            }}
+          >
+            {showPassword ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        <input
+          style={input}
+          type={showPassword ? 'text' : 'password'}
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
         {error && <p style={{ color: COLORS.bad, fontSize: '0.85rem', marginTop: 10 }}>{error}</p>}
 
