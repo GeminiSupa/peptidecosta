@@ -10,7 +10,6 @@ import Papa from 'papaparse';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/whatsapp';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
-import { getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
 import {
@@ -67,7 +66,7 @@ import {
   ChevronLeft, ChevronRight,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, MessageCircle, Lock, Share2, User
+  CreditCard, MessageCircle, Share2
 } from 'lucide-react';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession } from '@/hooks/useCustomerSession';
@@ -76,8 +75,7 @@ import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
 import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
-import PressBand from '@/components/PressBand';
-import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
+import CatalogHero from '@/components/catalog/CatalogHero';
 import { readDealPageOrderTag } from '@/hooks/useDealPageExperiment';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
 import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
@@ -3783,16 +3781,6 @@ export default function CatalogPage() {
             {lang === 'en' ? 'Back' : 'Volver'}
           </Link>
           <div className="header-controls">
-            <Link
-              href="/account"
-              className="admin-link"
-              title={lang === 'en' ? 'My Account' : 'Mi Cuenta'}
-            >
-              <User size={11} /> {lang === 'en' ? 'MY ACCOUNT' : 'MI CUENTA'}
-            </Link>
-            <Link href="/admin" className="admin-link" title="Admin Dashboard">
-              <Lock size={11} /> ADMIN
-            </Link>
             <div className="theme-toggle">
               <button
                 onClick={() => handleThemeToggle('light')}
@@ -3866,63 +3854,15 @@ export default function CatalogPage() {
         </div>
       </div>
 
-      <section className="catalog-proof-section">
-        <div className="header-content container">
-          <div className="header-proof-column">
-            {/* Trust Seals */}
-            <div className="trust-badges-container">
-              <a href={links.googleReviewUrl || links.googleMapsUrl} target="_blank" rel="noopener noreferrer" className="trust-badge google-maps">
-                <svg viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
-                <div className="trust-text">
-                  <span className="trust-score">Google</span>
-                  <span className="trust-desc">
-                    5.0 <Star size={8} fill="#FBBC05" color="#FBBC05" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#FBBC05" color="#FBBC05" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#FBBC05" color="#FBBC05" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#FBBC05" color="#FBBC05" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#FBBC05" color="#FBBC05" style={{display: 'inline', margin: '0 1px'}}/>
-                  </span>
-                </div>
-              </a>
-              
-              <a
-                href={getTrustpilotReviewUrl(lang, links)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="trust-badge"
-                aria-label={`Trustpilot rating ${liveTrustpilotRating} out of 5`}
-              >
-                <div className="tp-star-box">
-                  <Star size={10} fill="#fff" color="#fff" />
-                </div>
-                <div className="trust-text">
-                  <span className="trust-score">Trustpilot</span>
-                  <span className="trust-desc">
-                    {liveTrustpilotRating} <Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#00b67a" color="#00b67a" style={{display: 'inline', margin: '0 1px'}}/>
-                  </span>
-                </div>
-              </a>
-
-              <a href={getFacebookReviewUrl(links)} target="_blank" rel="noopener noreferrer" className="trust-badge">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="#1877F2" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-                <div className="trust-text">
-                  <span className="trust-score">Facebook</span>
-                  <span className="trust-desc">
-                    5.0 <Star size={8} fill="#1877F2" color="#1877F2" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#1877F2" color="#1877F2" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#1877F2" color="#1877F2" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#1877F2" color="#1877F2" style={{display: 'inline', margin: '0 1px'}}/><Star size={8} fill="#1877F2" color="#1877F2" style={{display: 'inline', margin: '0 1px'}}/>
-                  </span>
-                </div>
-              </a>
-            </div>
-
-            {/* Press feature band — outlets come from the CMS (site_settings.landing_page) */}
-            <PressBand lang={lang} settings={landingSettings} variant="catalog" />
-            <BulkWholesaleSpotlight lang={lang} compact />
-          </div>
-        </div>
-      </section>
+      {/* Offer-first hero: the deal leads, ratings and press support it.
+          Replaces the old proof strip (badges + press + deal line) that
+          sat above every product and price. */}
+      <CatalogHero
+        lang={lang}
+        links={links}
+        trustpilotRating={liveTrustpilotRating}
+        settings={landingSettings}
+      />
 
       {/* Compact Sticky Bottom Controls Section */}
       <div className="header-sticky-section">
@@ -4240,7 +4180,7 @@ export default function CatalogPage() {
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
-        <div className="catalog-seo-header">
+        <div className="catalog-seo-header" id="catalog-products">
           <h1 className="catalog-seo-title">
             {lang === 'en' ? 'Peptide Catalog Costa Rica' : 'Catálogo de Péptidos en Costa Rica'}
           </h1>
@@ -4249,17 +4189,6 @@ export default function CatalogPage() {
               ? 'Browse available peptides, prices, and real-time availability.'
               : 'Explora péptidos disponibles, precios y disponibilidad en tiempo real.'}
           </p>
-          <button
-            type="button"
-            className="catalog-hero-promo"
-            onClick={() => window.open('https://peptidescostarica.net', '_blank', 'noopener,noreferrer')}
-            aria-label={lang === 'en' ? 'Open Peptides Costa Rica website' : 'Abrir sitio de Peptides Costa Rica'}
-          >
-            <img
-              src="/catalog-promo-banner.webp"
-              alt={lang === 'en' ? 'Peptides Costa Rica product vials' : 'Viales de Peptides Costa Rica'}
-            />
-          </button>
         </div>
         {gateLoading ? (
           <div className="loader">

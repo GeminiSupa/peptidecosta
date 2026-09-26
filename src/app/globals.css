@@ -676,11 +676,11 @@ body {
 
 .cat-chip {
     white-space: nowrap;
-    padding: 8px 16px;
+    padding: 9px 18px;
     border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--bg-card);
-    font-size: 0.8rem;
+    font-size: 0.86rem;
     font-weight: 700;
     color: var(--text-muted);
     cursor: pointer;
@@ -6848,9 +6848,9 @@ body:has(.product-grid.grid-view) {
 }
 
 .cat-chip {
-    padding: 6px 14px;
+    padding: 8px 15px;
     border-radius: 8px;
-    font-size: 0.68rem;
+    font-size: 0.78rem;
 }
 
 .main.container {
@@ -7191,8 +7191,8 @@ body:has(.product-grid.grid-view) {
     }
 
     .cat-chip {
-        padding: 6px 11px;
-        font-size: 0.58rem;
+        padding: 7px 13px;
+        font-size: 0.72rem;
     }
 
     .main.container {

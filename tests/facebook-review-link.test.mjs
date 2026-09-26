@@ -32,7 +32,9 @@ test('nothing configured falls back to the current profile', () => {
 });
 
 test('every Facebook review badge reads the CMS, none hardcode a profile', async () => {
-  const files = ['../src/app/catalog/page.js', '../src/app/landing/page.js', '../src/components/StorefrontChrome.js'];
+  // The catalog's review badges moved out of the page into the offer-first
+  // hero; the guarantee is the same, so the guard follows them.
+  const files = ['../src/components/catalog/CatalogHero.js', '../src/app/landing/page.js', '../src/components/StorefrontChrome.js'];
   for (const file of files) {
     const source = await readFile(new URL(file, import.meta.url), 'utf8');
     assert.match(source, /getFacebookReviewUrl\(links\)/, `${file} should read the link from the CMS`);

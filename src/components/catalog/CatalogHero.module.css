@@ -1,0 +1,264 @@
+.wrap {
+  margin: 10px 0 4px;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.copy {
+  min-width: 0;
+}
+
+/* Social proof sits above the headline but at a supporting size: present, and
+   clearly not the main event. */
+.ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  text-decoration: none;
+}
+
+.rating b {
+  color: var(--text-main);
+  font-size: 0.86rem;
+}
+
+.rating:hover span {
+  text-decoration: underline;
+}
+
+.headline {
+  margin: 0 0 10px;
+  font-size: clamp(1.5rem, 4.4vw, 2.1rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.offers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.offers li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.offers li svg {
+  flex: none;
+  color: var(--cta);
+}
+
+.noCode {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--cta);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  text-transform: uppercase;
+  box-shadow: 0 8px 20px rgba(191, 79, 11, 0.28);
+}
+
+.cta:hover {
+  background: var(--cta-hover);
+}
+
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.countdown > span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 42px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-secondary);
+}
+
+.countdown b {
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text-main);
+}
+
+.countdown em {
+  margin-top: 2px;
+  font-size: 0.56rem;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.vials {
+  width: 100%;
+  height: auto;
+  max-height: 170px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+}
+
+.benefits {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.benefit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.benefit svg {
+  flex: none;
+  color: #15803d;
+}
+
+@media (max-width: 760px) {
+  .card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  /* On a phone the photo is decoration between the offer and the products,
+     so it goes last and stays small. */
+  .aside {
+    order: 2;
+  }
+
+  .vials {
+    max-height: 110px;
+  }
+
+  .benefits {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phones: the hero must not eat the whole first screen. The CRO review's main
+   complaint was that no product was visible without scrolling, so on a phone
+   the decorative vial photo goes and the type steps down. The offer, the
+   countdown, the CTA and the press band all stay. */
+@media (max-width: 520px) {
+  .card {
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .ratings {
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .headline {
+    font-size: 1.3rem;
+    margin-bottom: 8px;
+  }
+
+  .offers li {
+    font-size: 0.85rem;
+    gap: 7px;
+  }
+
+  .noCode {
+    font-size: 0.72rem;
+  }
+
+  .actions {
+    margin-top: 11px;
+    gap: 9px;
+  }
+
+  .cta {
+    padding: 10px 18px;
+    font-size: 0.82rem;
+  }
+
+  .countdown > span {
+    min-width: 36px;
+    padding: 4px 5px;
+  }
+
+  .vials {
+    display: none;
+  }
+
+  .benefits {
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .benefit {
+    font-size: 0.68rem;
+  }
+}
