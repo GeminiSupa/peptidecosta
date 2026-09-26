@@ -1875,17 +1875,17 @@ Core Rules:
   const desktopPrimaryTabIds = (
     isSubUserProfile
       ? ['my_earnings', 'my_qr', 'team_chat']
-      // 'requests' sits second, right under Home. The desktop sidebar is built
-      // from these two hand-written lists and NOT from ADMIN_NAV_GROUPS, which
-      // only feeds the mobile More sheet — so a tab missing from here is
-      // invisible on a desktop no matter what the permission rules say. That is
-      // exactly what happened to Requests.
-      : ['home', 'requests', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
+      // The desktop sidebar is built from these two hand-written lists and NOT
+      // from ADMIN_NAV_GROUPS, which only feeds the mobile More sheet — so a
+      // tab missing from both is invisible on a desktop no matter what the
+      // permission rules say. That is exactly what happened to Requests, which
+      // now sits down in Operations with the other owner-only screens.
+      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
     { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
-    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'recycle_bin', 'team_chat', 'payment_test'] },
+    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'requests', 'recycle_bin', 'team_chat', 'payment_test'] },
   ].map((group) => ({
     ...group,
     tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),

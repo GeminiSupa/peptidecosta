@@ -204,7 +204,9 @@ test('an affiliate route never selects a customer contact column', () => {
  */
 test('Requests is in the desktop sidebar, not only in the mobile sheet', () => {
   const page = fs.readFileSync(path.join(process.cwd(), 'src/app/admin/page.js'), 'utf8');
-  const list = page.match(/const desktopPrimaryTabIds = \(([\s\S]*?)\)\.filter/);
-  assert.ok(list, 'desktopPrimaryTabIds should still exist');
-  assert.match(list[1], /'requests'/, 'Requests must be in the desktop sidebar list');
+  const sidebar = page.match(
+    /const desktopPrimaryTabIds = \(([\s\S]*?)const mobilePrimaryTabIds/
+  );
+  assert.ok(sidebar, 'the desktop sidebar lists should still exist');
+  assert.match(sidebar[1], /'requests'/, 'Requests must be in one of the desktop sidebar lists');
 });
