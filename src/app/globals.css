@@ -6903,6 +6903,7 @@ body:has(.product-grid.grid-view) {
 .product-grid.grid-view {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+    align-items: start;
 }
 
 .product-grid.grid-view .product-card {
@@ -6913,7 +6914,7 @@ body:has(.product-grid.grid-view) {
     border-color: rgba(15, 23, 42, 0.06);
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.035);
     contain-intrinsic-size: auto 255px;
-    height: 100%;
+    height: auto;
 }
 
 .product-grid.grid-view .product-card:hover {
@@ -6945,10 +6946,9 @@ body:has(.product-grid.grid-view) {
     overflow: hidden;
 }
 
-/* The price stays under the name on every card in the row. Spare room goes
-   above the Add to cart button, not between the name and the price — that
-   hole is what made a short card's price sit near the button while its
-   neighbour's price sat under the name. */
+/* The price stays under the name. A card is only as tall as its own
+   contents, so a neighbour with size chips does not leave a hole above
+   this card's button. */
 .product-grid.grid-view .product-name {
     font-size: 0.72rem;
     line-height: 1.18;
@@ -6993,7 +6993,7 @@ body:has(.product-grid.grid-view) {
 
 .product-grid.grid-view .product-actions {
     width: 100%;
-    margin-top: auto;
+    margin-top: 8px;
 }
 
 .product-grid.grid-view .add-to-cart-btn {
@@ -7469,7 +7469,15 @@ body:has(.product-grid.grid-view) {
 
 .product-grid.grid-view .product-composition {
   font-size: 0.6rem;
-  margin: -2px 0 4px;
+  line-height: 1.35;
+  min-height: 1.35em;
+  margin: 0 0 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.product-grid.list-view .product-composition:empty {
+  display: none;
 }
 
 .product-composition--detail {

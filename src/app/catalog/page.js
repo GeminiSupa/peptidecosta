@@ -4638,9 +4638,9 @@ export default function CatalogPage() {
                       </div>
                     )}
                     <h3 className="product-name">{row.grouped ? row.base : p.product}</h3>
-                    {productComposition(p.product, lang) && (
-                      <div className="product-composition">{productComposition(p.product, lang)}</div>
-                    )}
+                    {/* Always present so a blend's ingredient line does not
+                        push that card's price down below its neighbours. */}
+                    <div className="product-composition">{productComposition(p.product, lang)}</div>
                     <div className="product-rating-slot">
                       {renderRatingSummary(p.product)}
                     </div>
