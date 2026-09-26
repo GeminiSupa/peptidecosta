@@ -169,7 +169,7 @@ export default function AffiliateDashboard() {
         <div style={panel}>
           <h2 style={{ margin: '0 0 8px', fontSize: '1.05rem' }}>We could not open your dashboard</h2>
           <p style={{ color: COLORS.muted, margin: '0 0 16px', lineHeight: 1.6 }}>{loadError}</p>
-          <button style={ghostButton} onClick={() => supabase.auth.signOut()}>Sign out</button>
+          <button className="aff-press" style={ghostButton} onClick={() => supabase.auth.signOut()}>Sign out</button>
         </div>
       </Shell>
     );
@@ -185,7 +185,7 @@ export default function AffiliateDashboard() {
             {me?.access === 'read' ? ' · view only' : ''}
           </p>
         </div>
-        <button style={ghostButton} onClick={() => supabase.auth.signOut()}>Sign out</button>
+        <button className="aff-press" style={ghostButton} onClick={() => supabase.auth.signOut()}>Sign out</button>
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -198,6 +198,7 @@ export default function AffiliateDashboard() {
         {TABS.map((item) => (
           <button
             key={item.id}
+            className="aff-press"
             onClick={() => setTab(item.id)}
             style={{
               ...ghostButton,
@@ -230,13 +231,18 @@ function LinksTab({ me, qr }) {
   const [copied, setCopied] = useState(false);
   if (!me) return null;
 
+  // The short one is what they hand out. The long one is kept visible but out
+  // of the way, because a partner who has printed the old link on something
+  // needs to be able to see it is the same link.
+  const shareLink = me.shortLink || me.link;
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(me.link);
+      await navigator.clipboard.writeText(shareLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
-      window.prompt('Copy your link:', me.link);
+      window.prompt('Copy your link:', shareLink);
     }
   };
 
@@ -246,11 +252,25 @@ function LinksTab({ me, qr }) {
     <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
       <div style={panel}>
         <h3 style={h3}>Your link</h3>
-        <p style={{ ...muted, wordBreak: 'break-all', marginBottom: 12 }}>{me.link}</p>
-        <button style={primaryButton} onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
+        <p style={{
+          margin: '0 0 12px', fontSize: '1rem', fontWeight: 600, wordBreak: 'break-all',
+          padding: '10px 12px', borderRadius: 8, background: COLORS.panelRaised,
+          border: `1px solid ${COLORS.border}`,
+        }}>
+          {shareLink}
+        </p>
+        <button className="aff-press" style={primaryButton} onClick={copy}>
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
         <p style={{ ...muted, marginTop: 12, marginBottom: 0 }}>
           Share this anywhere. Orders placed through it are credited to you automatically.
         </p>
+        {me.shortLink && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{ ...muted, cursor: 'pointer' }}>The full version of this link</summary>
+            <p style={{ ...muted, wordBreak: 'break-all', marginTop: 8, marginBottom: 0 }}>{me.link}</p>
+          </details>
+        )}
       </div>
 
       <div style={panel}>
@@ -259,7 +279,7 @@ function LinksTab({ me, qr }) {
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={qr} alt="Your referral QR code" style={{ width: '100%', maxWidth: 220, background: '#fff', padding: 8, borderRadius: 8 }} />
-            <a href={qr} download="my-affiliate-qr.png" style={{ ...primaryButton, display: 'inline-block', marginTop: 12, textDecoration: 'none' }}>
+            <a className="aff-press" href={qr} download="my-affiliate-qr.png" style={{ ...primaryButton, display: 'inline-block', marginTop: 12, textDecoration: 'none' }}>
               Download QR
             </a>
           </>
@@ -373,6 +393,7 @@ function AccountTab({ me, onSaved }) {
   const [email, setEmail] = useState(me?.affiliate?.email || '');
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(null);
 
   useEffect(() => {
     setWhatsapp(me?.affiliate?.whatsapp || '');
@@ -383,14 +404,16 @@ function AccountTab({ me, onSaved }) {
   const readOnly = me.access !== 'read_write';
   const pendingEmail = (me.pendingChanges || []).find((row) => row.field === 'email');
 
-  const save = async () => {
+  const emailChanged = email.trim().toLowerCase() !== String(me.affiliate.email || '').trim().toLowerCase();
+
+  const send = async (payload, method = 'PATCH') => {
     setSaving(true);
     setStatus('');
     try {
       const res = await adminFetch('/api/affiliate/account', {
-        method: 'PATCH',
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ whatsapp, email }),
+        body: payload ? JSON.stringify(payload) : undefined,
       });
       const body = await res.json().catch(() => ({}));
       setStatus(res.ok ? (body.message || 'Saved.') : (body.error || 'Could not save.'));
@@ -399,7 +422,15 @@ function AccountTab({ me, onSaved }) {
       setStatus('Could not save. Check your connection and try again.');
     } finally {
       setSaving(false);
+      setConfirming(null);
     }
+  };
+
+  // An email change is the one action here with a consequence worth stopping
+  // for, so it asks first. Changing only the WhatsApp number does not.
+  const save = () => {
+    if (emailChanged) { setConfirming('email'); return; }
+    send({ whatsapp });
   };
 
   return (
@@ -433,6 +464,16 @@ function AccountTab({ me, onSaved }) {
             Until then nothing has changed — keep signing in with{' '}
             <strong>{me.affiliate.email}</strong>.
           </p>
+          {!readOnly && (
+            <button
+              className="aff-press"
+              style={{ ...ghostButton, marginTop: 12, borderColor: `${COLORS.warn}88`, color: COLORS.warn }}
+              disabled={saving}
+              onClick={() => setConfirming('withdraw')}
+            >
+              Withdraw this request
+            </button>
+          )}
         </div>
       )}
 
@@ -450,11 +491,46 @@ function AccountTab({ me, onSaved }) {
           Rica and they will update them for you.
         </p>
       ) : (
-        <button style={{ ...primaryButton, marginTop: 18 }} disabled={saving} onClick={save}>
+        <button className="aff-press" style={{ ...primaryButton, marginTop: 18 }} disabled={saving} onClick={save}>
           {saving ? 'Saving…' : 'Save'}
         </button>
       )}
       {status && <p style={{ ...muted, marginTop: 10, color: COLORS.text }}>{status}</p>}
+
+      <Modal
+        open={confirming === 'email'}
+        title="Ask to change your email?"
+        confirmLabel="Send the request"
+        busy={saving}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => send({ whatsapp, email })}
+      >
+        <p style={{ margin: '0 0 10px' }}>
+          You are asking to move from <strong>{me.affiliate.email}</strong> to{' '}
+          <strong>{email.trim()}</strong>.
+        </p>
+        <p style={{ margin: 0 }}>
+          Nothing changes today. Peptides Costa Rica has to approve it first, because this is
+          the address your payouts are announced to. Keep signing in with your current address
+          until they do.
+        </p>
+      </Modal>
+
+      <Modal
+        open={confirming === 'withdraw'}
+        title="Withdraw your email change?"
+        confirmLabel="Yes, withdraw it"
+        confirmTone={COLORS.warn}
+        busy={saving}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => send(null, 'DELETE')}
+      >
+        <p style={{ margin: 0 }}>
+          Your request to change to <strong>{pendingEmail?.requested_value}</strong> will be
+          taken back, and Peptides Costa Rica will not see it. Your email stays as it is. You
+          can ask again whenever you like.
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -497,7 +573,7 @@ function SignIn({ onDone }) {
 
         {error && <p style={{ color: COLORS.bad, fontSize: '0.85rem', marginTop: 10 }}>{error}</p>}
 
-        <button style={{ ...primaryButton, marginTop: 16, width: '100%' }} disabled={busy}>
+        <button className="aff-press" style={{ ...primaryButton, marginTop: 16, width: '100%' }} disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
@@ -507,9 +583,81 @@ function SignIn({ onDone }) {
 
 /* ---------------------------------------------------------------- bits -- */
 
+/**
+ * A real dialog, not window.confirm.
+ *
+ * The browser's own box cannot be styled, says "localhost:3000 says", and on a
+ * phone looks like a scam warning — not what you want on the screen where
+ * somebody is changing the address their money is announced to. This one
+ * closes on Escape and on a click outside, and traps nothing it does not need
+ * to.
+ */
+function Modal({ open, title, children, confirmLabel, confirmTone, onConfirm, onCancel, busy }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape' && !busy) onCancel(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, busy, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(event) => { if (event.target === event.currentTarget && !busy) onCancel(); }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(3,7,18,0.72)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        animation: 'affFade 140ms ease-out',
+      }}
+    >
+      <div style={{
+        ...panel, maxWidth: 430, width: '100%', background: COLORS.panelRaised,
+        animation: 'affRise 160ms cubic-bezier(0.2, 0.8, 0.3, 1)',
+      }}>
+        <h3 style={{ margin: '0 0 10px', fontSize: '1rem', fontWeight: 700 }}>{title}</h3>
+        <div style={{ ...muted, color: COLORS.text }}>{children}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 20, justifyContent: 'flex-end' }}>
+          <button className="aff-press" style={ghostButton} disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="aff-press"
+            style={{
+              ...primaryButton,
+              borderColor: confirmTone || COLORS.text,
+              color: confirmTone || COLORS.text,
+            }}
+            disabled={busy}
+            onClick={onConfirm}
+          >
+            {busy ? 'Working…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Shell({ children }) {
   return (
     <main style={{ minHeight: '100vh', background: COLORS.bg, color: COLORS.text, padding: '24px 16px', fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif' }}>
+      <style>{`
+        @keyframes affFade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes affRise { from { opacity: 0; transform: translateY(10px) scale(0.98) } to { opacity: 1; transform: none } }
+        /* The press itself, so a tap feels answered even before the request
+           comes back. Disabled while busy so it cannot look clickable twice. */
+        .aff-press { transition: transform 90ms ease, filter 90ms ease; }
+        .aff-press:hover:not(:disabled) { filter: brightness(1.15); }
+        .aff-press:active:not(:disabled) { transform: scale(0.96); }
+        .aff-press:disabled { opacity: 0.55; cursor: default; }
+        @media (prefers-reduced-motion: reduce) {
+          .aff-press { transition: none }
+          .aff-press:active:not(:disabled) { transform: none }
+        }
+      `}</style>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>{children}</div>
     </main>
   );

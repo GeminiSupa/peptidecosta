@@ -126,3 +126,54 @@ export async function PATCH(request) {
       : 'Saved.',
   });
 }
+
+/**
+ * Withdraw an email change that has not been answered yet.
+ *
+ * A mistyped address should not mean messaging Peptides Costa Rica and waiting
+ * for somebody to notice — the person who made the request can take it back
+ * themselves. Only a 'pending' row is touched, so a decision that has already
+ * been made cannot be undone from here.
+ */
+export async function DELETE(request) {
+  const session = await requireAffiliateSession(request);
+  if (session.error) return session.error;
+
+  const { affiliate, profile, supabaseAdmin } = session;
+
+  if (!affiliateCanWrite(profile)) {
+    return NextResponse.json(
+      { ok: false, error: 'Your account is view-only. Contact Peptides Costa Rica and they will update your details.' },
+      { status: 403 }
+    );
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('affiliate_change_requests')
+    .update({
+      status: 'cancelled',
+      decided_at: new Date().toISOString(),
+      decision_note: 'Withdrawn by the affiliate',
+    })
+    .eq('affiliate_id', affiliate.id)
+    .eq('field', 'email')
+    .eq('status', 'pending')
+    .select('id');
+
+  if (error) {
+    console.error('[affiliate/account] cancel:', error.message);
+    return NextResponse.json({ ok: false, error: 'Could not withdraw your request' }, { status: 500 });
+  }
+
+  if (!data || data.length === 0) {
+    return NextResponse.json(
+      { ok: false, error: 'There is nothing waiting to withdraw.' },
+      { status: 404 }
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    message: 'Withdrawn. Your email is unchanged and nothing is waiting for approval.',
+  });
+}

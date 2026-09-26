@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireAffiliateSession } from '@/lib/affiliateSession';
 import { affiliateAccessMode } from '@/lib/affiliateAccess.mjs';
-import { buildReferralLink, catalogBaseUrl } from '@/lib/referralLink.mjs';
+import { buildReferralLink, catalogBaseUrl, slugify } from '@/lib/referralLink.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,9 +33,15 @@ export async function GET(request) {
   }
 
   const active = (codes || []).find((row) => row.is_active) || null;
-  const link = buildReferralLink(affiliate.name || '', catalogBaseUrl(process.env), {
+  const base = catalogBaseUrl(process.env);
+  const link = buildReferralLink(affiliate.name || '', base, {
     promoCode: active?.code || null,
   });
+
+  // The short form is what a partner pastes into a message. /r/<slug> redirects
+  // to `link` above, so both carry identical attribution — see src/app/r.
+  const slug = slugify(affiliate.name || '');
+  const shortLink = slug ? `${new URL(base).origin}/r/${slug}` : null;
 
   // A pending email change is shown back to them so the screen can say "waiting
   // for approval" rather than appearing to have forgotten what they asked for.
@@ -56,6 +62,7 @@ export async function GET(request) {
       commissionRate: Number(affiliate.commission_rate || 0),
     },
     link,
+    shortLink,
     codes: codes || [],
     pendingChanges: pending || [],
   });
