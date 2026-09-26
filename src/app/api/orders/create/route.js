@@ -7,7 +7,7 @@ import { authoritativeCheckout, activeDealForOrder } from '@/lib/authoritativeCh
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { mergeOrderWhatsAppDestinations, selectWithOptionalPreferences } from '@/lib/notificationPreferences.mjs';
 import { sanitizeOrderAttribution } from '@/lib/orderAttribution.mjs';
-import { affiliateCommissionPatch, affiliateHandlingAgentName } from '@/lib/affiliateCommission.mjs';
+import { affiliateCommissionPatch, affiliateHandlingAgentName, partnerReferralAffiliate } from '@/lib/affiliateCommission.mjs';
 import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
 import { ORDER_RESEARCH_ACK_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
@@ -70,6 +70,28 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const REQUIRED_FIELDS = ['order_number', 'customer_name', 'customer_phone', 'items'];
+
+/**
+ * A partner's own link, when the partner is not on the sales team.
+ *
+ * Who the name belongs to is decided by partnerReferralAffiliate, which is
+ * tested on its own. A promo code that already chose an affiliate always wins:
+ * the link never overrides the code.
+ */
+async function applyPartnerReferral(supabase, order, requestedAgent, profiles) {
+  if (order.affiliate_id || !requestedAgent) return order;
+
+  const { data: affiliates } = await supabase
+    .from('affiliates')
+    .select('*')
+    .not('admin_profile_user_id', 'is', null);
+
+  const match = partnerReferralAffiliate(affiliates || [], profiles || [], requestedAgent);
+  if (!match) return order;
+
+  const credited = { ...order, affiliate_id: match.id };
+  return { ...credited, ...affiliateCommissionPatch(credited, match) };
+}
 
 async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
   const order = { ...untrustedOrder };
@@ -134,7 +156,9 @@ async function applyTrustedAgentReferralAttribution(supabase, untrustedOrder) {
 
   const { data: profiles } = await supabase.from('admin_profiles').select('*');
   const profile = (profiles || []).find((row) => agentMatchKeys(row).has(requestedAgent));
-  if (!isEligibleSalesAgentProfile(profile)) return order;
+  if (!isEligibleSalesAgentProfile(profile)) {
+    return applyPartnerReferral(supabase, order, requestedAgent, profiles || []);
+  }
 
   const { data: linkedAffiliate } = await supabase
     .from('affiliates')

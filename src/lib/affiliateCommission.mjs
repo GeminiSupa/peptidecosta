@@ -76,3 +76,34 @@ export function affiliateHandlingAgentName(affiliate, profiles = []) {
 
   return String(profile.name || profile.email || '').trim() || null;
 }
+
+/**
+ * The partner a referral link's name belongs to, or null.
+ *
+ * A partner's link carries their name in sales_agent, exactly like a sales
+ * rep's. The rep path only resolves names belonging to STAFF profiles, so an
+ * order from a partner with a dashboard and no discount code landed with
+ * affiliate_id null — earning them nothing and never appearing in their own My
+ * Orders, while their dashboard promised orders through the link are credited
+ * automatically.
+ *
+ * Deliberately narrow. Only an affiliate whose login is tier 'affiliate' and
+ * active matches: that is exactly the partners given a dashboard. Affiliates
+ * with no login, staff and sub-users are all left to the paths that already
+ * handle them, so no existing order changes hands.
+ */
+export function partnerReferralAffiliate(affiliates = [], profiles = [], agentName = '') {
+  const wanted = norm(agentName);
+  if (!wanted) return null;
+
+  const match = (affiliates || []).find(
+    (row) => row?.admin_profile_user_id && norm(row.name) === wanted
+  );
+  if (!match) return null;
+
+  const login = (profiles || []).find((row) => row?.user_id === match.admin_profile_user_id);
+  if (norm(login?.tier) !== 'affiliate') return null;
+  if (norm(login?.status) !== 'active') return null;
+
+  return match;
+}
