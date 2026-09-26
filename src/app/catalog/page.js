@@ -12,6 +12,7 @@ import { buildWhatsAppLink, cleanPhoneNumber, logWhatsAppSource } from '@/lib/wh
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { useTrustpilotRating } from '@/hooks/useTrustpilotRating';
 import { getPromoBadgeForProduct } from '@/lib/promoBadge.mjs';
+import { stockRangePhrase } from '@/lib/stockRange.mjs';
 import {
   translateCategoryLabel,
   isMetabolicCategory,
@@ -1840,17 +1841,9 @@ export default function CatalogPage() {
   };
 
   /**
-   * The units-on-hand line the payment processor asked to see on every product.
-   *
-   * The count was always in the data and was only ever surfaced as an urgency
-   * badge below the low-stock threshold, which meant 57 of 73 products showed
-   * nothing at all. The processor wants the number present, not the warning.
-   *
-   * Returns null rather than a zero line when there is no count to show: a
-   * product nobody has counted yet (11 of them) must not claim "0 available",
-   * which reads as sold out, and an out-of-stock product already says so in its
-   * own badge. Below the threshold the red urgency badge is still the one that
-   * speaks, so this stays quiet and does not repeat the number beside it.
+   * The product-page stock pill. Same bands as the card, and quiet when the
+   * count is low — that case already has its own line, so this does not
+   * repeat it. No count at all stays blank rather than claiming "0".
    */
   const stockUnitsLabel = (product) => {
     if (!product) return null;
@@ -1859,7 +1852,8 @@ export default function CatalogPage() {
     const units = Number(count);
     if (units <= 0) return null;
     if (units <= (product.lowStockThreshold || 5)) return null;
-    return lang === 'en' ? `${units} in stock` : `${units} disponibles`;
+    const phrase = stockRangePhrase(units, lang);
+    return phrase ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : null;
   };
 
   /** True when this product is down to its urgency threshold. */
@@ -1872,20 +1866,15 @@ export default function CatalogPage() {
   /**
    * The single availability line on a product card.
    *
-   * It replaced a green "In stock" pill sitting beside a grey "48 in stock"
-   * pill, which said the same thing twice and pushed the price down the card.
-   * The count is still on every product that has one, because that is what the
-   * payment processor asked to see; when the count is low the line says so in
-   * the urgency colour instead of adding a second badge.
+   * The exact count is not shown. A known count becomes one of four bands
+   * (less than 10, more than 10, more than 50, more than 100). A low count
+   * uses the same band, in the urgency colour, instead of a second badge.
    */
   const stockLineLabel = (product) => {
     const count = Number(product?.inventoryCount);
-    const known = Number.isFinite(count) && count > 0;
-    if (!known) return lang === 'en' ? 'In stock' : 'Disponible';
-    if (isLowStock(product)) {
-      return lang === 'en' ? `Only ${count} left in stock` : `Solo quedan ${count}`;
-    }
-    return lang === 'en' ? `In stock — ${count} available` : `Disponible — ${count} unidades`;
+    const phrase = stockRangePhrase(count, lang);
+    if (!phrase) return lang === 'en' ? 'In stock' : 'Disponible';
+    return lang === 'en' ? `In stock — ${phrase}` : `Disponible — ${phrase}`;
   };
 
   // New and old category names, plus the "English / Español" custom format.
@@ -4707,6 +4696,36 @@ export default function CatalogPage() {
                         <span className="dose-picker-label">
                           {lang === 'en' ? 'Select size' : 'Elige el tamaño'}
                         </span>
+                        {row.doses.length > 6 ? (
+                          // A long chip list is what stretches one card far
+                          // past its neighbours. The menu keeps every size
+                          // choosable and the card the same height as the rest.
+                          <select
+                            className="dose-select"
+                            value={p.product}
+                            aria-label={lang === 'en' ? `Vial size for ${row.base}` : `Tamaño de vial para ${row.base}`}
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              const name = event.target.value;
+                              setSelectedDoses((current) => ({ ...current, [row.key]: name }));
+                            }}
+                          >
+                            {row.doses.map((dose) => {
+                              const doseInStock = isInStock(dose.product.status);
+                              const soldOut = lang === 'en' ? 'out of stock' : 'agotado';
+                              return (
+                                <option
+                                  key={dose.product.product}
+                                  value={dose.product.product}
+                                  disabled={!doseInStock}
+                                >
+                                  {doseInStock ? dose.label : `${dose.label} — ${soldOut}`}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        ) : (
                         <div className="dose-picker-options">
                           {row.doses.map((dose) => {
                             const doseInStock = isInStock(dose.product.status);
@@ -4734,6 +4753,7 @@ export default function CatalogPage() {
                             );
                           })}
                         </div>
+                        )}
                       </div>
                     )}
                     <div className="product-actions">
@@ -6003,7 +6023,7 @@ export default function CatalogPage() {
               </div>
               {isInStock(selectedProduct.status) && selectedProduct.inventoryCount !== null && selectedProduct.inventoryCount <= (selectedProduct.lowStockThreshold || 5) && selectedProduct.inventoryCount > 0 && (
                 <div className="stock-badge stock-soon" style={{ position: 'static', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                  {lang === 'en' ? `Only ${selectedProduct.inventoryCount} left in stock!` : `¡Solo quedan ${selectedProduct.inventoryCount} en inventario!`}
+                  {stockLineLabel(selectedProduct)}
                 </div>
               )}
               {isInStock(selectedProduct.status) && stockUnitsLabel(selectedProduct) && (

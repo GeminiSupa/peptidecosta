@@ -7781,6 +7781,23 @@ body:has(.product-grid.grid-view) {
     text-decoration: line-through;
 }
 
+/* A peptide with many vial sizes uses a menu instead of a stack of chips,
+   so that one card does not grow much taller than the cards beside it. */
+.dose-select {
+    width: 100%;
+    max-width: 180px;
+    padding: 7px 28px 7px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+    color: var(--text-main);
+    font-size: 0.75rem;
+    font-weight: 800;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+}
+
 /* ---------------------------------------------------------------------------
    The product page (CRO review, step 4)
 
