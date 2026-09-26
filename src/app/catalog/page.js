@@ -381,7 +381,9 @@ export default function CatalogPage() {
   const [priceFilter, setPriceFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('pop');
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
+  // Grid is the default: the CRO review asked for several products on screen
+  // at once rather than one tall row each. Anyone who picks list keeps it.
+  const [viewMode, setViewMode] = useState('grid'); // 'list', 'grid'
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -1060,8 +1062,8 @@ export default function CatalogPage() {
     document.documentElement.setAttribute('data-theme', savedTheme);
 
     // Viewmode loaded from localStorage
-    const savedView = localStorage.getItem('viewMode') || 'list';
-    setViewMode(['list', 'grid', 'az'].includes(savedView) ? savedView : 'list');
+    const savedView = localStorage.getItem('viewMode') || 'grid';
+    setViewMode(['list', 'grid', 'az'].includes(savedView) ? savedView : 'grid');
 
     // The acknowledgement survives a reload, but only for as long as this tab
     // is open, and only if it was given against the wording we still show. A
@@ -1841,6 +1843,32 @@ export default function CatalogPage() {
     if (units <= 0) return null;
     if (units <= (product.lowStockThreshold || 5)) return null;
     return lang === 'en' ? `${units} in stock` : `${units} disponibles`;
+  };
+
+  /** True when this product is down to its urgency threshold. */
+  const isLowStock = (product) => {
+    const count = Number(product?.inventoryCount);
+    if (!Number.isFinite(count) || count <= 0) return false;
+    return count <= (product?.lowStockThreshold || 5);
+  };
+
+  /**
+   * The single availability line on a product card.
+   *
+   * It replaced a green "In stock" pill sitting beside a grey "48 in stock"
+   * pill, which said the same thing twice and pushed the price down the card.
+   * The count is still on every product that has one, because that is what the
+   * payment processor asked to see; when the count is low the line says so in
+   * the urgency colour instead of adding a second badge.
+   */
+  const stockLineLabel = (product) => {
+    const count = Number(product?.inventoryCount);
+    const known = Number.isFinite(count) && count > 0;
+    if (!known) return lang === 'en' ? 'In stock' : 'Disponible';
+    if (isLowStock(product)) {
+      return lang === 'en' ? `Only ${count} left in stock` : `Solo quedan ${count}`;
+    }
+    return lang === 'en' ? `In stock — ${count} available` : `Disponible — ${count} unidades`;
   };
 
   // New and old category names, plus the "English / Español" custom format.
@@ -4410,11 +4438,6 @@ export default function CatalogPage() {
                         <span>{lang === 'en' ? 'OUT OF STOCK' : 'AGOTADO'}</span>
                       </div>
                     )}
-                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                      <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', background: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '800', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.4)', zIndex: 3, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {lang === 'en' ? `🔥 Only ${p.inventoryCount} left!` : `🔥 ¡Solo quedan ${p.inventoryCount}!`}
-                      </div>
-                    )}
                     {inStock && (() => {
                       // A product-level sale wins: its price has genuinely dropped,
                       // so reporting the gap is accurate. A promo ribbon only
@@ -4462,6 +4485,19 @@ export default function CatalogPage() {
                   </div>
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
+                    {/* One availability line instead of two badges lower down.
+                        The units count stays on every in-stock product: the
+                        payment processor asked for it. Below the low-stock
+                        threshold the same line turns into the urgency cue. */}
+                    {inStock ? (
+                      <div className={`product-stock-line${isLowStock(p) ? ' is-low' : ''}`}>
+                        {stockLineLabel(p)}
+                      </div>
+                    ) : (
+                      <div className={`stock-badge ${comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: '0 0 6px', height: 'fit-content' }}>
+                        <span>{translateStatus(p.status)}</span>
+                      </div>
+                    )}
                     <h3 className="product-name">{p.product}</h3>
                     {productComposition(p.product, lang) && (
                       <div className="product-composition">{productComposition(p.product, lang)}</div>
@@ -4510,18 +4546,6 @@ export default function CatalogPage() {
                         : isBac
                         ? <span className="price-sub" style={{ color: '#16a34a', flexBasis: '100%' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
                         : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
-                    </div>
-                    <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
-                      <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
-                        <span>
-                          {translateStatus(p.status)}
-                        </span>
-                      </div>
-                      {inStock && stockUnitsLabel(p) && (
-                        <div className="stock-units-badge">
-                          <span>{stockUnitsLabel(p)}</span>
-                        </div>
-                      )}
                     </div>
                     <div className="product-actions">
                       {inStock ? (

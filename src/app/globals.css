@@ -7642,3 +7642,66 @@ body:has(.product-grid.grid-view) {
     top: 60px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Catalog product grid, wide screens (CRO review, step 2)
+
+   The catalog was laid out in an 850px column, which on a desktop left the
+   grid with five 148px cards: too narrow for a price, a stock line and an Add
+   to cart button to sit together without fighting. Above 1100px the catalog —
+   and only the catalog — uses a wider column and four roomier cards. Every
+   container inside the page follows, because they all read
+   --container-width, so the hero, the search bar and the grid stay aligned.
+--------------------------------------------------------------------------- */
+@media (min-width: 1100px) {
+    .catalog-page-shell {
+        --container-width: 1120px;
+    }
+
+    .catalog-page-shell .product-grid.grid-view {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 20px;
+    }
+
+    .catalog-page-shell .product-grid.grid-view .product-image {
+        height: 190px;
+    }
+
+    .catalog-page-shell .product-grid.grid-view .product-name {
+        font-size: 1rem;
+        height: 2.6rem;
+    }
+
+    .catalog-page-shell .product-grid.grid-view .product-category {
+        font-size: 0.62rem;
+    }
+}
+
+/* The card's one availability line (CRO review, step 2). Normal stock is quiet
+   and factual; low stock is the urgency cue, in the same place, so a card
+   never carries two stock messages at once. */
+.product-stock-line {
+    margin-bottom: 5px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text-muted);
+}
+
+.product-stock-line.is-low {
+    color: #c2410c;
+}
+
+[data-theme="dark"] .product-stock-line.is-low {
+    color: #fb923c;
+}
+
+.product-grid.grid-view .product-stock-line {
+    text-align: center;
+}
+
+@media (min-width: 1100px) {
+    .catalog-page-shell .product-stock-line {
+        font-size: 0.78rem;
+    }
+}
