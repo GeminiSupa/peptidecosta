@@ -1987,14 +1987,6 @@ Core Rules:
     return () => document.body.classList.remove(cls);
   }, [activeTab]);
 
-  // An affiliate login has no business here. The API refuses them on every
-  // route regardless, so this is not the lock — it is so a partner who lands on
-  // /admin sees their own dashboard instead of an empty staff shell.
-  useEffect(() => {
-    if (!mounted || !adminProfile || profileLoading) return;
-    if (isAffiliateTier(adminProfile)) router.replace('/affiliate-dashboard');
-  }, [mounted, adminProfile, profileLoading, router]);
-
   // Resolve ?tab= from URL once admin profile is loaded
   useEffect(() => {
     if (!mounted || !adminProfile || profileLoading) return;
@@ -5373,6 +5365,34 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         <div className="admin-login-container">
           <div className="sync-spinner" style={{ width: '32px', height: '32px', marginBottom: '16px' }}></div>
           <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>Loading admin permissions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // An affiliate login has no business in here. It used to be bounced straight
+  // to /affiliate-dashboard, which looked exactly like "the admin is broken" to
+  // anybody who was simply signed in as the wrong person on that browser — there
+  // was no sign-out button on the way past. So say what happened, and offer both
+  // doors.
+  if (isAffiliateTier(adminProfile)) {
+    return (
+      <div className="admin-layout" suppressHydrationWarning>
+        <div className="admin-login-container">
+          <div className="admin-login-card">
+            <p>You are signed in as a partner</p>
+            <div className="error-msg" style={{ lineHeight: 1.6 }}>
+              This browser is signed in as {adminProfile?.name || adminProfile?.email}, a partner
+              account. Partner accounts cannot open the admin. Sign out and sign back in with your
+              admin email.
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '16px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={handleLogout}>Sign out</button>
+              <button type="button" onClick={() => router.push('/affiliate-dashboard')}>
+                Open my partner dashboard
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );

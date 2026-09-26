@@ -4070,7 +4070,19 @@
     color: rgba(255, 255, 255, 0.75);
 }
 
+/* The hero styles every anchor inside it as a button, so this plain sentence
+   link has to opt back out of all of it — otherwise it renders as a bordered
+   box sitting under the real buttons. */
+.clone-affiliate-hero .clone-affiliate-signin a,
 .clone-affiliate-signin a {
+    display: inline;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    width: auto;
+    font-size: inherit;
     color: #fff;
     font-weight: 700;
     text-decoration: underline;

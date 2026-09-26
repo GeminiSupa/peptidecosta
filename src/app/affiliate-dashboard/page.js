@@ -265,12 +265,6 @@ function LinksTab({ me, qr }) {
         <p style={{ ...muted, marginTop: 12, marginBottom: 0 }}>
           Share this anywhere. Orders placed through it are credited to you automatically.
         </p>
-        {me.shortLink && (
-          <details style={{ marginTop: 12 }}>
-            <summary style={{ ...muted, cursor: 'pointer' }}>The full version of this link</summary>
-            <p style={{ ...muted, wordBreak: 'break-all', marginTop: 8, marginBottom: 0 }}>{me.link}</p>
-          </details>
-        )}
       </div>
 
       <div style={panel}>
