@@ -3999,3 +3999,85 @@
 @media (prefers-reduced-motion: reduce) {
     .clone-lead-spin { animation: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Affiliate programme buttons.
+
+   These three were bare <button> elements with no class, so they rendered as
+   the browser's default grey box on a navy panel — no fill, no radius, black
+   text. The orange fill is the same --accent the rest of the storefront uses
+   for its primary action, so "Contact Us" here now matches "Contact Us" in the
+   band below it rather than looking like a different site.
+   --------------------------------------------------------------------------- */
+.clone-affiliate-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.clone-affiliate-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 13px 24px;
+    border: 2px solid transparent;
+    border-radius: 50px;
+    font-size: 0.9rem;
+    font-weight: 800;
+    line-height: 1;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.clone-affiliate-btn--primary {
+    background: var(--accent);
+    color: #fff;
+}
+
+.clone-affiliate-btn--primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(191, 79, 11, 0.35);
+}
+
+.clone-affiliate-btn--ghost {
+    background: transparent;
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.clone-affiliate-btn--ghost:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #fff;
+}
+
+/* Answers the press, so a tap feels acknowledged on a phone. */
+.clone-affiliate-btn:active {
+    transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .clone-affiliate-btn { transition: none; }
+    .clone-affiliate-btn:hover,
+    .clone-affiliate-btn:active { transform: none; }
+}
+
+.clone-affiliate-signin {
+    margin: 16px 0 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.75);
+}
+
+.clone-affiliate-signin a {
+    color: #fff;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+/* The Let's Talk button sits centred in its own panel. */
+.clone-affiliate-talk .clone-affiliate-btn {
+    margin-top: 6px;
+}

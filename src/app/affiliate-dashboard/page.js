@@ -405,6 +405,11 @@ function AccountTab({ me, onSaved }) {
   const pendingEmail = (me.pendingChanges || []).find((row) => row.field === 'email');
 
   const emailChanged = email.trim().toLowerCase() !== String(me.affiliate.email || '').trim().toLowerCase();
+  const whatsappChanged = whatsapp.trim() !== String(me.affiliate.whatsapp || '').trim();
+  // Greyed out until something is actually different, so pressing it always
+  // does something. A button that looks live and then says "nothing changed"
+  // teaches people to distrust it.
+  const somethingChanged = emailChanged || whatsappChanged;
 
   const send = async (payload, method = 'PATCH') => {
     setSaving(true);
@@ -433,9 +438,18 @@ function AccountTab({ me, onSaved }) {
     send({ whatsapp });
   };
 
+
+
   return (
     <div style={{ ...panel, maxWidth: 520 }}>
       <h3 style={h3}>Your details</h3>
+      {/* Somebody landing here sees two filled-in boxes and a button, with no
+          sign that the boxes are theirs to change. One sentence fixes that. */}
+      <p style={{ ...muted, margin: '-6px 0 16px' }}>
+        {readOnly
+          ? 'These are the details Peptides Costa Rica has for you.'
+          : 'Type over anything below, then press Update my details at the bottom.'}
+      </p>
 
       <label style={label}>WhatsApp number</label>
       <input style={input} value={whatsapp} disabled={readOnly} onChange={(e) => setWhatsapp(e.target.value)} />
@@ -491,8 +505,13 @@ function AccountTab({ me, onSaved }) {
           Rica and they will update them for you.
         </p>
       ) : (
-        <button className="aff-press" style={{ ...primaryButton, marginTop: 18 }} disabled={saving} onClick={save}>
-          {saving ? 'Saving…' : 'Save'}
+        <button
+          className="aff-press"
+          style={{ ...primaryButton, marginTop: 18, width: '100%', padding: '12px 16px' }}
+          disabled={saving || !somethingChanged}
+          onClick={save}
+        >
+          {saving ? 'Saving…' : 'Update my details'}
         </button>
       )}
       {status && <p style={{ ...muted, marginTop: 10, color: COLORS.text }}>{status}</p>}

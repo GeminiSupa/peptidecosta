@@ -24,10 +24,30 @@ export default function AffiliateProgramPage() {
             <span>{localized(pageSettings, 'heroKicker', lang)}</span>
             <h1>{localized(pageSettings, 'heroTitle', lang)}</h1>
             <p>{localized(pageSettings, 'heroText', lang)}</p>
-            <div>
-              <button type="button" onClick={() => openContactForm('affiliate_apply')}>{localized(pageSettings, 'primaryButton', lang)} <ArrowRight size={16} /></button>
-              <button type="button" onClick={() => openContactForm('affiliate_contact')}><MessageCircle size={16} /> {localized(pageSettings, 'secondaryButton', lang)}</button>
+            <div className="clone-affiliate-actions">
+              <button
+                type="button"
+                className="clone-affiliate-btn clone-affiliate-btn--primary"
+                onClick={() => openContactForm('affiliate_apply')}
+              >
+                {localized(pageSettings, 'primaryButton', lang)} <ArrowRight size={16} />
+              </button>
+              <button
+                type="button"
+                className="clone-affiliate-btn clone-affiliate-btn--ghost"
+                onClick={() => openContactForm('affiliate_contact')}
+              >
+                <MessageCircle size={16} /> {localized(pageSettings, 'secondaryButton', lang)}
+              </button>
             </div>
+            {/* Partners who already have an account had nowhere to sign in from:
+                the dashboard address was only ever handed out by hand. */}
+            <p className="clone-affiliate-signin">
+              {lang === 'en' ? 'Already a partner?' : '¿Ya eres afiliado?'}{' '}
+              <a href="/affiliate-dashboard">
+                {lang === 'en' ? 'Sign in to your dashboard' : 'Entra a tu panel'}
+              </a>
+            </p>
           </div>
           <img src={pageSettings.heroImageUrl || '/science_lab_about.webp'} alt="Affiliate program partner support" />
         </section>
@@ -73,7 +93,11 @@ export default function AffiliateProgramPage() {
           <div className="clone-affiliate-talk">
             <h2>{localized(pageSettings, 'talkTitle', lang)}</h2>
             <p>{localized(pageSettings, 'talkText', lang)}</p>
-            <button type="button" onClick={() => openContactForm('affiliate_talk')}>
+            <button
+              type="button"
+              className="clone-affiliate-btn clone-affiliate-btn--primary"
+              onClick={() => openContactForm('affiliate_talk')}
+            >
               {lang === 'en' ? 'Contact Us' : 'Contáctenos'}
             </button>
           </div>
