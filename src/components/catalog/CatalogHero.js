@@ -75,7 +75,7 @@ export default function CatalogHero({ lang = 'es', links = {}, trustpilotRating 
   ].filter((item) => Boolean(item.href));
 
   return (
-    <section className={styles.wrap} aria-label={headline}>
+    <section className={`catalog-hero-wrap ${styles.wrap}`} aria-label={headline}>
       <div className={`container ${styles.card}`}>
         <div className={styles.copy}>
           <div className={styles.ratings}>

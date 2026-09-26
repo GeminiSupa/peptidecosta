@@ -386,6 +386,10 @@ export default function CatalogPage() {
   // at once rather than one tall row each. Anyone who picks list keeps it.
   const [viewMode, setViewMode] = useState('grid'); // 'list', 'grid'
 
+  // How many vials the product page will add. It is not the cart quantity —
+  // the cart still owns that — just what the Add to cart button sends.
+  const [detailQty, setDetailQty] = useState(1);
+
   // Which vial size a grouped card is showing, keyed by the group. Only the
   // sizes a shopper has actually tapped live here; everything else falls back
   // to the cheapest one in stock.
@@ -2078,7 +2082,13 @@ export default function CatalogPage() {
   };
 
   // Cart operations
-  const addToCart = (productObj) => {
+  /**
+   * @param {object} productObj  the exact product row, as the cart stores it
+   * @param {number} [quantity]  how many vials to add. Every caller but the
+   *   product page adds one at a time, so the default keeps them unchanged;
+   *   the stock ceiling below is the same one either way.
+   */
+  const addToCart = (productObj, quantity = 1) => {
     // Last line of defence. Filtering the three product lists is what a customer
     // sees, but a stale tab, a recovered cart or a saved localStorage cart can
     // still carry a BAC size that is not for sale.
@@ -2087,8 +2097,9 @@ export default function CatalogPage() {
       return;
     }
 
+    const requested = Math.max(1, Math.floor(Number(quantity) || 1));
     const existing = cart.find(item => item.product === productObj.product);
-    const newQty = existing ? existing.qty + 1 : 1;
+    const newQty = existing ? existing.qty + requested : requested;
 
     if (productObj.inventoryCount !== null && newQty > productObj.inventoryCount) {
       flagStockLimit(productObj.product, productObj.inventoryCount);
@@ -2102,9 +2113,9 @@ export default function CatalogPage() {
           : item
       ));
     } else {
-      setCart([...cart, { ...productObj, qty: 1 }]);
+      setCart([...cart, { ...productObj, qty: requested }]);
     }
-    setSelectedProduct(null);
+    closeProductModal();
     setIsCartOpen(true);
 
     // Trigger cart bounce animation
@@ -2138,6 +2149,47 @@ export default function CatalogPage() {
     }
   };
 
+  // A product is a page: it gets its own URL, so it can be shared, linked to
+  // and counted, and the quantity resets each time a new one opens.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setDetailQty(1);
+
+    const url = new URL(window.location.href);
+    const current = url.searchParams.get('product');
+    if (selectedProduct) {
+      if (current === selectedProduct.product) return;
+      url.searchParams.set('product', selectedProduct.product);
+      window.scrollTo({ top: 0 });
+      // Switching vial size stays on the same page, so it replaces the entry
+      // rather than stacking one per size.
+      if (window.history.state?.productPage) {
+        window.history.replaceState({ productPage: selectedProduct.product }, '', url);
+      } else {
+        window.history.pushState({ productPage: selectedProduct.product }, '', url);
+      }
+    } else if (current) {
+      url.searchParams.delete('product');
+      window.history.replaceState({}, '', url);
+    }
+  }, [selectedProduct]);
+
+  // Back and Forward move between the catalog and a product like any other
+  // pair of pages.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handlePop = () => {
+      const name = new URL(window.location.href).searchParams.get('product');
+      if (!name) {
+        setSelectedProduct(null);
+        return;
+      }
+      setSelectedProduct(products.find((item) => item.product === name) || null);
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [products]);
+
   const handleShareProduct = (e, product) => {
     if (e) e.stopPropagation();
     const url = `${window.location.origin}/catalog?product=${encodeURIComponent(product.product)}`;
@@ -2154,7 +2206,18 @@ export default function CatalogPage() {
     }
   };
 
+  /**
+   * Leaving the product page.
+   *
+   * Opening one pushes a history entry, so going back is what actually closes
+   * it — that way the browser's own Back button and this button do the same
+   * thing. The popstate listener below is what clears the state.
+   */
   const closeProductModal = () => {
+    if (typeof window !== 'undefined' && window.history.state?.productPage) {
+      window.history.back();
+      return;
+    }
     setSelectedProduct(null);
   };
 
@@ -3521,6 +3584,38 @@ export default function CatalogPage() {
   // interchangeable doses.
   const productRows = groupCatalogProducts(filteredProducts, (item) => isBacWater(item?.product));
 
+  // --- The open product page -------------------------------------------
+  // Its sizes come from the whole shelf, not from the filtered grid: a
+  // shopper who searched "GLP-1 20mg" should still be able to switch size on
+  // the page they landed on.
+  const detailRow = selectedProduct
+    ? groupCatalogProducts(products, (item) => isBacWater(item?.product))
+      .find((row) => row.doses.some((dose) => dose.product.product === selectedProduct.product)) || null
+    : null;
+
+  // The Add button can never ask for more than the shelf holds, counting what
+  // is already in the cart. addToCart enforces the same ceiling; this just
+  // stops the stepper offering a number that would be refused.
+  const detailInCart = selectedProduct
+    ? (cart.find((item) => item.product === selectedProduct.product)?.qty || 0)
+    : 0;
+  const detailStockCeiling = Number(selectedProduct?.inventoryCount);
+  const detailMaxQty = Number.isFinite(detailStockCeiling) && detailStockCeiling > 0
+    ? Math.max(1, detailStockCeiling - detailInCart)
+    : 99;
+
+  // How far this order is from the next volume tier. Silent while a deal or a
+  // promo code has taken the tiers off the table, so the page never promises a
+  // discount the cart will not apply.
+  const volumeNudge = (() => {
+    if (!selectedProduct || isBacWater(selectedProduct.product)) return null;
+    if (volumeTierHintSuppressed) return null;
+    const units = getCartVialCount() + detailQty;
+    const nextTier = [5, 10].find((tier) => units < tier);
+    if (!nextTier) return null;
+    return { missing: nextTier - units, pct: getVolumeDiscountPct(nextTier) };
+  })();
+
   // The dropdown is a preview of the actual result set, not a second search
   // with different stock/category/price rules. Ten covers the largest family;
   // the final row submits the search and reveals the complete grid.
@@ -3810,7 +3905,7 @@ export default function CatalogPage() {
   return (
     <div
       id="app"
-      className={`catalog-page-shell min-h-screen${searchFocused ? ' catalog-search-open' : ''}`}
+      className={`catalog-page-shell min-h-screen${searchFocused ? ' catalog-search-open' : ''}${selectedProduct ? ' product-page-open' : ''}`}
       suppressHydrationWarning
     >
       <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
@@ -5731,23 +5826,29 @@ export default function CatalogPage() {
 
       {/* Product Detail Modal */}
       {selectedProduct && (
-        <div className="modal active product-detail-overlay" onClick={closeProductModal}>
-          <div className="modal-content product-detail-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="product-detail-title">
-            <button className="close-modal product-detail-close" onClick={closeProductModal} aria-label={lang === 'en' ? 'Close product details' : 'Cerrar detalles del producto'}><X size={20} /></button>
+        <section className="product-page" aria-labelledby="product-detail-title">
+          <div className="product-page-inner container">
+            <button type="button" className="product-page-back" onClick={closeProductModal}>
+              <ArrowLeft size={18} />
+              {lang === 'en' ? 'Back to catalog' : 'Volver al catálogo'}
+            </button>
             
-            <div className="product-detail-hero">
-              <div style={{ marginBottom: '12px', display: 'flex', justifyContent: 'center' }}>
-                <div className="product-image" style={{ width: '120px', height: '120px', fontSize: '60px' }}>
-                  {selectedProduct.imageUrl ? (
-                    <img
-                      src={selectedProduct.imageUrl}
-                      alt={selectedProduct.product}
-                      decoding="async"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '20px' }}
-                    />
-                  ) : getCategoryIcon(selectedProduct.category, 56)}
-                </div>
+            {/* The photo is its own column now: on a page there is room to
+                show the vial at a size worth looking at. */}
+            <div className="product-page-media">
+              <div className="product-image">
+                {selectedProduct.imageUrl ? (
+                  <img
+                    src={selectedProduct.imageUrl}
+                    alt={selectedProduct.product}
+                    decoding="async"
+                  />
+                ) : getCategoryIcon(selectedProduct.category, 96)}
               </div>
+            </div>
+
+            <div className="product-page-buy">
+            <div className="product-detail-hero">
               <div className="product-category" style={{ color: 'var(--text-primary)', paddingRight: 0 }}>
                 {translateCategory(selectedProduct.category)}
               </div>
@@ -5878,13 +5979,76 @@ export default function CatalogPage() {
                 </button>
               </>
             ) : isInStock(selectedProduct.status) && (
-              <button 
-                className="whatsapp-btn product-detail-cart-button"
-                onClick={() => addToCart(selectedProduct)}
-              >
-                {lang === 'en' ? 'Add to Cart' : 'Añadir al Carrito'}
-              </button>
+              <div className="product-buy-box">
+                {detailRow && detailRow.grouped && (
+                  <div className="dose-picker" role="group" aria-label={lang === 'en' ? 'Vial size' : 'Tamaño de vial'}>
+                    <span className="dose-picker-label">{lang === 'en' ? 'Select size' : 'Elige el tamaño'}</span>
+                    <div className="dose-picker-options">
+                      {detailRow.doses.map((dose) => {
+                        const doseInStock = isInStock(dose.product.status);
+                        const isChosen = dose.product.product === selectedProduct.product;
+                        return (
+                          <button
+                            key={dose.product.product}
+                            type="button"
+                            className={`dose-chip${isChosen ? ' is-chosen' : ''}${doseInStock ? '' : ' is-out'}`}
+                            aria-pressed={isChosen}
+                            disabled={!doseInStock}
+                            title={doseInStock ? dose.product.product : `${dose.product.product} — ${lang === 'en' ? 'out of stock' : 'agotado'}`}
+                            onClick={() => setSelectedProduct(dose.product)}
+                          >
+                            {dose.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="product-buy-row">
+                  <div className="qty-stepper" role="group" aria-label={lang === 'en' ? 'Quantity' : 'Cantidad'}>
+                    <button
+                      type="button"
+                      onClick={() => setDetailQty((n) => Math.max(1, n - 1))}
+                      disabled={detailQty <= 1}
+                      aria-label={lang === 'en' ? 'One fewer vial' : 'Un vial menos'}
+                    >
+                      <Minus size={16} />
+                    </button>
+                    <span aria-live="polite">{detailQty}</span>
+                    <button
+                      type="button"
+                      onClick={() => setDetailQty((n) => Math.min(detailMaxQty, n + 1))}
+                      disabled={detailQty >= detailMaxQty}
+                      aria-label={lang === 'en' ? 'One more vial' : 'Un vial más'}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
+
+                  {/* How close this order is to the next volume tier. The
+                      percentages come from the pricing engine, so the nudge
+                      cannot promise a discount the cart will not give. */}
+                  {volumeNudge && (
+                    <span className="volume-nudge">
+                      {lang === 'en'
+                        ? `Add ${volumeNudge.missing} more ${volumeNudge.missing === 1 ? 'vial' : 'vials'} to unlock ${volumeNudge.pct}% off`
+                        : `Agrega ${volumeNudge.missing} ${volumeNudge.missing === 1 ? 'vial más' : 'viales más'} para desbloquear ${volumeNudge.pct}% de descuento`}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  className="whatsapp-btn product-detail-cart-button"
+                  onClick={() => addToCart(selectedProduct, detailQty)}
+                >
+                  {lang === 'en'
+                    ? `Add ${detailQty} to cart`
+                    : `Añadir ${detailQty} al carrito`}
+                </button>
+              </div>
             )}
+            </div>
 
             {/* REVIEWS SECTION */}
             <div className="reviews-section">
@@ -5982,7 +6146,7 @@ export default function CatalogPage() {
             </div>
             
           </div>
-        </div>
+        </section>
       )}
 
       {/* How to Order Modal */}

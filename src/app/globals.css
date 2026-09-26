@@ -7769,3 +7769,165 @@ body:has(.product-grid.grid-view) {
     cursor: not-allowed;
     text-decoration: line-through;
 }
+
+/* ---------------------------------------------------------------------------
+   The product page (CRO review, step 4)
+
+   This content used to be a modal over the catalog: a narrow column with the
+   vial shrunk to 120px and no room to answer a question before asking for the
+   sale. It is now a page — its own URL, its own Back button, the photo in one
+   column and the buying decision in the other.
+
+   While it is open the catalog behind it is hidden rather than unmounted, so
+   coming back costs no reload and keeps the shopper's scroll, filters and
+   search exactly as they left them.
+--------------------------------------------------------------------------- */
+.catalog-page-shell.product-page-open .catalog-hero-wrap,
+.catalog-page-shell.product-page-open .header-sticky-section,
+.catalog-page-shell.product-page-open > .main {
+    display: none;
+}
+
+.product-page {
+    padding: 18px 0 60px;
+}
+
+.product-page-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.product-page-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.product-page-back:hover {
+    color: var(--text-main);
+}
+
+.product-page-media .product-image {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    max-height: 420px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+
+.product-page-media .product-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.product-page-buy {
+    min-width: 0;
+}
+
+/* The page's own title block reads left-aligned, not centred like the modal. */
+.product-page .product-detail-hero,
+.product-page .product-detail-hero > div {
+    text-align: left;
+    justify-content: flex-start;
+}
+
+.product-buy-box {
+    margin-top: 14px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+}
+
+.product-buy-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.qty-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-secondary);
+}
+
+.qty-stepper button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--bg-card);
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.qty-stepper button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.qty-stepper span {
+    min-width: 30px;
+    text-align: center;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--text-main);
+}
+
+.volume-nudge {
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(191, 79, 11, 0.12);
+    color: #c2410c;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+[data-theme="dark"] .volume-nudge {
+    color: #fb923c;
+}
+
+.product-page .product-detail-cart-button {
+    width: 100%;
+}
+
+/* Reviews run the full width under both columns. The description stays in the
+   buying column, where it answers the question being asked. */
+.product-page .reviews-section {
+    grid-column: 1 / -1;
+}
+
+@media (min-width: 860px) {
+    .product-page-inner {
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        column-gap: 34px;
+    }
+
+    .product-page-back {
+        grid-column: 1 / -1;
+    }
+}
