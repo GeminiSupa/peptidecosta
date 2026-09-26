@@ -508,7 +508,7 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
 
       {activeSubTab === 'access' && <AffiliateAccessPanel />}
 
-      {activeSubTab === 'partners' ? (
+      {activeSubTab === 'partners' && (
       <>
       <ReferralAnalytics />
       <div className="admin-responsive-grid-auto">
@@ -937,7 +937,12 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
 
       </div>
       </>
-      ) : (
+      )}
+
+      {/* Payouts is its own sub-tab, not "whatever is not partners". It used to
+          be the else half of a ternary, so opening Logins & Access rendered the
+          whole payout screen — scan filters and all — underneath it. */}
+      {activeSubTab === 'payouts' && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <select
