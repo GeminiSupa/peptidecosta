@@ -35,6 +35,11 @@ export default function BulkWholesaleSpotlight({ lang = 'es', compact = false })
   if (compact) {
     return (
       <Link className={styles.strip} href={href}>
+        <img
+          className={styles.stripThumb}
+          src="/catalog-promo-banner.webp"
+          alt=""
+        />
         <span className={styles.stripBrand}>
           <span className={styles.stripIcon} aria-hidden="true"><Zap size={17} strokeWidth={2.5} fill="currentColor" /></span>
           <span>
