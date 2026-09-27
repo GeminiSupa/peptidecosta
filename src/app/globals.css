@@ -848,7 +848,7 @@ body {
 
 .dosage-chips {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 4px;
     width: 100%;
 }
@@ -858,16 +858,16 @@ body {
 }
 
 .dosage-chip {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     min-width: 0;
-    border: 1px solid #e5e7eb;
-    background: #f3f4f6;
-    color: #111827;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
     border-radius: 999px;
-    padding: 6px 8px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    line-height: 1.1;
+    padding: 3px 8px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    line-height: 1.2;
     cursor: pointer;
     font-family: inherit;
 }
@@ -877,9 +877,9 @@ body {
 }
 
 .dosage-chip.is-selected {
-    background: #1f2937;
-    border-color: #1f2937;
-    color: #fff;
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #334155;
 }
 
 .dosage-chip.is-unavailable:not(.is-selected) {
@@ -902,9 +902,9 @@ body {
 }
 
 [data-theme="dark"] .dosage-chip.is-selected {
-    background: #f8fafc;
-    border-color: #f8fafc;
-    color: #0f172a;
+    background: #334155;
+    border-color: #94a3b8;
+    color: #f8fafc;
 }
 
 .add-to-cart-btn {

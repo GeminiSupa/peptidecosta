@@ -226,19 +226,12 @@ export function groupCatalogCards(products = []) {
 }
 
 /**
- * The size chips a card can show without wrapping.
- *
- * Three or fewer sizes are all shown. Four or more show two chips plus a
- * count of the rest. The selected size stays on the card: when it was not
- * already one of those two, it replaces the second chip.
+ * Every size on the card. Hiding the rest behind a "+N" meant shoppers
+ * never found the other strengths.
  */
-export function visibleSizeChips(items, selectedProductName) {
+export function visibleSizeChips(items) {
   const list = Array.isArray(items) ? items : [];
-  if (list.length <= 3) return { visible: list, hiddenCount: 0 };
-  const selectedIndex = list.findIndex((item) => item?.product?.product === selectedProductName);
-  const picked = selectedIndex > 1 ? selectedIndex : 1;
-  const visible = [list[0], list[picked]];
-  return { visible, hiddenCount: list.length - visible.length };
+  return { visible: list, hiddenCount: 0 };
 }
 
 /** The jump-bar letter a compound files under; digits share '#'. */

@@ -4089,39 +4089,6 @@ export default function CatalogPage() {
           </div>
         </div>
 
-        <div className="container catalog-deal-line">
-          <BulkWholesaleSpotlight lang={lang} compact />
-        </div>
-
-        {reorderNotice ? (
-          <div
-            className="container"
-            role="status"
-            style={{
-              margin: '10px auto',
-              padding: '10px 14px',
-              borderRadius: 'var(--radius-md)',
-              background: 'var(--bg-secondary)',
-              color: 'var(--text-main)',
-              fontSize: '0.88rem',
-              display: 'flex',
-              gap: 12,
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <span>{reorderNotice}</span>
-            <button
-              type="button"
-              onClick={() => setReorderNotice('')}
-              aria-label={lang === 'en' ? 'Dismiss' : 'Cerrar'}
-              style={{ background: 'none', border: 0, cursor: 'pointer', color: 'var(--text-muted)' }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        ) : null}
-
         <nav className="category-nav container">
           <button
             type="button"
@@ -4168,6 +4135,39 @@ export default function CatalogPage() {
         </nav>
       </div>
       </div>
+
+        <div className="container catalog-deal-line">
+          <BulkWholesaleSpotlight lang={lang} compact />
+        </div>
+
+        {reorderNotice ? (
+          <div
+            className="container"
+            role="status"
+            style={{
+              margin: '10px auto',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--bg-secondary)',
+              color: 'var(--text-main)',
+              fontSize: '0.88rem',
+              display: 'flex',
+              gap: 12,
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>{reorderNotice}</span>
+            <button
+              type="button"
+              onClick={() => setReorderNotice('')}
+              aria-label={lang === 'en' ? 'Dismiss' : 'Cerrar'}
+              style={{ background: 'none', border: 0, cursor: 'pointer', color: 'var(--text-muted)' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : null}
 
       {/* Main Catalog View */}
       <main className="main container" style={{ position: 'relative', minHeight: '60vh' }}>
@@ -4513,7 +4513,7 @@ export default function CatalogPage() {
                         className={`dosage-block${openDosageKey === card.key ? ' is-open' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="dosage-label">{lang === 'en' ? 'Select dosage' : 'Seleccionar dosis'}</div>
+                        <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Seleccionar tamaño'}</div>
                         <div className="dosage-chips">
                           {sizeChoices.map((item) => {
                             const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
