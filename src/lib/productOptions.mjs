@@ -43,7 +43,9 @@ export function vialSizeOf(product) {
 function sizeAtEndPattern(size) {
   const match = String(size).match(/^(\d+(?:\.\d+)?)\s*(mg|ml|iu)$/i);
   if (!match) return escapeRegExp(size);
-  return `${match[1]}\\s*${match[2]}`;
+  // The size has to be its own number. Otherwise "5mg" matches the end of "15mg"
+  // and the name is left as "GLP-1 1".
+  return `(?<!\\d)${match[1]}\\s*${match[2]}`;
 }
 
 export function productPickerName(product) {

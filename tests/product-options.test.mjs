@@ -31,4 +31,8 @@ test('a manual order can show the vial size apart from the peptide name', () => 
 
   assert.equal(vialSizeOf({ product: 'HGH (Pfizer Genotropin) 50IU', vialSize: '50IU' }), '50 IU');
   assert.equal(productPickerName({ product: 'HGH (Pfizer Genotropin) 50IU', vialSize: '50IU' }), 'HGH (Pfizer Genotropin)');
+
+  assert.equal(productPickerName({ product: 'GLP-1 15mg', vialSize: '15mg' }), 'GLP-1');
+  assert.equal(productPickerName({ product: 'GLP-1 15mg', vialSize: '5mg' }), 'GLP-1 15mg');
+  assert.equal(productPickerName({ product: 'BPC-157 10mg' }), 'BPC-157');
 });
