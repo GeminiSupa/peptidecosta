@@ -7,6 +7,7 @@ import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import ProductCombobox from './ProductCombobox';
+import { productPickerName, vialSizeOf } from '@/lib/productOptions.mjs';
 import AskForReviewButton from './AskForReviewButton';
 import CardPaymentsPausedBanner from './CardPaymentsPausedBanner';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
@@ -1304,9 +1305,15 @@ export default function OrderDetailPanel({
 
         <div className="order-detail-section">
           <h3>Items &amp; Totals</h3>
-          {editItems.map((item, idx) => (
+          {editItems.map((item, idx) => {
+            const catalogProduct = products.find((product) => product.product === item.product) || { product: item.product };
+            const size = vialSizeOf(catalogProduct);
+            return (
             <div key={`${item.product}-${idx}`} className="manual-order-item-row" style={{ marginBottom: '8px' }}>
-              <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{item.product}</span>
+              <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, minWidth: 0 }}>
+                <span style={{ minWidth: 0 }}>{productPickerName(catalogProduct) || item.product}</span>
+                {size ? <span className="product-combobox-size">{size}</span> : null}
+              </span>
               <input
                 className="admin-input"
                 type="number"
@@ -1328,7 +1335,8 @@ export default function OrderDetailPanel({
                 <Trash2 size={14} />
               </button>
             </div>
-          ))}
+            );
+          })}
 
           {giftShortfall.missing > 0 && (
             <div

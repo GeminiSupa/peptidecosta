@@ -2574,6 +2574,7 @@ Core Rules:
           loadedProducts = data.map(item => ({
             id: item.id,
             product: item.product || '',
+            vialSize: item.vial_size || '',
             category: item.category || '',
             priceUsd: item.price_usd || '',
             priceCrc: item.price_crc || '',

@@ -4833,6 +4833,39 @@
   text-align: left;
 }
 
+.product-combobox.has-size .product-combobox-input {
+  padding-right: 76px !important;
+}
+
+.product-combobox-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-combobox-size {
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.product-combobox-selected-size {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
 .product-combobox-option small { color: #94a3b8; white-space: nowrap; }
 .product-combobox-option:hover,
 .product-combobox-option.active { background: #172237; color: #38bdf8; }

@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { sortProductsAlphabetically } from '@/lib/productOptions.mjs';
+import { productPickerName, sortProductsAlphabetically, vialSizeOf } from '@/lib/productOptions.mjs';
 
 export default function ProductCombobox({
   products = [],
@@ -20,19 +20,31 @@ export default function ProductCombobox({
   const [activeIndex, setActiveIndex] = useState(0);
   const blurTimer = useRef(null);
 
-  useEffect(() => setQuery(value || ''), [value]);
+  useEffect(() => {
+    if (!value) return;
+    const match = products.find((product) => product.product === value);
+    setQuery(match ? productPickerName(match) : value);
+  }, [value, products]);
   useEffect(() => () => clearTimeout(blurTimer.current), []);
 
   const sorted = useMemo(() => sortProductsAlphabetically(products), [products]);
+  const selected = useMemo(
+    () => (value ? products.find((product) => product.product === value) || null : null),
+    [products, value],
+  );
+  const selectedSize = selected ? vialSizeOf(selected) : '';
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return sorted.slice(0, 30);
-    return sorted.filter((product) => String(product.product || '').toLowerCase().includes(needle)).slice(0, 30);
+    return sorted.filter((product) => {
+      const haystack = `${product.product || ''} ${productPickerName(product)} ${vialSizeOf(product)}`.toLowerCase();
+      return haystack.includes(needle);
+    }).slice(0, 30);
   }, [query, sorted]);
 
   const choose = (product) => {
     if (!product) return;
-    setQuery(product.product);
+    setQuery(productPickerName(product));
     setOpen(false);
     setActiveIndex(0);
     onSelect?.(product);
@@ -52,16 +64,18 @@ export default function ProductCombobox({
       choose(filtered[activeIndex]);
     } else if (event.key === 'Escape') {
       setOpen(false);
-      setQuery(value || '');
+      const match = products.find((product) => product.product === value);
+      setQuery(match ? productPickerName(match) : (value || ''));
     }
   };
 
   return (
-    <div className={`product-combobox ${className}`}>
+    <div className={`product-combobox ${selectedSize && !open ? 'has-size' : ''} ${className}`}>
       <Search size={14} className="product-combobox-icon" aria-hidden="true" />
       <input
         id={inputId}
         className="admin-input product-combobox-input"
+        aria-label={selectedSize ? `${query}, ${selectedSize}` : undefined}
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={open}
@@ -81,6 +95,9 @@ export default function ProductCombobox({
         }}
         onKeyDown={handleKeyDown}
       />
+      {selectedSize && !open && (
+        <span className="product-combobox-size product-combobox-selected-size">{selectedSize}</span>
+      )}
       {open && !disabled && (
         <div id={listId} role="listbox" className="product-combobox-list">
           {filtered.length === 0 ? (
@@ -97,7 +114,8 @@ export default function ProductCombobox({
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => choose(product)}
             >
-              <span>{product.product}</span>
+              <span className="product-combobox-option-name">{productPickerName(product)}</span>
+              {vialSizeOf(product) ? <span className="product-combobox-size">{vialSizeOf(product)}</span> : null}
               <small>{product.status || 'Product'}</small>
             </button>
           ))}
