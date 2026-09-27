@@ -1,11 +1,22 @@
 import { composeStoredProductName } from './catalogCategories.mjs';
 
 export function sortProductsAlphabetically(products = []) {
-  return [...products].sort((left, right) => String(left?.product || '').localeCompare(
-    String(right?.product || ''),
-    undefined,
-    { sensitivity: 'base', numeric: true }
-  ));
+  return [...products].sort((left, right) => {
+    const byName = String(left?.product || '').localeCompare(
+      String(right?.product || ''),
+      undefined,
+      { sensitivity: 'base', numeric: true }
+    );
+    if (byName !== 0) return byName;
+    // Same peptide, different vials. The size lives in its own field now, so
+    // without this the sizes list in whatever order the shelf happens to hold.
+    return sizeSortValue(left) - sizeSortValue(right);
+  });
+}
+
+function sizeSortValue(product) {
+  const value = parseFloat(String(vialSizeOf(product)).replace(/,/g, ''));
+  return Number.isFinite(value) ? value : 0;
 }
 
 function escapeRegExp(value) {

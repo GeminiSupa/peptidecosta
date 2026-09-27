@@ -9,6 +9,20 @@ test('manual order products sort alphabetically with numeric strengths in order'
   assert.deepEqual(sorted.map((row) => row.product), ['AOD-9604', 'bpc-157 5mg', 'BPC-157 10mg', 'Zinc']);
 });
 
+test('the sizes of one peptide list smallest first, even with the size in its own field', () => {
+  const sorted = sortProductsAlphabetically([
+    { product: 'GLP-1', vialSize: '20mg' },
+    { product: 'DSIP', vialSize: '10mg' },
+    { product: 'GLP-1', vialSize: '5mg' },
+    { product: 'DSIP', vialSize: '5mg' },
+    { product: 'GLP-1', vialSize: '12mg' },
+  ]);
+  assert.deepEqual(
+    sorted.map((row) => `${row.product} ${row.vialSize}`),
+    ['DSIP 5mg', 'DSIP 10mg', 'GLP-1 5mg', 'GLP-1 12mg', 'GLP-1 20mg'],
+  );
+});
+
 test('a manual order can show the vial size apart from the peptide name', () => {
   assert.equal(vialSizeOf({ product: 'AHK-CU', vialSize: '50mg' }), '50mg');
   assert.equal(productPickerName({ product: 'AHK-CU', vialSize: '50mg' }), 'AHK-CU');
