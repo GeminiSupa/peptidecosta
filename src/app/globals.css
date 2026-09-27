@@ -156,6 +156,72 @@ body {
     padding-right: 0;
 }
 
+.catalog-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 850;
+    padding: 6px 0;
+}
+
+.catalog-topbar-row {
+    flex-wrap: nowrap;
+    padding-bottom: 0;
+    gap: 8px;
+    min-height: 48px;
+}
+
+.catalog-back,
+.catalog-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    color: var(--text-main);
+    text-decoration: none;
+    border-radius: 8px;
+}
+
+.catalog-topbar-logo {
+    margin-right: auto;
+    line-height: 0;
+}
+
+.catalog-topbar .logo-emblem {
+    height: 36px;
+    border-radius: 8px;
+}
+
+.catalog-topbar .header-controls {
+    flex-wrap: nowrap;
+    gap: 6px;
+}
+
+.header-select {
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-main);
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    height: 32px;
+    padding: 0 2px 0 6px;
+    max-width: 72px;
+}
+
+.header-select--theme {
+    max-width: 78px;
+}
+
+.catalog-topbar .catalog-header-cart {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+    border-radius: 10px;
+}
+
 .catalog-brand-sticky {
     position: sticky;
     top: 0;
@@ -288,6 +354,12 @@ body {
     padding-bottom: 12px;
     gap: 10px;
     flex-wrap: wrap;
+}
+
+.catalog-topbar .header-top {
+    justify-content: flex-start;
+    padding-bottom: 0;
+    flex-wrap: nowrap;
 }
 
 .header-controls {

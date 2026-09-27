@@ -65,11 +65,11 @@ import { HONEYPOT_FIELD, junkOrderMessage } from '@/lib/checkoutJunkGuard.mjs';
 import { 
   ShoppingBag, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
-  Plus, Minus, Trash2, Check, CheckCircle, AlertCircle, ArrowLeft,
+  Plus, Minus, Trash2, Check, CheckCircle, AlertCircle,
   ChevronLeft, ChevronRight,
   Dna, FlaskConical, Syringe, TestTubes, Atom,
   Brain, Shield, Moon, Sun, Flame, Zap, Droplets, Microscope, Star,
-  CreditCard, MessageCircle, Lock, Share2, User
+  CreditCard, MessageCircle, Share2, User
 } from 'lucide-react';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession } from '@/hooks/useCustomerSession';
@@ -3781,96 +3781,72 @@ export default function CatalogPage() {
       suppressHydrationWarning
     >
       <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
-      {/* Utility controls stay in normal flow above the persistent brand row. */}
-      <header className="header-top-section">
-        <div className="header-top container">
-          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)', textDecoration: 'none', fontWeight: 'bold', marginRight: 'auto' }}>
-            <ArrowLeft size={16} />
-            {lang === 'en' ? 'Back' : 'Volver'}
+      <header className="header-top-section catalog-topbar">
+        <div className="header-top container catalog-topbar-row">
+          <Link
+            href="/"
+            className="catalog-back"
+            aria-label={lang === 'en' ? 'Back' : 'Volver'}
+          >
+            <ChevronLeft size={22} aria-hidden="true" />
           </Link>
-          <div className="header-controls">
-            <Link
-              href="/account"
-              className="admin-link"
-              title={lang === 'en' ? 'My Account' : 'Mi Cuenta'}
-            >
-              <User size={11} /> {lang === 'en' ? 'MY ACCOUNT' : 'MI CUENTA'}
-            </Link>
-            <Link href="/admin" className="admin-link" title="Admin Dashboard">
-              <Lock size={11} /> ADMIN
-            </Link>
-            <div className="theme-toggle">
-              <button
-                onClick={() => handleThemeToggle('light')}
-                className={theme === 'light' ? 'active' : ''}
-                title="Light Mode"
-              >
-                <Sun size={14} strokeWidth={2.5} />
-              </button>
-              <button
-                onClick={() => handleThemeToggle('dark')}
-                className={theme === 'dark' ? 'active' : ''}
-                title="Dark Mode"
-              >
-                <Moon size={14} strokeWidth={2.5} />
-              </button>
-            </div>
-            <div className="lang-selector">
-              <button
-                onClick={() => handleLangToggle('en')}
-                className={lang === 'en' ? 'active' : ''}
-              >
-                ENG
-              </button>
-              <button
-                onClick={() => handleLangToggle('es')}
-                className={lang === 'es' ? 'active' : ''}
-              >
-                ES
-              </button>
-            </div>
-            <div className="currency-selector">
-              <button
-                onClick={() => setCurrency('USD')}
-                className={currency === 'USD' ? 'active' : ''}
-              >
-                USD
-              </button>
-              <button
-                onClick={() => setCurrency('CRC')}
-                className={currency === 'CRC' ? 'active' : ''}
-              >
-                CRC
-              </button>
-            </div>
-          </div>
-        </div>
-
-      </header>
-
-      <div className="catalog-brand-sticky">
-        <div className="catalog-brand-row container">
-          <Link href="/" className="logo logo--emblem">
+          <Link href="/" className="logo logo--emblem catalog-topbar-logo">
             <img
               src="/logo.webp"
-              alt="Peptides Costa Rica Logo"
+              alt="Peptides Costa Rica"
               className="logo-emblem"
             />
           </Link>
-
-          <button
-            type="button"
-            className={`catalog-header-cart ${cartAnimating ? 'cart-animating' : ''}`}
-            onClick={() => setIsCartOpen(true)}
-            aria-label={lang === 'en'
-              ? `Open cart, ${cartItemCount} ${cartItemCount === 1 ? 'item' : 'items'}`
-              : `Abrir carrito, ${cartItemCount} ${cartItemCount === 1 ? 'artículo' : 'artículos'}`}
-          >
-            <ShoppingBag size={24} strokeWidth={2.4} aria-hidden="true" />
-            {cartItemCount > 0 && <span className="catalog-header-cart-badge">{cartItemCount}</span>}
-          </button>
+          <div className="header-controls">
+            <select
+              className="header-select"
+              aria-label={lang === 'en' ? 'Language' : 'Idioma'}
+              value={lang}
+              onChange={(e) => handleLangToggle(e.target.value)}
+            >
+              <option value="en">EN</option>
+              <option value="es">ES</option>
+            </select>
+            <select
+              className="header-select"
+              aria-label={lang === 'en' ? 'Currency' : 'Moneda'}
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+            >
+              <option value="USD">USD</option>
+              <option value="CRC">CRC</option>
+            </select>
+            <select
+              className="header-select header-select--theme"
+              aria-label={lang === 'en' ? 'Theme' : 'Tema'}
+              value={theme}
+              onChange={(e) => handleThemeToggle(e.target.value)}
+            >
+              <option value="light">{lang === 'en' ? 'Light' : 'Claro'}</option>
+              <option value="dark">{lang === 'en' ? 'Dark' : 'Oscuro'}</option>
+            </select>
+            <Link
+              href="/account"
+              className="catalog-icon-btn"
+              aria-label={lang === 'en' ? 'My Account' : 'Mi Cuenta'}
+              title={lang === 'en' ? 'My Account' : 'Mi Cuenta'}
+            >
+              <User size={18} aria-hidden="true" />
+            </Link>
+            <button
+              type="button"
+              className={`catalog-header-cart ${cartAnimating ? 'cart-animating' : ''}`}
+              onClick={() => setIsCartOpen(true)}
+              aria-label={lang === 'en'
+                ? `Open cart, ${cartItemCount} ${cartItemCount === 1 ? 'item' : 'items'}`
+                : `Abrir carrito, ${cartItemCount} ${cartItemCount === 1 ? 'artículo' : 'artículos'}`}
+            >
+              <ShoppingBag size={20} strokeWidth={2.4} aria-hidden="true" />
+              {cartItemCount > 0 && <span className="catalog-header-cart-badge">{cartItemCount}</span>}
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
       <section className="catalog-proof-section">
         <div className="header-content container">
