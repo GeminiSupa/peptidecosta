@@ -147,6 +147,55 @@ export function splitCompoundAndSize(name) {
   return { compound: compound || text, size: match[1].replace(/\s+/g, ' ').trim() };
 }
 
+function sizeSortValue(size) {
+  return parseFloat(String(size).replace(/,/g, '')) || 0;
+}
+
+/**
+ * One catalog card per compound, in the order the first size appeared.
+ *
+ * Sizes inside the card run smallest first. `lead` is that first size, so a
+ * card promoted because one vial is on sale can open on that vial.
+ */
+export function groupCatalogCards(products = []) {
+  const groups = new Map();
+  const order = [];
+  for (const product of products || []) {
+    const name = product?.product;
+    if (!name) continue;
+    const { compound, size } = splitCompoundAndSize(name);
+    const key = compound.toLowerCase();
+    let group = groups.get(key);
+    if (!group) {
+      group = { key, compound, lead: name, items: [] };
+      groups.set(key, group);
+      order.push(group);
+    }
+    group.items.push({ product, size, sizeValue: sizeSortValue(size) });
+  }
+  for (const group of order) {
+    group.items.sort((a, b) => a.sizeValue - b.sizeValue
+      || String(a.product.product).localeCompare(String(b.product.product)));
+  }
+  return order;
+}
+
+/**
+ * The size chips a card can show without wrapping.
+ *
+ * Three or fewer sizes are all shown. Four or more show two chips plus a
+ * count of the rest. The selected size stays on the card: when it was not
+ * already one of those two, it replaces the second chip.
+ */
+export function visibleSizeChips(items, selectedProductName) {
+  const list = Array.isArray(items) ? items : [];
+  if (list.length <= 3) return { visible: list, hiddenCount: 0 };
+  const selectedIndex = list.findIndex((item) => item?.product?.product === selectedProductName);
+  const picked = selectedIndex > 1 ? selectedIndex : 1;
+  const visible = [list[0], list[picked]];
+  return { visible, hiddenCount: list.length - visible.length };
+}
+
 /** The jump-bar letter a compound files under; digits share '#'. */
 export function azLetter(compound) {
   const first = String(compound ?? '').trim().charAt(0).toUpperCase();

@@ -745,6 +745,81 @@ body {
     border-color: rgba(0, 33, 105, 0.15);
 }
 
+.dosage-block {
+    width: 100%;
+    margin: 0 0 8px;
+}
+
+.dosage-label {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+
+.dosage-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    width: 100%;
+}
+
+.dosage-block.is-open .dosage-chips {
+    flex-wrap: wrap;
+}
+
+.dosage-chip {
+    flex: 1 1 0;
+    min-width: 0;
+    border: 1px solid #e5e7eb;
+    background: #f3f4f6;
+    color: #111827;
+    border-radius: 999px;
+    padding: 6px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.1;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.dosage-block.is-open .dosage-chip {
+    flex: 0 1 auto;
+}
+
+.dosage-chip.is-selected {
+    background: #1f2937;
+    border-color: #1f2937;
+    color: #fff;
+}
+
+.dosage-chip.is-unavailable:not(.is-selected) {
+    opacity: 0.55;
+}
+
+.dosage-more {
+    flex: 0 0 auto;
+    min-width: 2.4rem;
+}
+
+[data-theme="dark"] .dosage-label {
+    color: #94a3b8;
+}
+
+[data-theme="dark"] .dosage-chip {
+    background: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+}
+
+[data-theme="dark"] .dosage-chip.is-selected {
+    background: #f8fafc;
+    border-color: #f8fafc;
+    color: #0f172a;
+}
+
 .add-to-cart-btn {
     display: flex;
     align-items: center;
@@ -6951,6 +7026,16 @@ body:has(.product-grid.grid-view) {
     min-height: 0;
     -webkit-line-clamp: 3;
     margin-bottom: 4px;
+}
+
+.product-grid.grid-view .dosage-label {
+    font-size: 0.52rem;
+    margin-bottom: 4px;
+}
+
+.product-grid.grid-view .dosage-chip {
+    font-size: 0.62rem;
+    padding: 5px 4px;
 }
 
 .product-grid.grid-view .product-rating-slot {

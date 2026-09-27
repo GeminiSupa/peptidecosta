@@ -9,6 +9,8 @@ import {
   productComposition,
   isBlendOrStack,
   splitCompoundAndSize,
+  groupCatalogCards,
+  visibleSizeChips,
   azLetter,
   buildAzList,
 } from '../src/lib/catalogCategories.mjs';
@@ -65,6 +67,33 @@ test('a product name splits into compound and vial size', () => {
   assert.deepEqual(splitCompoundAndSize('HGH 50 IU (Pfizer Genotropin)'), { compound: 'HGH (Pfizer Genotropin)', size: '50 IU' });
   assert.deepEqual(splitCompoundAndSize('CJC-1295 without DAC + IPA 10mg'), { compound: 'CJC-1295 without DAC + IPA', size: '10mg' });
   assert.deepEqual(splitCompoundAndSize('Melanotan II'), { compound: 'Melanotan II', size: '' });
+});
+
+test('catalog cards group a compound and keep a long size list to two chips', () => {
+  const cards = groupCatalogCards([
+    { product: 'Semaglutide 30mg' },
+    { product: 'Semaglutide 5mg' },
+    { product: 'Semaglutide 10mg' },
+    { product: 'Semaglutide 20mg' },
+    { product: 'Semaglutide 15mg' },
+    { product: 'BPC-157 10mg' },
+    { product: 'Melanotan II' },
+  ]);
+  assert.deepEqual(cards.map((card) => card.compound), ['Semaglutide', 'BPC-157', 'Melanotan II']);
+  assert.equal(cards[0].lead, 'Semaglutide 30mg');
+  assert.deepEqual(cards[0].items.map((item) => item.size), ['5mg', '10mg', '15mg', '20mg', '30mg']);
+
+  const collapsed = visibleSizeChips(cards[0].items, 'Semaglutide 5mg');
+  assert.deepEqual(collapsed.visible.map((item) => item.size), ['5mg', '10mg']);
+  assert.equal(collapsed.hiddenCount, 3);
+
+  const picked = visibleSizeChips(cards[0].items, 'Semaglutide 30mg');
+  assert.deepEqual(picked.visible.map((item) => item.size), ['5mg', '30mg']);
+  assert.equal(picked.hiddenCount, 3);
+
+  const three = visibleSizeChips(cards[0].items.slice(0, 3), 'Semaglutide 15mg');
+  assert.equal(three.visible.length, 3);
+  assert.equal(three.hiddenCount, 0);
 });
 
 test('digits file under # in the jump bar', () => {

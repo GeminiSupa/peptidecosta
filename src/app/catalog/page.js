@@ -18,6 +18,8 @@ import {
   isMetabolicCategory,
   productComposition,
   buildAzList,
+  groupCatalogCards,
+  visibleSizeChips,
 } from '@/lib/catalogCategories.mjs';
 import {
   RESEARCH_ACK_VERSION,
@@ -384,6 +386,10 @@ export default function CatalogPage() {
   const [sortOrder, setSortOrder] = useState('pop');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
+  // Which vial size a grouped card is showing, and which card has its full
+  // size list open. Keys are the compound name, lowercased.
+  const [dosagePick, setDosagePick] = useState({});
+  const [openDosageKey, setOpenDosageKey] = useState(null);
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -4427,7 +4433,17 @@ export default function CatalogPage() {
         ) : (
           <>
           <div className={`product-grid ${viewMode}-view`}>
-            {filteredProducts.map((p, idx) => {
+            {groupCatalogCards(filteredProducts).map((card, idx) => {
+              const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
+              const lead = card.items.find((item) => item.product.product === card.lead);
+              const leadSellable = lead && (isBacWater(lead.product.product) || isInStock(lead.product.status));
+              const fallback = (leadSellable ? lead : null)
+                || card.items.find((item) => isBacWater(item.product.product) || isInStock(item.product.status))
+                || card.items[0];
+              const p = (chosen || fallback).product;
+              const showSizes = card.items.length > 1;
+              const sizeMenu = visibleSizeChips(card.items, p.product);
+              const sizeChoices = openDosageKey === card.key ? card.items : sizeMenu.visible;
               const isBac = isBacWater(p.product);
               const isTenMlBac = isBac && getBacWaterSizeMl(p.product) === 10;
               const inStock = isBac || isInStock(p.status);
@@ -4460,7 +4476,7 @@ export default function CatalogPage() {
 
               return (
                 <div 
-                  key={idx} 
+                  key={card.key}
                   className={cardClass}
                   onClick={() => handleProductClick(p)}
                 >
@@ -4533,7 +4549,7 @@ export default function CatalogPage() {
                   </div>
                   <div className="product-info">
                     <div className="product-category">{translateCategory(p.category)}</div>
-                    <h3 className="product-name">{p.product}</h3>
+                    <h3 className="product-name">{showSizes ? card.compound : p.product}</h3>
                     {productComposition(p.product, lang) && (
                       <div className="product-composition">{productComposition(p.product, lang)}</div>
                     )}
@@ -4594,6 +4610,47 @@ export default function CatalogPage() {
                         </div>
                       )}
                     </div>
+                    {showSizes && (
+                      <div
+                        className={`dosage-block${openDosageKey === card.key ? ' is-open' : ''}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Elegir tamaño'}</div>
+                        <div className="dosage-chips">
+                          {sizeChoices.map((item) => {
+                            const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
+                            const selected = item.product.product === p.product;
+                            return (
+                              <button
+                                type="button"
+                                key={item.product.product}
+                                className={`dosage-chip${selected ? ' is-selected' : ''}${itemInStock ? '' : ' is-unavailable'}`}
+                                aria-pressed={selected}
+                                onClick={() => {
+                                  setDosagePick((prev) => ({ ...prev, [card.key]: item.product.product }));
+                                  setOpenDosageKey(null);
+                                }}
+                              >
+                                {item.size || item.product.product}
+                              </button>
+                            );
+                          })}
+                          {sizeMenu.hiddenCount > 0 && (
+                            <button
+                              type="button"
+                              className="dosage-chip dosage-more"
+                              aria-expanded={openDosageKey === card.key}
+                              aria-label={lang === 'en'
+                                ? `Show ${sizeMenu.hiddenCount} more sizes`
+                                : `Ver ${sizeMenu.hiddenCount} tamaños más`}
+                              onClick={() => setOpenDosageKey((current) => (current === card.key ? null : card.key))}
+                            >
+                              {openDosageKey === card.key ? '–' : `+${sizeMenu.hiddenCount}`}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div className="product-actions">
                       {inStock ? (
                         // The card always shows the Add button; quantity is
