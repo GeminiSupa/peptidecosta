@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
