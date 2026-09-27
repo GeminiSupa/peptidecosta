@@ -4808,8 +4808,12 @@
   z-index: 260;
   top: calc(100% + 5px);
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: 520px;
   max-height: 280px;
+  overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid #334155;
   border-radius: 10px;
@@ -4823,7 +4827,9 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
   padding: 9px 10px;
   border: 0;
   border-radius: 7px;
@@ -4838,7 +4844,7 @@
 }
 
 .product-combobox-option-name {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4846,7 +4852,7 @@
 }
 
 .product-combobox-size {
-  flex: none;
+  flex: 0 0 auto;
   font-size: 0.72rem;
   font-weight: 800;
   line-height: 1.2;
@@ -4866,7 +4872,7 @@
   pointer-events: none;
 }
 
-.product-combobox-option small { color: #94a3b8; white-space: nowrap; }
+.product-combobox-option small { color: #94a3b8; white-space: nowrap; flex: 0 0 auto; }
 .product-combobox-option:hover,
 .product-combobox-option.active { background: #172237; color: #38bdf8; }
 .product-combobox-empty { padding: 12px; color: #94a3b8; font-size: .78rem; }

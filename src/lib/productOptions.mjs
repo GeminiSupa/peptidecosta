@@ -40,10 +40,18 @@ export function vialSizeOf(product) {
  * "AHK-CU" beside a "50mg" chip instead of burying the size in the name.
  * The stored product name is left alone — this is display only.
  */
+function sizeAtEndPattern(size) {
+  const match = String(size).match(/^(\d+(?:\.\d+)?)\s*(mg|ml|iu)$/i);
+  if (!match) return escapeRegExp(size);
+  return `${match[1]}\\s*${match[2]}`;
+}
+
 export function productPickerName(product) {
   const name = String(product?.product || '').trim();
   const size = vialSizeOf(product);
   if (!name || !size) return name;
-  const stripped = name.replace(new RegExp(`\\s*${escapeRegExp(size)}\\s*$`, 'i'), '').trim();
+  // "50IU" and "50 IU" are the same size. The chip shows it, so it must come
+  // off the end of the name even when the spacing does not match.
+  const stripped = name.replace(new RegExp(`\\s*${sizeAtEndPattern(size)}\\s*$`, 'i'), '').trim();
   return stripped || name;
 }

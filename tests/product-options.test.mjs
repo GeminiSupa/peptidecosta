@@ -28,4 +28,7 @@ test('a manual order can show the vial size apart from the peptide name', () => 
   const plain = 'CJC-1295 without DAC + Ipamorelin';
   assert.equal(vialSizeOf({ product: plain }), '');
   assert.equal(productPickerName({ product: plain }), plain);
+
+  assert.equal(vialSizeOf({ product: 'HGH (Pfizer Genotropin) 50IU', vialSize: '50IU' }), '50 IU');
+  assert.equal(productPickerName({ product: 'HGH (Pfizer Genotropin) 50IU', vialSize: '50IU' }), 'HGH (Pfizer Genotropin)');
 });
