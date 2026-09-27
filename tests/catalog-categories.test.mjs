@@ -9,6 +9,8 @@ import {
   productComposition,
   isBlendOrStack,
   splitCompoundAndSize,
+  catalogCompoundAndSize,
+  composeStoredProductName,
   groupCatalogCards,
   visibleSizeChips,
   azLetter,
@@ -94,6 +96,28 @@ test('catalog cards group a compound and keep a long size list to two chips', ()
   const three = visibleSizeChips(cards[0].items.slice(0, 3), 'Semaglutide 15mg');
   assert.equal(three.visible.length, 3);
   assert.equal(three.hiddenCount, 0);
+});
+
+test('a size saved in its own field becomes the chip, and a size left in the name still does', () => {
+  assert.equal(composeStoredProductName('AHK-CU', '50mg'), 'AHK-CU 50mg');
+  assert.equal(composeStoredProductName('AHK-CU 50mg', '50mg'), 'AHK-CU 50mg');
+  assert.equal(composeStoredProductName('AHK-CU 50mg', ''), 'AHK-CU 50mg');
+  assert.deepEqual(catalogCompoundAndSize({ product: 'AHK-CU 50mg' }), { compound: 'AHK-CU', size: '50mg' });
+
+  const fromField = groupCatalogCards([
+    { product: 'AHK-CU', vialSize: '50mg' },
+    { product: 'AHK-CU', vialSize: '100mg' },
+  ]);
+  assert.equal(fromField.length, 1);
+  assert.equal(fromField[0].compound, 'AHK-CU');
+  assert.deepEqual(fromField[0].items.map((item) => item.size), ['50mg', '100mg']);
+
+  const fromName = groupCatalogCards([
+    { product: 'AHK-CU 50mg' },
+    { product: 'AHK-CU 100mg' },
+  ]);
+  assert.equal(fromName.length, 1);
+  assert.deepEqual(fromName[0].items.map((item) => item.size), ['50mg', '100mg']);
 });
 
 test('digits file under # in the jump bar', () => {

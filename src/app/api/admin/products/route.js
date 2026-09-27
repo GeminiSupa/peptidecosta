@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import {
   liveDealProductConflicts,
@@ -27,6 +27,23 @@ function isMissingDealsTable(error) {
 }
 
 const normalizeName = (value) => String(value || '').trim().toLowerCase();
+
+const PRODUCT_OPTIONAL_COLUMNS = ['vial_size'];
+
+async function writeProductRows(supabase, method, rows, id) {
+  return writeDroppingMissingColumns(rows[0] || {}, PRODUCT_OPTIONAL_COLUMNS, async (sample) => {
+    const payload = rows.map((row) => {
+      const copy = { ...row };
+      for (const col of PRODUCT_OPTIONAL_COLUMNS) {
+        if (!(col in sample)) delete copy[col];
+      }
+      return copy;
+    });
+    if (method === 'upsert') return supabase.from('products').upsert(payload);
+    if (method === 'insert') return supabase.from('products').insert(payload);
+    return supabase.from('products').update(payload[0]).eq('id', id).select('*').single();
+  });
+}
 
 /**
  * Reviews are stored against the product's name, so a rename leaves them on the
@@ -155,12 +172,12 @@ export async function PUT(request) {
     }
 
     if (toUpdate.length > 0) {
-      const { error } = await supabase.from('products').upsert(toUpdate);
+      const { error } = await writeProductRows(supabase, 'upsert', toUpdate);
       if (error) throw error;
     }
 
     if (toInsert.length > 0) {
-      const { error } = await supabase.from('products').insert(toInsert);
+      const { error } = await writeProductRows(supabase, 'insert', toInsert);
       if (error) throw error;
     }
 
@@ -229,12 +246,7 @@ async function saveOneProduct(supabase, { product, baseline, moveReviews }) {
     }
   }
 
-  const { data: saved, error: writeError } = await supabase
-    .from('products')
-    .update(row)
-    .eq('id', id)
-    .select('*')
-    .single();
+  const { data: saved, error: writeError } = await writeProductRows(supabase, 'update', [row], id);
   if (writeError) throw writeError;
 
   const movedReviews = moveReviews === true

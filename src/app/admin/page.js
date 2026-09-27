@@ -66,6 +66,7 @@ import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
 import AdminHelpBot from '@/components/admin/AdminHelpBot';
 import { productBaseline as buildProductBaseline } from '@/lib/productSaveGuard.mjs';
+import { composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
@@ -2571,9 +2572,12 @@ Core Rules:
           }
           setHiddenProductNames(hiddenNames);
 
-          loadedProducts = data.map(item => ({
+          loadedProducts = data.map(item => {
+            const shown = splitStoredProductForAdmin(item.product || '', item.vial_size);
+            return {
             id: item.id,
-            product: item.product || '',
+            product: shown.product,
+            vialSize: shown.vialSize,
             category: item.category || '',
             priceUsd: item.price_usd || '',
             priceCrc: item.price_crc || '',
@@ -2605,7 +2609,8 @@ Core Rules:
             freeBacVialsPerItem: item.free_bac_vials_per_item != null && item.free_bac_vials_per_item > 0
               ? item.free_bac_vials_per_item
               : 1,
-          }));
+            };
+          });
           setProductBaseline(buildProductBaseline(data));
           setLoadedProductNames(Object.fromEntries(data.map((item) => [item.id, item.product || ''])));
           setIsDbConnected(true);
@@ -3171,7 +3176,7 @@ Core Rules:
       products
         .map(p => p.id === productId ? { ...p, hidden: nextHidden } : p)
         .filter(p => p.hidden && p.product && p.product.trim())
-        .map(p => p.product.trim())
+        .map(p => composeStoredProductName(p.product, p.vialSize).trim())
     ));
     setHiddenProductNames(names);
 
@@ -3200,6 +3205,7 @@ Core Rules:
     const newRow = {
       id: `temp-${Date.now()}`,
       product: 'New Peptide Name',
+      vialSize: '',
       category: 'Metabolic & GLP-1 Compounds',
       priceUsd: '$100',
       priceCrc: '₡45,448',

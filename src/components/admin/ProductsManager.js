@@ -93,6 +93,7 @@ export default function ProductsManager({
     String(p.saleStartTime || '') !== String(mobileEditProduct.saleStartTime || '') ||
     String(p.saleEndTime || '') !== String(mobileEditProduct.saleEndTime || '') ||
     String(p.status || '') !== String(mobileEditProduct.status || '') ||
+    String(p.vialSize || '') !== String(mobileEditProduct.vialSize || '') ||
     String(p.inventoryCount ?? '') !== String(mobileEditProduct.inventoryCount ?? '') ||
     String(p.lowStockThreshold ?? 5) !== String(mobileEditProduct.lowStockThreshold ?? 5) ||
     String(p.discount || '') !== String(mobileEditProduct.discount || '') ||
@@ -381,6 +382,7 @@ export default function ProductsManager({
               <tr>
                 <th style={{ width: '40px' }}>#</th>
                 <th style={{ minWidth: '220px' }}>Product Peptide Name</th>
+                <th style={{ width: '110px' }}>Vial size</th>
                 <th style={{ minWidth: '180px' }}>Category</th>
                 <th style={{ width: '100px' }}>Price (USD)</th>
                 <th style={{ width: '100px' }}>CRC Auto</th>
@@ -445,6 +447,18 @@ export default function ProductsManager({
                       onBlur={(e) => handleCellChange(p.id, 'product', e.target.innerText)}
                     >
                       {p.product}
+                    </div>
+                  </td>
+
+                  <td data-label="Vial size">
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="cell-editable"
+                      title="The size chip, for example 50mg. Leave this empty if the size is already in the name."
+                      onBlur={(e) => handleCellChange(p.id, 'vialSize', e.target.innerText.trim())}
+                    >
+                      {p.vialSize || ''}
                     </div>
                   </td>
 
@@ -1037,6 +1051,15 @@ export default function ProductsManager({
               <label>
                 <span>Name</span>
                 <input value={mobileEditProduct.product || ''} onChange={(e) => updateMobileDraft('product', e.target.value)} />
+              </label>
+              <label>
+                <span>Vial size</span>
+                <input
+                  value={mobileEditProduct.vialSize || ''}
+                  placeholder="50mg"
+                  onChange={(e) => updateMobileDraft('vialSize', e.target.value)}
+                />
+                <small>This becomes the size chip. Example: 50mg. Leave empty if the size is already in the name.</small>
               </label>
               <label>
                 <span>Category</span>

@@ -157,13 +157,58 @@ function sizeSortValue(size) {
  * Sizes inside the card run smallest first. `lead` is that first size, so a
  * card promoted because one vial is on sale can open on that vial.
  */
+function sizesMatch(a, b) {
+  return String(a || '').replace(/\s+/g, '').toLowerCase() === String(b || '').replace(/\s+/g, '').toLowerCase();
+}
+
+/**
+ * The compound and the chip size for one product.
+ *
+ * A vial size typed in its own field wins. When that field is empty, the size
+ * is still read out of the name, so "AHK-CU 50mg" keeps working.
+ */
+export function catalogCompoundAndSize(product) {
+  const name = String(product?.product ?? '').trim();
+  const explicit = String(product?.vialSize ?? product?.vial_size ?? '').trim();
+  if (!explicit) return splitCompoundAndSize(name);
+  const parsed = splitCompoundAndSize(name);
+  if (parsed.size) return { compound: parsed.compound, size: explicit };
+  return { compound: name, size: explicit };
+}
+
+/**
+ * The name stored on the product row.
+ *
+ * The cart, orders and stock still match the full name ("AHK-CU 50mg"). The
+ * size field is joined on when it is not already written in the name.
+ */
+export function composeStoredProductName(name, vialSize) {
+  const raw = String(name ?? '').trim().replace(/\s+/g, ' ');
+  const size = String(vialSize ?? '').trim().replace(/\s+/g, ' ');
+  if (!size) return raw;
+  const parsed = splitCompoundAndSize(raw);
+  if (parsed.size && sizesMatch(parsed.size, size)) return `${parsed.compound} ${parsed.size}`.trim();
+  if (parsed.size) return `${parsed.compound} ${size}`.trim();
+  return `${raw} ${size}`.trim();
+}
+
+/** What the product grid shows when a size has been saved in its own field. */
+export function splitStoredProductForAdmin(storedName, vialSize) {
+  const size = String(vialSize ?? '').trim();
+  const name = String(storedName ?? '');
+  if (!size) return { product: name, vialSize: '' };
+  const parsed = splitCompoundAndSize(name);
+  if (parsed.size && sizesMatch(parsed.size, size)) return { product: parsed.compound, vialSize: size };
+  return { product: name, vialSize: size };
+}
+
 export function groupCatalogCards(products = []) {
   const groups = new Map();
   const order = [];
   for (const product of products || []) {
     const name = product?.product;
     if (!name) continue;
-    const { compound, size } = splitCompoundAndSize(name);
+    const { compound, size } = catalogCompoundAndSize(product);
     const key = compound.toLowerCase();
     let group = groups.get(key);
     if (!group) {
@@ -221,7 +266,7 @@ export function buildAzList(products = [], isSupply = () => false) {
   for (const product of products || []) {
     const name = product?.product;
     if (!name || isSupply(name)) continue;
-    const { compound, size } = splitCompoundAndSize(name);
+    const { compound, size } = catalogCompoundAndSize(product);
     const row = { product, compound, size, sizeValue: parseFloat(String(size).replace(/,/g, '')) || 0 };
     (isBlendOrStack(name) ? blends : singles).push(row);
   }

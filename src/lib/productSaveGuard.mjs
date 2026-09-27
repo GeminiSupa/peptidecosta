@@ -25,6 +25,7 @@
 
 import { crWallToIso } from './crTime.mjs';
 import { defaultFreeBacConfig } from './bacWater.mjs';
+import { composeStoredProductName } from './catalogCategories.mjs';
 
 /** A row that exists in the database, as opposed to one added in the grid. */
 export function isExistingProductId(id) {
@@ -48,7 +49,7 @@ export function emojiForCategory(category) {
 /** A grid row (camelCase) as the database row (snake_case) it is saved as. */
 export function productToDbRow(product, priority) {
   const row = {
-    product: product.product,
+    product: composeStoredProductName(product.product, product.vialSize),
     category: product.category,
     price_usd: product.priceUsd,
     price_crc: product.priceCrc,
@@ -58,6 +59,7 @@ export function productToDbRow(product, priority) {
     sale_start_time: crWallToIso(product.saleStartTime),
     sale_end_time: crWallToIso(product.saleEndTime),
     status: product.status,
+    vial_size: String(product.vialSize || '').trim() || null,
     inventory_count: product.inventoryCount === '' ? null : product.inventoryCount,
     low_stock_threshold: product.lowStockThreshold === '' ? 5 : product.lowStockThreshold,
     coa: product.coa,
@@ -100,6 +102,7 @@ const FINGERPRINT_FIELDS = Object.freeze([
   'sale_start_time',
   'sale_end_time',
   'status',
+  'vial_size',
   'inventory_count',
   'low_stock_threshold',
   'coa',

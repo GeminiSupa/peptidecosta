@@ -93,6 +93,7 @@ export function mapDbProduct(item) {
     imageUrl: item.image_url || getProductFallbackImage(item.product, item.category),
     descriptionEn: item.description_en || '',
     descriptionEs: item.description_es || '',
+    vialSize: item.vial_size || '',
     emoji: item.emoji || getEmojiForCategory(item.category),
     ...resolveFreeBacConfig(item),
   };
