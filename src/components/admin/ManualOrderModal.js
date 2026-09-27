@@ -18,6 +18,7 @@ import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import ManualCustomerCombobox from './ManualCustomerCombobox';
 import ProductCombobox from './ProductCombobox';
+import { storedOrderProductName } from '@/lib/productOptions.mjs';
 
 const EMPTY_ITEM = { product: '', qty: 1, price: '' };
 // A superadmin must say who owns a manual order. This is the explicit "nobody".
@@ -96,7 +97,7 @@ export default function ManualOrderModal({
   };
 
   const productPrice = (name, currency) => {
-    const p = products.find((x) => x.product === name);
+    const p = products.find((x) => storedOrderProductName(x) === name);
     if (!p) return 0;
     const usd = parseFloat(String(p.priceUsd || '0').replace(/[^0-9.]/g, '')) || 0;
     if (currency === 'USD') return usd;
@@ -367,7 +368,7 @@ export default function ManualOrderModal({
                 value={item.product}
                 placeholder="Type to find a product…"
                 onClear={() => updateItem(idx, 'product', '')}
-                onSelect={(product) => pickProduct(idx, product.product)}
+                onSelect={(product) => pickProduct(idx, storedOrderProductName(product))}
               />
               <input className="admin-input" type="number" min="1" placeholder="Qty" value={item.qty} onChange={(e) => updateItem(idx, 'qty', e.target.value)} style={{ width: '70px' }} />
               <input className="admin-input" type="number" min="0" step="0.01" placeholder="Price" value={item.price} readOnly title="Price is loaded from the live product catalog" style={{ width: '100px', opacity: 0.82 }} />

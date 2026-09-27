@@ -7,6 +7,7 @@ import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import { confirmCustomerEmail } from '@/lib/confirmCustomerEmail.mjs';
 import ProductCombobox from './ProductCombobox';
+import { productPickerName, storedOrderProductName, vialSizeOf } from '@/lib/productOptions.mjs';
 import AskForReviewButton from './AskForReviewButton';
 import CardPaymentsPausedBanner from './CardPaymentsPausedBanner';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
@@ -648,16 +649,17 @@ export default function OrderDetailPanel({
 
   const handleAddProduct = () => {
     if (!addProduct) return;
-    const product = products.find((p) => p.product === addProduct);
+    const product = products.find((p) => storedOrderProductName(p) === addProduct);
     if (!product) return;
-    if (editItems.some((i) => i.product === product.product)) {
+    const storedName = storedOrderProductName(product);
+    if (editItems.some((i) => i.product === storedName)) {
       setOrderError('Product already on this order — change quantity instead.');
       return;
     }
     setEditItems([
       ...editItems,
       {
-        product: product.product,
+        product: storedName,
         qty: 1,
         price: parseProductPrice(product, orderCurrency),
       },
@@ -1304,9 +1306,15 @@ export default function OrderDetailPanel({
 
         <div className="order-detail-section">
           <h3>Items &amp; Totals</h3>
-          {editItems.map((item, idx) => (
+          {editItems.map((item, idx) => {
+            const catalogProduct = products.find((product) => storedOrderProductName(product) === item.product) || { product: item.product };
+            const size = vialSizeOf(catalogProduct);
+            return (
             <div key={`${item.product}-${idx}`} className="manual-order-item-row" style={{ marginBottom: '8px' }}>
-              <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 600 }}>{item.product}</span>
+              <span style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: 600, minWidth: 0 }}>
+                <span style={{ minWidth: 0 }}>{productPickerName(catalogProduct) || item.product}</span>
+                {size ? <span className="product-combobox-size">{size}</span> : null}
+              </span>
               <input
                 className="admin-input"
                 type="number"
@@ -1328,7 +1336,8 @@ export default function OrderDetailPanel({
                 <Trash2 size={14} />
               </button>
             </div>
-          ))}
+            );
+          })}
 
           {giftShortfall.missing > 0 && (
             <div
@@ -1360,7 +1369,7 @@ export default function OrderDetailPanel({
               value={addProduct}
               placeholder="Type to add a product…"
               onClear={() => setAddProduct('')}
-              onSelect={(product) => setAddProduct(product.product)}
+              onSelect={(product) => setAddProduct(storedOrderProductName(product))}
               className="order-detail-product-picker"
             />
             <button type="button" className="admin-btn admin-btn-secondary" onClick={handleAddProduct}>
