@@ -4497,11 +4497,6 @@ export default function CatalogPage() {
                         <span>{lang === 'en' ? 'OUT OF STOCK' : 'AGOTADO'}</span>
                       </div>
                     )}
-                    {inStock && p.inventoryCount !== null && p.inventoryCount <= (p.lowStockThreshold || 5) && p.inventoryCount > 0 && (
-                      <div style={{ position: 'absolute', bottom: '8px', left: '50%', transform: 'translateX(-50%)', background: '#ef4444', color: '#fff', padding: '4px 12px', borderRadius: '20px', fontSize: '0.65rem', fontWeight: '800', boxShadow: '0 4px 10px rgba(239, 68, 68, 0.4)', zIndex: 3, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {lang === 'en' ? `🔥 Only ${p.inventoryCount} left!` : `🔥 ¡Solo quedan ${p.inventoryCount}!`}
-                      </div>
-                    )}
                     {inStock && (() => {
                       // A product-level sale wins: its price has genuinely dropped,
                       // so reporting the gap is accurate. A promo ribbon only
@@ -4548,14 +4543,20 @@ export default function CatalogPage() {
                     })()}
                   </div>
                   <div className="product-info">
-                    <div className="product-category">{translateCategory(p.category)}</div>
+                    {(() => {
+                      const units = Number(p.inventoryCount);
+                      const scarcity = inStock && Number.isFinite(units) && units > 0
+                        ? (lang === 'en' ? `Only ${units} left in stock` : `Solo quedan ${units} en inventario`)
+                        : '';
+                      return <div className="card-scarcity">{scarcity}</div>;
+                    })()}
                     <h3 className="product-name">{showSizes ? card.compound : p.product}</h3>
-                    {productComposition(p.product, lang) && (
-                      <div className="product-composition">{productComposition(p.product, lang)}</div>
-                    )}
-                    <div className="product-rating-slot">
-                      {renderRatingSummary(p.product)}
-                    </div>
+                    {(() => {
+                      const blurb = productComposition(p.product, lang)
+                        || String(lang === 'en' ? p.descriptionEn : p.descriptionEs || '').trim();
+                      if (!blurb) return null;
+                      return <div className="product-card-blurb">{blurb}</div>;
+                    })()}
                     <div className="product-pricing">
                       {isBac ? (
                         // Priced per vial like everything else, so it shows both
@@ -4598,24 +4599,12 @@ export default function CatalogPage() {
                         ? <span className="price-sub" style={{ color: '#16a34a', flexBasis: '100%' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
                         : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
-                    <div className="stock-badges-slot" style={{ display: 'flex', gap: '8px', justifyContent: viewMode === 'grid' ? 'center' : 'flex-start', marginBottom: '8px' }}>
-                      <div className={`stock-badge ${isBac ? 'stock-in' : inStock ? 'stock-in' : comingSoon ? 'stock-soon' : 'stock-out'}`} style={{ position: 'relative', top: 'auto', right: 'auto', margin: 0, height: 'fit-content' }}>
-                        <span>
-                          {translateStatus(p.status)}
-                        </span>
-                      </div>
-                      {inStock && stockUnitsLabel(p) && (
-                        <div className="stock-units-badge">
-                          <span>{stockUnitsLabel(p)}</span>
-                        </div>
-                      )}
-                    </div>
                     {showSizes && (
                       <div
                         className={`dosage-block${openDosageKey === card.key ? ' is-open' : ''}`}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Elegir tamaño'}</div>
+                        <div className="dosage-label">{lang === 'en' ? 'Select dosage' : 'Seleccionar dosis'}</div>
                         <div className="dosage-chips">
                           {sizeChoices.map((item) => {
                             const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
@@ -5811,6 +5800,9 @@ export default function CatalogPage() {
                   {productComposition(selectedProduct.product, lang)}
                 </div>
               )}
+              <div className="product-detail-rating">
+                {renderRatingSummary(selectedProduct.product)}
+              </div>
             </div>
 
             <div className="product-detail-price">
