@@ -4350,7 +4350,7 @@ export default function CatalogPage() {
                 || card.items.find((item) => isBacWater(item.product.product) || isInStock(item.product.status))
                 || card.items[0];
               const p = (chosen || fallback).product;
-              const showSizes = card.items.length > 1;
+              const showSizes = card.items.some((item) => item.size);
               const sizeMenu = visibleSizeChips(card.items, p.product);
               const sizeChoices = openDosageKey === card.key ? card.items : sizeMenu.visible;
               const isBac = isBacWater(p.product);

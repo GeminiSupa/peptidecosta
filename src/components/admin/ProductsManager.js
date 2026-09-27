@@ -1,12 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
 
-import { CATALOG_CATEGORY_NAMES } from '@/lib/catalogCategories.mjs';
+import { CATALOG_CATEGORY_NAMES, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import {
   calculateProductProfit,
   calculateSalesVelocity,
   calculateStockoutForecast,
 } from '@/lib/inventoryForecasting.mjs';
+
+function nameWithoutSize(product) {
+  if (!String(product?.vialSize || '').trim()) return product?.product || '';
+  return splitStoredProductForAdmin(
+    composeStoredProductName(product.product, product.vialSize),
+    product.vialSize,
+  ).product;
+}
 
 export default function ProductsManager({
   products,
@@ -86,7 +94,7 @@ export default function ProductsManager({
     return [...CATALOG_CATEGORY_NAMES, ...others];
   }, [products]);
   const mobileDirty = Boolean(mobileEditProduct && products.find((p) => p.id === mobileEditProduct.id && (
-    p.product !== mobileEditProduct.product ||
+    nameWithoutSize(p) !== (mobileEditProduct.product || '') ||
     p.category !== mobileEditProduct.category ||
     String(p.priceUsd || '') !== String(mobileEditProduct.priceUsd || '') ||
     String(p.originalPriceUsd || '') !== String(mobileEditProduct.originalPriceUsd || '') ||
@@ -107,7 +115,7 @@ export default function ProductsManager({
   )));
   const openMobileEditor = (product) => {
     setMobileProductError('');
-    setMobileEditProduct({ ...product });
+    setMobileEditProduct({ ...product, product: nameWithoutSize(product) });
   };
   const updateMobileDraft = (field, value) => {
     setMobileProductError('');
@@ -441,12 +449,13 @@ export default function ProductsManager({
                   {/* Name */}
                   <td data-label="Product Peptide Name">
                     <div 
+                      key={`${p.id}-${nameWithoutSize(p)}`}
                       contentEditable 
                       suppressContentEditableWarning
                       className="cell-editable"
-                      onBlur={(e) => handleCellChange(p.id, 'product', e.target.innerText)}
+                      onBlur={(e) => handleCellChange(p.id, 'product', e.target.innerText.trim())}
                     >
-                      {p.product}
+                      {nameWithoutSize(p)}
                     </div>
                   </td>
 
