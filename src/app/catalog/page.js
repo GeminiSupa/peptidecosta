@@ -4476,7 +4476,7 @@ export default function CatalogPage() {
                         : '';
                       return <div className="card-scarcity">{scarcity}</div>;
                     })()}
-                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound) : catalogFacingName(p.product)}</h3>
+                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
                       const blurb = productComposition(p.product, lang)
                         || withRetatrutideLead(p.product, lang === 'en' ? p.descriptionEn : p.descriptionEs, lang);
@@ -5726,7 +5726,7 @@ export default function CatalogPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                 <h2 id="product-detail-title" style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
-                  {catalogFacingName(selectedProduct.product)}
+                  {catalogFacingName(selectedProduct.product, lang)}
                 </h2>
                 <button 
                   onClick={(e) => handleShareProduct(e, selectedProduct)}

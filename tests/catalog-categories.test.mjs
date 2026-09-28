@@ -30,9 +30,11 @@ test('the fourteen categories from the plan, each with a slug and both languages
 });
 
 test('GLP-1 is shown as GLP-1 – Triple Agonist, and the research sentence leads the description', () => {
-  assert.equal(catalogFacingCompound('GLP-1'), 'GLP-1 – Triple Agonist');
-  assert.equal(catalogFacingName('GLP-1 5mg'), 'GLP-1 – Triple Agonist 5mg');
-  assert.equal(catalogFacingName('Tirzepatide 10mg'), 'Tirzepatide 10mg');
+  assert.equal(catalogFacingCompound('GLP-1', 'en'), 'GLP-1 – Triple Agonist');
+  assert.equal(catalogFacingCompound('GLP-1', 'es'), 'GLP-1 – Agonista Triple');
+  assert.equal(catalogFacingName('GLP-1 5mg', 'en'), 'GLP-1 – Triple Agonist 5mg');
+  assert.equal(catalogFacingName('GLP-1 5mg', 'es'), 'GLP-1 – Agonista Triple 5mg');
+  assert.equal(catalogFacingName('Tirzepatide 10mg', 'es'), 'Tirzepatide 10mg');
   const en = 'Research peptide with agonist activity at the GIP, GLP-1, and glucagon receptors.';
   const es = 'Péptido de investigación con actividad agonista sobre los receptores GIP, GLP-1 y glucagón.';
   assert.equal(withRetatrutideLead('GLP-1 5mg', 'Keep cold.', 'en'), `${en} Keep cold.`);

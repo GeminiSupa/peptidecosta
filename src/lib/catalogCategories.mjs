@@ -116,7 +116,10 @@ const COMPOSITIONS = [
   { test: /lipotropic|fat blaster/i, en: 'Lipotropic blend, 10 ml solution', es: 'Mezcla lipotrópica, solución de 10 ml' },
 ];
 
-const RETATRUTIDE_DISPLAY = 'GLP-1 – Triple Agonist';
+const GLP1_DISPLAY = {
+  en: 'GLP-1 – Triple Agonist',
+  es: 'GLP-1 – Agonista Triple',
+};
 const RETATRUTIDE_LEAD = {
   en: 'Research peptide with agonist activity at the GIP, GLP-1, and glucagon receptors.',
   es: 'Péptido de investigación con actividad agonista sobre los receptores GIP, GLP-1 y glucagón.',
@@ -126,16 +129,21 @@ function isGlp1(name) {
   return /^glp-1$/i.test(String(name ?? '').trim());
 }
 
+function glp1Display(lang) {
+  return String(lang).toLowerCase().startsWith('en') ? GLP1_DISPLAY.en : GLP1_DISPLAY.es;
+}
+
 /** The name on the catalog card. Orders still use the stored name, GLP-1. */
-export function catalogFacingCompound(compound) {
-  return isGlp1(compound) ? RETATRUTIDE_DISPLAY : String(compound ?? '');
+export function catalogFacingCompound(compound, lang = 'es') {
+  return isGlp1(compound) ? glp1Display(lang) : String(compound ?? '');
 }
 
 /** Full customer-facing name, size included: "GLP-1 – Triple Agonist 5mg". */
-export function catalogFacingName(storedName) {
+export function catalogFacingName(storedName, lang = 'es') {
   const { compound, size } = splitCompoundAndSize(storedName);
   if (!isGlp1(compound)) return String(storedName ?? '');
-  return size ? `${RETATRUTIDE_DISPLAY} ${size}` : RETATRUTIDE_DISPLAY;
+  const label = glp1Display(lang);
+  return size ? `${label} ${size}` : label;
 }
 
 /** Puts the triple-agonist sentence in front of a GLP-1 description. */
