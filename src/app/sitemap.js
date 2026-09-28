@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { LIVE_SITE_URL } from '@/lib/publicUrl';
+import { productUrlSlug } from '@/lib/catalogCategories.mjs';
 
 export default async function sitemap() {
   // Must match the canonicals in layout.js. Submitting main-site URLs from the
@@ -45,5 +46,25 @@ export default async function sitemap() {
     priority: route === '' ? 1 : route === '/catalog' ? 0.9 : 0.8,
   }));
 
-  return [...staticUrls, ...blogUrls];
+  const [{ data: productRows }, { data: hiddenRow }] = await Promise.all([
+    supabase.from('products').select('product'),
+    supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle(),
+  ]);
+  const hidden = new Set(Array.isArray(hiddenRow?.value?.names) ? hiddenRow.value.names : []);
+  const seenSlugs = new Set();
+  const productUrls = [];
+  for (const row of productRows || []) {
+    if (!row?.product || hidden.has(row.product)) continue;
+    const slug = productUrlSlug(row.product);
+    if (!slug || seenSlugs.has(slug)) continue;
+    seenSlugs.add(slug);
+    productUrls.push({
+      url: `${baseUrl}/catalog/${slug}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    });
+  }
+
+  return [...staticUrls, ...productUrls, ...blogUrls];
 }

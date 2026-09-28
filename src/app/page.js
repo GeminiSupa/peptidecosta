@@ -23,6 +23,7 @@ import {
   DEFAULT_LANDING_PAGE_SETTINGS,
   mergeLandingPageSettings,
 } from '@/lib/landingContent';
+import { productCatalogPath } from '@/lib/catalogCategories.mjs';
 import './landing.css';
 
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
@@ -99,7 +100,7 @@ function ProductCard({ product, lang }) {
   return (
     <article className="clone-product-card">
       {isSale && <span className="clone-sale-badge">{lang === 'en' ? 'Sale' : 'Oferta'}</span>}
-      <Link href={`/catalog?product=${encodeURIComponent(product.product)}&lang=${lang}`} className="clone-product-media">
+      <Link href={`${productCatalogPath(product.product)}?lang=${lang}`} className="clone-product-media">
         {product.image_url ? (
           <img src={product.image_url} alt={product.product} loading="lazy" decoding="async" />
         ) : (
@@ -113,7 +114,7 @@ function ProductCard({ product, lang }) {
           {isSale && <span>{original}</span>}
           <strong>{price}</strong>
         </div>
-        <Link href={`/catalog?product=${encodeURIComponent(product.product)}&lang=${lang}`}>
+        <Link href={`${productCatalogPath(product.product)}?lang=${lang}`}>
           {lang === 'en' ? 'Add to Cart' : 'Agregar'} <ArrowRight size={13} />
         </Link>
       </div>

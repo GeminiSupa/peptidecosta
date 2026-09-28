@@ -9,6 +9,9 @@ import {
   productComposition,
   catalogFacingCompound,
   catalogFacingName,
+  productUrlSlug,
+  productUrlTitle,
+  productCatalogPath,
   withRetatrutideLead,
   isBlendOrStack,
   splitCompoundAndSize,
@@ -41,6 +44,17 @@ test('GLP-1 is shown as GLP-1 – Triple Agonist, and the research sentence lead
   assert.equal(withRetatrutideLead('GLP-1 5mg', '', 'es'), es);
   assert.equal(withRetatrutideLead('GLP-1 5mg', en, 'en'), en);
   assert.equal(withRetatrutideLead('Tirzepatide 10mg', 'Keep cold.', 'en'), 'Keep cold.');
+});
+
+test('product addresses stay readable, and GLP-1 keeps retatrutide in the URL only', () => {
+  assert.equal(productUrlSlug('GLP-1 15mg'), 'retatrutide-15mg');
+  assert.equal(productUrlSlug('GLP-1 5mg'), 'retatrutide-5mg');
+  assert.equal(productUrlTitle('GLP-1 15mg'), 'Retatrutide 15mg');
+  assert.equal(catalogFacingName('GLP-1 15mg', 'en'), 'GLP-1 – Triple Agonist 15mg');
+  assert.equal(productUrlSlug('Semaglutide 10mg'), 'semaglutide-10mg');
+  assert.equal(productUrlSlug('HCG 10,000 IU'), 'hcg-10000iu');
+  assert.equal(productUrlSlug('BPC-157 10mg'), 'bpc-157-10mg');
+  assert.equal(productCatalogPath('GLP-1 15mg', '?lang=en&product=old'), '/catalog/retatrutide-15mg?lang=en');
 });
 
 test('new and old categories both translate', () => {

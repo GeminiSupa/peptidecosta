@@ -146,6 +146,60 @@ export function catalogFacingName(storedName, lang = 'es') {
   return size ? `${label} ${size}` : label;
 }
 
+function slugPiece(value) {
+  return String(value ?? '')
+    .replace(/(\d),(?=\d)/g, '$1')
+    .replace(/(\d)\s+(mg|mcg|ml|iu)\b/gi, '$1$2')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * The address for one product. The page still says GLP-1; the URL keeps the
+ * old name so a search for retatrutide can land here.
+ */
+export function productUrlSlug(productOrName) {
+  const product = typeof productOrName === 'string' ? { product: productOrName } : (productOrName || {});
+  const { compound, size } = catalogCompoundAndSize(product);
+  const compoundLabel = isGlp1(compound) ? 'retatrutide' : compound;
+  return [slugPiece(compoundLabel), slugPiece(size)].filter(Boolean).join('-');
+}
+
+/** Browser tab and link title. GLP-1 keeps "Retatrutide" here only. */
+export function productUrlTitle(productOrName) {
+  const product = typeof productOrName === 'string' ? { product: productOrName } : (productOrName || {});
+  const { compound, size } = catalogCompoundAndSize(product);
+  if (isGlp1(compound)) return size ? `Retatrutide ${size}` : 'Retatrutide';
+  return String(product.product || '');
+}
+
+export function productSlugFromCatalogPath(pathname) {
+  const match = String(pathname || '').match(/^\/catalog\/([^/]+)\/?$/);
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+export function productCatalogPath(productOrName, search = '') {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  params.delete('product');
+  const query = params.toString();
+  return `/catalog/${productUrlSlug(productOrName)}${query ? `?${query}` : ''}`;
+}
+
+export function catalogIndexPath(search = '') {
+  const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  params.delete('product');
+  const query = params.toString();
+  return `/catalog${query ? `?${query}` : ''}`;
+}
+
 /** Puts the triple-agonist sentence in front of a GLP-1 description. */
 export function withRetatrutideLead(storedName, description, lang = 'es') {
   const text = String(description ?? '').trim();
