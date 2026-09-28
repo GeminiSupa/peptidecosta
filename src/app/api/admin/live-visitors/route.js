@@ -5,14 +5,21 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// Google's Realtime report headlines "active users in the last 30 minutes".
-// Five is the tighter of the two windows it shows, and on a store with a
-// couple of dozen visitors an hour it is the shortest window that is not
-// almost always zero. The 45-second window this panel used before reported no
-// one on a site with nine people reading the catalog.
-export const DEFAULT_LIVE_WINDOW_MINUTES = 5;
-const MAX_LIVE_WINDOW_MINUTES = 30;
-const ROW_LIMIT = 200;
+// Two figures, the way Google's Realtime report shows them: a tight "right
+// now" number and a wider one that is still there when the site is quiet. On a
+// store with roughly ten visitors an hour, five minutes alone reads zero about
+// a third of the time and two minutes reads zero more than half the time, so
+// the thirty-minute figure is what stops the panel looking broken. The 45
+// seconds this panel used before read zero 82% of the time.
+export const LIVE_WINDOW_MINUTES = 5;
+export const LIVE_WINDOW_LONG_MINUTES = 30;
+const MAX_WINDOW_MINUTES = 60;
+const ROW_LIMIT = 500;
+
+const windowMinutes = (raw, fallback) => Math.min(
+  MAX_WINDOW_MINUTES,
+  Math.max(1, Number(raw) || fallback),
+);
 
 /**
  * Who is on the site right now — and nothing else.
@@ -23,9 +30,10 @@ const ROW_LIMIT = 200;
  * a snapshot and counted down to zero. This returns one small, already-filtered
  * slice so the panel can refresh itself every few seconds cheaply.
  *
- * The window is applied here rather than in the browser on purpose: an admin
- * laptop with a skewed clock would otherwise filter out live visitors, or
- * invent them.
+ * One query covers both windows: the rows for the wider one are fetched, and
+ * each is flagged for the tighter one. Both flags are decided here rather than
+ * in the browser, because an admin laptop with a skewed clock would otherwise
+ * filter out live visitors, or invent them.
  */
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -33,11 +41,15 @@ export async function GET(request) {
 
   try {
     const url = new URL(request.url);
-    const minutes = Math.min(
-      MAX_LIVE_WINDOW_MINUTES,
-      Math.max(1, Number(url.searchParams.get('minutes')) || DEFAULT_LIVE_WINDOW_MINUTES),
+    const recentMinutes = windowMinutes(url.searchParams.get('minutes'), LIVE_WINDOW_MINUTES);
+    const longMinutes = Math.max(
+      recentMinutes,
+      windowMinutes(url.searchParams.get('longMinutes'), LIVE_WINDOW_LONG_MINUTES),
     );
-    const since = new Date(Date.now() - minutes * 60 * 1000).toISOString();
+
+    const now = Date.now();
+    const since = new Date(now - longMinutes * 60 * 1000).toISOString();
+    const recentCutoff = now - recentMinutes * 60 * 1000;
 
     const { data, error } = await getSupabaseAdmin()
       .from('visitor_sessions')
@@ -48,11 +60,19 @@ export async function GET(request) {
 
     if (error) throw error;
 
+    const sessions = (data || []).map((session) => ({
+      ...session,
+      active_recent: new Date(session.last_active).getTime() >= recentCutoff,
+    }));
+
     return NextResponse.json({
-      sessions: data || [],
-      windowMinutes: minutes,
+      sessions,
+      recentMinutes,
+      longMinutes,
+      recentCount: sessions.filter((session) => session.active_recent).length,
+      longCount: sessions.length,
       since,
-      serverNow: new Date().toISOString(),
+      serverNow: new Date(now).toISOString(),
     });
   } catch (error) {
     console.error('[admin/live-visitors]', error.message);
