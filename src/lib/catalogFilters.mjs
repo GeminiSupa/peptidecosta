@@ -12,8 +12,8 @@ export function readCatalogParams(search = '') {
   return {
     search: (params.get('search') || '').trim() || null,
     category: (params.get('category') || '').trim() || null,
-    // `?deal=week` narrows the catalog to this week's deal products — the
-    // "Build my order" button on /bulk-discounts sends it.
+    // `?deal=week` narrows the catalog to this week's deal products. The
+    // Deal of the Week checkout button sends it.
     dealOnly: (params.get('deal') || '').trim().toLowerCase() === 'week',
     // `?cart=open` opens the cart drawer, which holds checkout. The Deal of the
     // Week page's Checkout button sends it, so the customer lands in checkout
