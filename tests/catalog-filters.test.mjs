@@ -9,6 +9,7 @@ import {
   rankCatalogSearchResults,
   productSortRank,
   compareBySaleAndStock,
+  catalogLeadRank,
 } from '../src/lib/catalogFilters.mjs';
 
 // The real category names on the products table — deliberately not the
@@ -180,6 +181,30 @@ test('sorting a mixed grid gives sale, then in stock, then sold out', () => {
   const grid = [plainSoldOut, plainInStock, onSaleSoldOut, onSaleInStock];
   const sorted = [...grid].sort((a, b) => compareBySaleAndStock(a, b, rank));
   assert.deepEqual(sorted.map((p) => p.product), ['GHK-Cu', 'BPC-157', 'DSIP', 'TB-500']);
+});
+
+test('Retatrutide then Tirzepatide stay ahead of a sale, even when sold out', () => {
+  const grid = [
+    { product: 'GHK-Cu 50mg', inStock: true, onSale: true },
+    { product: 'Tirzepatide 30mg', inStock: false, onSale: false },
+    { product: 'BPC-157 10mg', inStock: true, onSale: false },
+    { product: 'Retatrutide 12mg', inStock: false, onSale: false },
+    { product: 'Tirzepatide 10mg', inStock: true, onSale: false },
+    { product: 'Retatrutide 5mg', inStock: true, onSale: false },
+  ];
+  const sorted = [...grid].sort((a, b) => {
+    const lead = catalogLeadRank(a) - catalogLeadRank(b);
+    if (lead !== 0) return lead;
+    return compareBySaleAndStock(a, b, rank);
+  });
+  assert.deepEqual(sorted.map((p) => p.product), [
+    'Retatrutide 5mg',
+    'Retatrutide 12mg',
+    'Tirzepatide 10mg',
+    'Tirzepatide 30mg',
+    'GHK-Cu 50mg',
+    'BPC-157 10mg',
+  ]);
 });
 
 test('products in the same band keep their incoming order', () => {

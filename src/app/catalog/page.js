@@ -92,6 +92,7 @@ import {
   productMatchesCatalogSearch,
   rankCatalogSearchResults,
   compareBySaleAndStock,
+  catalogLeadRank,
 } from '@/lib/catalogFilters.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
@@ -3482,11 +3483,18 @@ export default function CatalogPage() {
     filteredProducts = searchQuery.trim()
       ? rankCatalogSearchResults(baseFilteredProducts, searchQuery)
       : [...baseFilteredProducts].sort(
-          (a, b) => compareBySaleAndStock(a, b, sortPredicates)
+          (a, b) => {
+            const lead = catalogLeadRank(a) - catalogLeadRank(b);
+            if (lead !== 0) return lead;
+            return compareBySaleAndStock(a, b, sortPredicates);
+          }
         );
   } else {
-    // Price sort, but still banded by sale and stock first
+    // Price sort, but still banded by sale and stock first.
+    // Retatrutide and Tirzepatide stay above that banding.
     filteredProducts = [...baseFilteredProducts].sort((a, b) => {
+      const lead = catalogLeadRank(a) - catalogLeadRank(b);
+      if (lead !== 0) return lead;
       const banded = compareBySaleAndStock(a, b, sortPredicates);
       if (banded !== 0) return banded;
       const priceA = getPriceAsNumber(a, currency);
