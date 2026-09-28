@@ -29,16 +29,16 @@ test('the fourteen categories from the plan, each with a slug and both languages
   assert.ok(!CATALOG_CATEGORY_NAMES.some((name) => /weight loss/i.test(name)), 'no therapeutic claim in a label');
 });
 
-test('Retatrutide is shown as GLP-1 – Triple Agonist, and the research sentence leads the description', () => {
-  assert.equal(catalogFacingCompound('Retatrutide'), 'GLP-1 – Triple Agonist');
-  assert.equal(catalogFacingName('Retatrutide 12mg'), 'GLP-1 – Triple Agonist 12mg');
+test('GLP-1 is shown as GLP-1 – Triple Agonist, and the research sentence leads the description', () => {
+  assert.equal(catalogFacingCompound('GLP-1'), 'GLP-1 – Triple Agonist');
+  assert.equal(catalogFacingName('GLP-1 5mg'), 'GLP-1 – Triple Agonist 5mg');
   assert.equal(catalogFacingName('Tirzepatide 10mg'), 'Tirzepatide 10mg');
   const en = 'Research peptide with agonist activity at the GIP, GLP-1, and glucagon receptors.';
   const es = 'Péptido de investigación con actividad agonista sobre los receptores GIP, GLP-1 y glucagón.';
-  assert.equal(withRetatrutideLead('Retatrutide 12mg', 'Keep cold.', 'en'), `${en} Keep cold.`);
-  assert.equal(withRetatrutideLead('Retatrutide 12mg', '', 'es'), es);
-  assert.equal(withRetatrutideLead('Retatrutide 12mg', en, 'en'), en);
-  assert.equal(withRetatrutideLead('GLP-1 5mg', 'Keep cold.', 'en'), 'Keep cold.');
+  assert.equal(withRetatrutideLead('GLP-1 5mg', 'Keep cold.', 'en'), `${en} Keep cold.`);
+  assert.equal(withRetatrutideLead('GLP-1 5mg', '', 'es'), es);
+  assert.equal(withRetatrutideLead('GLP-1 5mg', en, 'en'), en);
+  assert.equal(withRetatrutideLead('Tirzepatide 10mg', 'Keep cold.', 'en'), 'Keep cold.');
 });
 
 test('new and old categories both translate', () => {

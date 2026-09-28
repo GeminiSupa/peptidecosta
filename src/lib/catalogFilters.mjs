@@ -245,12 +245,12 @@ export function compareBySaleAndStock(a, b, predicates) {
 }
 
 /**
- * Retatrutide first, then Tirzepatide, then every other product.
+ * GLP-1 first, then Tirzepatide, then every other product.
  * Checked before sale and stock so a promotion cannot push them down the grid.
  */
 export function catalogLeadRank(product) {
   const name = String(product?.product || '').trim().toLowerCase();
-  if (name.startsWith('retatrutide')) return 0;
+  if (name.startsWith('glp-1')) return 0;
   if (name.startsWith('tirzepatide')) return 1;
   return 2;
 }

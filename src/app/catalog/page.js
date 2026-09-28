@@ -3494,7 +3494,7 @@ export default function CatalogPage() {
         );
   } else {
     // Price sort, but still banded by sale and stock first.
-    // Retatrutide and Tirzepatide stay above that banding.
+    // GLP-1 and Tirzepatide stay above that banding.
     filteredProducts = [...baseFilteredProducts].sort((a, b) => {
       const lead = catalogLeadRank(a) - catalogLeadRank(b);
       if (lead !== 0) return lead;

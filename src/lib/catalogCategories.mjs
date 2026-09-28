@@ -122,26 +122,26 @@ const RETATRUTIDE_LEAD = {
   es: 'Péptido de investigación con actividad agonista sobre los receptores GIP, GLP-1 y glucagón.',
 };
 
-function isRetatrutide(name) {
-  return /^retatrutide\b/i.test(String(name ?? '').trim());
+function isGlp1(name) {
+  return /^glp-1$/i.test(String(name ?? '').trim());
 }
 
-/** The name on the catalog card. The stored name stays Retatrutide for orders. */
+/** The name on the catalog card. Orders still use the stored name, GLP-1. */
 export function catalogFacingCompound(compound) {
-  return isRetatrutide(compound) ? RETATRUTIDE_DISPLAY : String(compound ?? '');
+  return isGlp1(compound) ? RETATRUTIDE_DISPLAY : String(compound ?? '');
 }
 
-/** Full customer-facing name, size included: "GLP-1 – Triple Agonist 12mg". */
+/** Full customer-facing name, size included: "GLP-1 – Triple Agonist 5mg". */
 export function catalogFacingName(storedName) {
   const { compound, size } = splitCompoundAndSize(storedName);
-  if (!isRetatrutide(compound)) return String(storedName ?? '');
+  if (!isGlp1(compound)) return String(storedName ?? '');
   return size ? `${RETATRUTIDE_DISPLAY} ${size}` : RETATRUTIDE_DISPLAY;
 }
 
-/** Puts the triple-agonist sentence in front of a Retatrutide description. */
+/** Puts the triple-agonist sentence in front of a GLP-1 description. */
 export function withRetatrutideLead(storedName, description, lang = 'es') {
   const text = String(description ?? '').trim();
-  if (!isRetatrutide(splitCompoundAndSize(storedName).compound)) return text;
+  if (!isGlp1(splitCompoundAndSize(storedName).compound)) return text;
   const lead = String(lang).toLowerCase().startsWith('en') ? RETATRUTIDE_LEAD.en : RETATRUTIDE_LEAD.es;
   if (!text) return lead;
   if (text.toLowerCase().startsWith(lead.toLowerCase())) return text;
