@@ -285,6 +285,46 @@ function offerSummary(item, lang = 'en') {
   return customName ? `${customName}: ${terms}` : terms;
 }
 
+/**
+ * The next Mix & Match step this cart has not reached yet.
+ * Counts only that offer's own products. BAC water is already left out of
+ * `units` by chooseDealOffer.
+ */
+function nextUnreachedMix(choice) {
+  const pending = (choice?.offers || [])
+    .filter((item) => item.type === MIX_OFFER_TYPE && item.config && !item.qualifies)
+    .map((item) => ({
+      units: item.units || 0,
+      minUnits: item.minUnits || item.config.min_units,
+      pct: Number(item.config.discount_pct) || 0,
+    }))
+    .filter((item) => item.minUnits > item.units && item.pct > 0)
+    .sort((a, b) => a.minUnits - b.minUnits || b.pct - a.pct);
+  return pending[0] || null;
+}
+
+function mixTierNudgeText(next, lang) {
+  const toGo = next.minUnits - next.units;
+  const pct = Math.round(next.pct * 100);
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  return isEn
+    ? `Add ${toGo} more ${toGo === 1 ? 'vial' : 'vials'} to unlock ${pct}% off.`
+    : `Agrega ${toGo} ${toGo === 1 ? 'vial' : 'viales'} más para desbloquear ${pct}% de descuento.`;
+}
+
+/**
+ * The loud cart line: how many more deal vials until the next Mix & Match
+ * step. Empty once the top step is reached, and empty when a different offer
+ * (free vials, a flash sale, or the everyday volume discount) is what the
+ * cart actually gets — those messages must not be replaced by a step the
+ * checkout will not apply.
+ */
+export function dealOfferNextTierNudge(choice, lang = 'en') {
+  if (!choice || (choice.kind !== MIX_OFFER_TYPE && choice.kind !== 'none')) return '';
+  const next = nextUnreachedMix(choice);
+  return next ? mixTierNudgeText(next, lang) : '';
+}
+
 /** One line for the cart: which offer applied, or how to reach one. */
 export function dealOfferCartMessage(choice, deal, lang = 'en') {
   if (!choice) return '';
@@ -294,6 +334,8 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
   const winningResult = choice.offers?.find((item) => item.id === choice.offerId);
 
   if (choice.kind === MIX_OFFER_TYPE && winning) {
+    const nudge = dealOfferNextTierNudge(choice, lang);
+    if (nudge) return nudge;
     const pct = Math.round(winning.discount_pct * 100);
     return isEn
       ? `Deal of the Week — ${offerDisplayName(winning, lang) || 'Mix & Match'}: ${pct}% off your whole order is applied. Offers do not stack.`
@@ -321,15 +363,8 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       : 'Tu descuento por volumen ahorra más que las ofertas de esta semana, así que se aplica ese.';
   }
 
-  const hints = clean.items.filter((item) => item.enabled).map((item) => {
-    const result = choice.offers?.find((candidate) => candidate.id === item.id);
-    if (item.type === MIX_OFFER_TYPE) {
-      const toGo = Math.max(0, item.min_units - (result?.units || 0));
-      const pct = Math.round(item.discount_pct * 100);
-      return isEn
-        ? `add ${toGo} more qualifying ${toGo === 1 ? 'vial' : 'vials'} for ${pct}% off your whole order`
-        : `agrega ${toGo} ${toGo === 1 ? 'vial participante' : 'viales participantes'} para ${pct}% de descuento en todo tu pedido`;
-    }
+  const nudge = dealOfferNextTierNudge(choice, lang);
+  const hints = clean.items.filter((item) => item.enabled && item.type !== MIX_OFFER_TYPE).map((item) => {
     if (item.type === FLAT_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       return isEn
@@ -340,7 +375,9 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       ? `buy ${item.buy_qty} of the same qualifying vial to get ${item.free_qty} free`
       : `compra ${item.buy_qty} del mismo vial participante y llévate ${item.free_qty} gratis`;
   });
-  const joined = hints.join(isEn ? ', or ' : ', o ');
+  if (nudge && hints.length === 0) return nudge;
+  const parts = nudge ? [nudge.replace(/\.$/, ''), ...hints] : hints;
+  const joined = parts.join(isEn ? ', or ' : ', o ');
   return isEn
     ? `Deal of the Week: ${joined}.`
     : `Oferta de la Semana: ${joined}.`;

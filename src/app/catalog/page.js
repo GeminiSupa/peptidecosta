@@ -77,7 +77,7 @@ import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
-import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferNextTierNudge, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
 import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
@@ -4961,11 +4961,26 @@ export default function CatalogPage() {
             )}
 
             {/* Promo Code UI */}
-            {getMatchedWeeklyDeal() && <div style={{ marginBottom:'10px', padding:'9px 12px', borderRadius:'10px', background:'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#ef4444' : '#f97316', fontSize:'.78rem', fontWeight:700 }}>
-              {getDealOfferChoice() ? dealOfferCartMessage(getDealOfferChoice(), getMatchedWeeklyDeal(), lang) : getWeeklyDealLimitError() || (dealPricingMode(getMatchedWeeklyDeal()) === 'bulk_threshold'
-                ? (lang === 'en' ? `Weekly bulk deal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} selected vials. It applies automatically and does not stack.` : `Oferta mayorista semanal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} viales seleccionados. Se aplica automáticamente y no se acumula.`)
-                : (lang === 'en' ? 'Deal of the Week applied automatically. Other discounts do not stack.' : 'Oferta de la Semana aplicada automáticamente. Otros descuentos no se acumulan.'))}
-            </div>}
+            {getMatchedWeeklyDeal() && (() => {
+              const offerChoice = getDealOfferChoice();
+              const tierNudge = offerChoice && !getWeeklyDealLimitError()
+                ? dealOfferNextTierNudge(offerChoice, lang)
+                : '';
+              const loud = Boolean(tierNudge);
+              return (
+                <div style={loud
+                  ? { marginBottom: '10px', padding: '12px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(249,115,22,.28), rgba(234,88,12,.14))', border: '1px solid rgba(249,115,22,.65)', color: theme === 'dark' ? '#ffedd5' : '#9a3412', fontSize: '0.95rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.35 }
+                  : { marginBottom: '10px', padding: '9px 12px', borderRadius: '10px', background: 'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#ef4444' : '#f97316', fontSize: '.78rem', fontWeight: 700 }}>
+                  {loud
+                    ? `🔥 ${tierNudge}`
+                    : (offerChoice
+                      ? dealOfferCartMessage(offerChoice, getMatchedWeeklyDeal(), lang)
+                      : getWeeklyDealLimitError() || (dealPricingMode(getMatchedWeeklyDeal()) === 'bulk_threshold'
+                        ? (lang === 'en' ? `Weekly bulk deal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} selected vials. It applies automatically and does not stack.` : `Oferta mayorista semanal: ${dealEligibleUnits(getMatchedWeeklyDeal(), cart)}/${getMatchedWeeklyDeal().min_units} viales seleccionados. Se aplica automáticamente y no se acumula.`)
+                        : (lang === 'en' ? 'Deal of the Week applied automatically. Other discounts do not stack.' : 'Oferta de la Semana aplicada automáticamente. Otros descuentos no se acumulan.')))}
+                </div>
+              );
+            })()}
             {<div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <CheckoutLabel htmlFor="field-promoCode">
                 {lang === 'en' ? 'Promo code' : 'Código promocional'}

@@ -209,14 +209,56 @@ test('checkout: a promo code switches the offers off', () => {
   assert.equal(result.items.some((item) => /Free Gift/.test(item.product) && /Retatrutide/.test(item.product)), false);
 });
 
-import { dealOfferCartMessage } from '../src/lib/dealOffers.mjs';
+import { dealOfferCartMessage, dealOfferNextTierNudge } from '../src/lib/dealOffers.mjs';
 
 test('the cart message says which offer applied, or how to reach one', () => {
   const deal = { offers: OFFERS };
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 2, 100)]), deal, 'en'), /10% off your whole order is applied/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('Retatrutide 12mg', 4, 150)]), deal, 'en'), /1 × Retatrutide 12mg FREE/);
-  assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 1, 100)]), deal, 'en'), /add 1 more qualifying vial for 10%.*or buy 4 of the same qualifying/);
+  assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 1, 100)]), deal, 'en'), /Add 1 more vial to unlock 10% off.*or buy 4 of the same qualifying/);
   assert.match(dealOfferCartMessage(chooseDealOffer(OFFERS, [line('BPC-157 10mg', 5, 100)], { volumePct: 15 }), deal, 'es'), /descuento por volumen/);
+});
+
+// Three Mix & Match steps on the same products: 5+ = 20%, 10+ = 30%, 20+ = 45%.
+const TIERED = {
+  items: [5, 10, 20].map((min, index) => ({
+    id: `mix-${min}`,
+    type: 'mix',
+    enabled: true,
+    product_names: ['GLP-1 5mg', 'Tirzepatide 10mg', 'KPV'],
+    min_units: min,
+    discount_pct: [0.20, 0.30, 0.45][index],
+  })),
+};
+
+test('the cart names only the next mix step, and ignores BAC water and products outside the deal', () => {
+  const deal = { offers: TIERED };
+  const seven = chooseDealOffer(TIERED, [
+    line('GLP-1 5mg', 4, 80),
+    line('Tirzepatide 10mg', 3, 90),
+    line('Bacteriostatic Water 10ml', 6, 10),
+    line('BPC-157 10mg', 8, 40),
+  ]);
+  assert.equal(seven.kind, 'mix');
+  assert.equal(seven.mix.units, 7);
+  assert.equal(dealOfferNextTierNudge(seven, 'en'), 'Add 3 more vials to unlock 30% off.');
+  assert.equal(dealOfferCartMessage(seven, deal, 'en'), 'Add 3 more vials to unlock 30% off.');
+
+  const sixteen = chooseDealOffer(TIERED, [line('KPV', 16, 50)]);
+  assert.equal(dealOfferCartMessage(sixteen, deal, 'en'), 'Add 4 more vials to unlock 45% off.');
+  assert.equal(dealOfferCartMessage(sixteen, deal, 'es'), 'Agrega 4 viales más para desbloquear 45% de descuento.');
+
+  const nine = chooseDealOffer(TIERED, [line('GLP-1 5mg', 9, 80)]);
+  assert.equal(dealOfferCartMessage(nine, deal, 'en'), 'Add 1 more vial to unlock 30% off.');
+
+  const four = chooseDealOffer(TIERED, [line('GLP-1 5mg', 2, 80), line('Bacteriostatic Water 3ml', 9, 10)]);
+  assert.equal(four.offers.find((item) => item.minUnits === 5).units, 2);
+  assert.equal(dealOfferCartMessage(four, deal, 'en'), 'Add 3 more vials to unlock 20% off.');
+
+  const top = chooseDealOffer(TIERED, [line('Tirzepatide 10mg', 20, 90)]);
+  assert.equal(dealOfferNextTierNudge(top, 'en'), '');
+  assert.match(dealOfferCartMessage(top, deal, 'en'), /45% off your whole order is applied/);
+  assert.doesNotMatch(dealOfferCartMessage(top, deal, 'en'), /Add /);
 });
 
 test('checkout breakdown itemizes paid vials, weekly gifts, BAC gifts, and value saved', () => {
