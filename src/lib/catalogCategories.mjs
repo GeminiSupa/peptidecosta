@@ -265,13 +265,21 @@ export function groupCatalogCards(products = []) {
   return order;
 }
 
+/** How many sizes stay as chips. The rest go in the size dropdown. */
+const SIZE_CHIP_LIMIT = 4;
+
 /**
- * Every size on the card. Hiding the rest behind a "+N" meant shoppers
- * never found the other strengths.
+ * The first four sizes stay as chips. Anything past that is listed in the
+ * dropdown, so a compound with many strengths does not fill the card.
  */
 export function visibleSizeChips(items) {
   const list = Array.isArray(items) ? items : [];
-  return { visible: list, hiddenCount: 0 };
+  if (list.length <= SIZE_CHIP_LIMIT) {
+    return { visible: list, overflow: [], hiddenCount: 0 };
+  }
+  const visible = list.slice(0, SIZE_CHIP_LIMIT);
+  const overflow = list.slice(SIZE_CHIP_LIMIT);
+  return { visible, overflow, hiddenCount: overflow.length };
 }
 
 /** The jump-bar letter a compound files under; digits share '#'. */

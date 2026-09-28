@@ -853,9 +853,6 @@ body {
     width: 100%;
 }
 
-.dosage-block.is-open .dosage-chips {
-    flex-wrap: wrap;
-}
 
 .dosage-chip {
     flex: 0 0 auto;
@@ -872,10 +869,6 @@ body {
     font-family: inherit;
 }
 
-.dosage-block.is-open .dosage-chip {
-    flex: 0 1 auto;
-}
-
 .dosage-chip.is-selected {
     background: #f1f5f9;
     border-color: #94a3b8;
@@ -886,9 +879,25 @@ body {
     opacity: 0.55;
 }
 
-.dosage-more {
+.dosage-select {
     flex: 0 0 auto;
-    min-width: 2.4rem;
+    width: fit-content;
+    field-sizing: content;
+    max-width: 100%;
+    border: 1px solid #e2e8f0;
+    background-color: #f8fafc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23475569' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 7px center;
+    color: #475569;
+    border-radius: 999px;
+    padding: 3px 22px 3px 8px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    font-family: inherit;
+    appearance: none;
 }
 
 [data-theme="dark"] .dosage-label {
@@ -905,6 +914,13 @@ body {
     background: #334155;
     border-color: #94a3b8;
     color: #f8fafc;
+}
+
+[data-theme="dark"] .dosage-select {
+    background-color: #1e293b;
+    border-color: #334155;
+    color: #f8fafc;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23f8fafc' d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 .add-to-cart-btn {
@@ -7139,9 +7155,14 @@ body:has(.product-grid.grid-view) {
     margin-bottom: 4px;
 }
 
-.product-grid.grid-view .dosage-chip {
+.product-grid.grid-view .dosage-chip,
+.product-grid.grid-view .dosage-select {
     font-size: 0.62rem;
     padding: 5px 4px;
+}
+
+.product-grid.grid-view .dosage-select {
+    padding-right: 18px;
 }
 
 .product-grid.grid-view .product-rating-slot {

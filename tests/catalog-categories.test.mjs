@@ -88,7 +88,7 @@ test('a product name splits into compound and vial size', () => {
   assert.deepEqual(splitCompoundAndSize('Melanotan II'), { compound: 'Melanotan II', size: '' });
 });
 
-test('catalog cards group a compound and show every size', () => {
+test('catalog cards group a compound and keep four sizes as chips', () => {
   const cards = groupCatalogCards([
     { product: 'Semaglutide 30mg' },
     { product: 'Semaglutide 5mg' },
@@ -102,9 +102,14 @@ test('catalog cards group a compound and show every size', () => {
   assert.equal(cards[0].lead, 'Semaglutide 30mg');
   assert.deepEqual(cards[0].items.map((item) => item.size), ['5mg', '10mg', '15mg', '20mg', '30mg']);
 
-  const shown = visibleSizeChips(cards[0].items, 'Semaglutide 30mg');
-  assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '10mg', '15mg', '20mg', '30mg']);
-  assert.equal(shown.hiddenCount, 0);
+  const shown = visibleSizeChips(cards[0].items);
+  assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '10mg', '15mg', '20mg']);
+  assert.deepEqual(shown.overflow.map((item) => item.size), ['30mg']);
+  assert.equal(shown.hiddenCount, 1);
+
+  const short = visibleSizeChips(cards[1].items);
+  assert.deepEqual(short.visible.map((item) => item.size), ['10mg']);
+  assert.deepEqual(short.overflow, []);
 });
 
 test('a size saved in its own field becomes the chip, and a size left in the name still does', () => {

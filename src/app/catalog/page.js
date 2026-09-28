@@ -391,10 +391,8 @@ export default function CatalogPage() {
   const [sortOrder, setSortOrder] = useState('pop');
   const [inStockOnly, setInStockOnly] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list', 'grid'
-  // Which vial size a grouped card is showing, and which card has its full
-  // size list open. Keys are the compound name, lowercased.
+  // Which vial size a grouped card is showing. Keys are the compound name, lowercased.
   const [dosagePick, setDosagePick] = useState({});
-  const [openDosageKey, setOpenDosageKey] = useState(null);
 
   // Cart & Modals States
   const [cart, setCart] = useState([]);
@@ -4368,8 +4366,8 @@ export default function CatalogPage() {
                 || card.items[0];
               const p = (chosen || fallback).product;
               const showSizes = card.items.some((item) => item.size);
-              const sizeMenu = visibleSizeChips(card.items, p.product);
-              const sizeChoices = openDosageKey === card.key ? card.items : sizeMenu.visible;
+              const sizeMenu = visibleSizeChips(card.items);
+              const overflowSelected = sizeMenu.overflow.some((item) => item.product.product === p.product);
               const isBac = isBacWater(p.product);
               const isTenMlBac = isBac && getBacWaterSizeMl(p.product) === 10;
               const inStock = isBac || isInStock(p.status);
@@ -4527,12 +4525,12 @@ export default function CatalogPage() {
                     </div>
                     {showSizes && (
                       <div
-                        className={`dosage-block${openDosageKey === card.key ? ' is-open' : ''}`}
+                        className="dosage-block"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Seleccionar tamaño'}</div>
                         <div className="dosage-chips">
-                          {sizeChoices.map((item) => {
+                          {sizeMenu.visible.map((item) => {
                             const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
                             const selected = item.product.product === p.product;
                             return (
@@ -4541,27 +4539,29 @@ export default function CatalogPage() {
                                 key={item.product.product}
                                 className={`dosage-chip${selected ? ' is-selected' : ''}${itemInStock ? '' : ' is-unavailable'}`}
                                 aria-pressed={selected}
-                                onClick={() => {
-                                  setDosagePick((prev) => ({ ...prev, [card.key]: item.product.product }));
-                                  setOpenDosageKey(null);
-                                }}
+                                onClick={() => setDosagePick((prev) => ({ ...prev, [card.key]: item.product.product }))}
                               >
                                 {item.size || item.product.product}
                               </button>
                             );
                           })}
-                          {sizeMenu.hiddenCount > 0 && (
-                            <button
-                              type="button"
-                              className="dosage-chip dosage-more"
-                              aria-expanded={openDosageKey === card.key}
-                              aria-label={lang === 'en'
-                                ? `Show ${sizeMenu.hiddenCount} more sizes`
-                                : `Ver ${sizeMenu.hiddenCount} tamaños más`}
-                              onClick={() => setOpenDosageKey((current) => (current === card.key ? null : card.key))}
+                          {sizeMenu.overflow.length > 0 && (
+                            <select
+                              className="dosage-select"
+                              aria-label={lang === 'en' ? 'More sizes' : 'Más tamaños'}
+                              value={overflowSelected ? p.product : ''}
+                              onChange={(e) => {
+                                if (!e.target.value) return;
+                                setDosagePick((prev) => ({ ...prev, [card.key]: e.target.value }));
+                              }}
                             >
-                              {openDosageKey === card.key ? '–' : `+${sizeMenu.hiddenCount}`}
-                            </button>
+                              <option value="">{lang === 'en' ? 'More' : 'Más'}</option>
+                              {sizeMenu.overflow.map((item) => (
+                                <option key={item.product.product} value={item.product.product}>
+                                  {item.size || item.product.product}
+                                </option>
+                              ))}
+                            </select>
                           )}
                         </div>
                       </div>
