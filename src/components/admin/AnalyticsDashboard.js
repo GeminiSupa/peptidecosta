@@ -454,6 +454,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     recent: LIVE_WINDOW_MINUTES,
     long: LIVE_WINDOW_LONG_MINUTES,
   });
+  // Which of the two windows the list and the breakdowns below are showing.
+  // Both counts stay on screen either way; this picks whose visitors are
+  // listed. Thirty minutes to start with, because five is often a short list.
+  const [liveView, setLiveView] = useState('long');
   const [dbProductViews, setDbProductViews] = useState([]);
   const [dbOrders, setDbOrders] = useState([]);
   const [dbCarts, setDbCarts] = useState([]);
@@ -697,8 +701,12 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   const liveLongWindowLabel = minuteLabel(liveWindows.long);
   const activeLiveUsers = recentLiveSessions.length;
   const activeLiveUsersLong = activeLiveSessions.length;
-  const knownActiveUsers = activeLiveSessions.filter((session) => session.known_customer).length;
-  const activeDomains = new Set(activeLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
+  // The window the reader picked. The two counts above are always both shown;
+  // this is who the table, the pages and the sources are about.
+  const shownLiveSessions = liveView === 'recent' ? recentLiveSessions : activeLiveSessions;
+  const shownWindowLabel = liveView === 'recent' ? liveWindowLabel : liveLongWindowLabel;
+  const knownActiveUsers = shownLiveSessions.filter((session) => session.known_customer).length;
+  const activeDomains = new Set(shownLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
 
   // A session and its abandoned cart share the same browser-issued session_id,
   // so this is the only link between "who is on the site right now" and "who
@@ -709,16 +717,16 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
   dbCarts.forEach((cart) => {
     if (cart.session_id) cartBySessionId[cart.session_id] = cart;
   });
-  const teamOnSiteCount = activeLiveSessions
+  const teamOnSiteCount = shownLiveSessions
     .filter((session) => cartBySessionId[session.session_id]?.is_team_member).length;
 
-  const livePageCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
+  const livePageCounts = Object.entries(shownLiveSessions.reduce((counts, session) => {
     const label = `${session.hostname || 'catalog'}${session.current_path || '/catalog'}`;
     counts[label] = (counts[label] || 0) + 1;
     return counts;
   }, {})).sort((left, right) => right[1] - left[1]).slice(0, 8);
 
-  const liveSourceCounts = Object.entries(activeLiveSessions.reduce((counts, session) => {
+  const liveSourceCounts = Object.entries(shownLiveSessions.reduce((counts, session) => {
     const source = session.last_touch_source || session.utm_source || 'direct';
     counts[source] = (counts[source] || 0) + 1;
     return counts;
@@ -2736,7 +2744,29 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           <div>
             <div style={{ color: 'var(--an-accent)', fontSize: '.7rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>Live visitor journeys</div>
             <h3 style={{ margin: '4px 0', fontSize: '1rem', color: 'var(--an-ink)' }}>Who is on which page, and how they arrived</h3>
-            <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker. Two windows, the same pair Google&apos;s Realtime report shows: active in the last {liveWindowLabel}, and active in the last {liveLongWindowLabel}. Refreshes itself every {Math.round(LIVE_POLL_MS / 1000)} seconds.</p>
+            <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker. Two windows, the same pair Google&apos;s Realtime report shows. Refreshes itself every {Math.round(LIVE_POLL_MS / 1000)} seconds.</p>
+            {/* Both counts are always on screen; this picks which window the
+                list and the two breakdowns below are about. A number with no
+                way to open it is where this panel started. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <span style={{ color: 'var(--an-ink-faint)', fontSize: '.7rem' }}>Showing visitors from</span>
+              <div className="time-filter-bar">
+                <button
+                  type="button"
+                  className={`time-filter-btn ${liveView === 'recent' ? 'active' : ''}`}
+                  onClick={() => setLiveView('recent')}
+                >
+                  Last {liveWindowLabel}
+                </button>
+                <button
+                  type="button"
+                  className={`time-filter-btn ${liveView === 'long' ? 'active' : ''}`}
+                  onClick={() => setLiveView('long')}
+                >
+                  Last {liveLongWindowLabel}
+                </button>
+              </div>
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[[`Active (last ${liveWindowLabel})`, activeLiveUsers], [`Active (last ${liveLongWindowLabel})`, activeLiveUsersLong], ['Known customers', knownActiveUsers], ['Team on site', teamOnSiteCount], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
@@ -2748,8 +2778,8 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           </div>
         </div>
 
-        {activeLiveSessions.length === 0 ? (
-          <div style={{ color: 'var(--an-ink-faint)', fontSize: '.8rem', padding: '18px 0' }}>No visitor heartbeat in the last {liveLongWindowLabel}.</div>
+        {shownLiveSessions.length === 0 ? (
+          <div style={{ color: 'var(--an-ink-faint)', fontSize: '.8rem', padding: '18px 0' }}>No visitor heartbeat in the last {shownWindowLabel}.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.76rem' }}>
@@ -2759,7 +2789,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
                 </tr>
               </thead>
               <tbody>
-                {activeLiveSessions.slice(0, 20).map((session) => {
+                {shownLiveSessions.slice(0, 20).map((session) => {
                   const linkedCart = cartBySessionId[session.session_id];
                   const isTeam = Boolean(linkedCart?.is_team_member);
                   // A name off the linked cart beats the bare "Known customer"
@@ -2826,11 +2856,11 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 12, marginTop: 14 }}>
           <div style={{ background: 'var(--an-surface-raised)', borderRadius: 10, padding: 12 }}>
-            <strong style={{ color: 'var(--an-ink)', fontSize: '.8rem' }}>Pages, last {liveLongWindowLabel}</strong>
+            <strong style={{ color: 'var(--an-ink)', fontSize: '.8rem' }}>Pages, last {shownWindowLabel}</strong>
             {livePageCounts.map(([page, count]) => <div key={page} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: 'var(--an-ink-muted)', fontSize: '.72rem', marginTop: 7 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{page}</span><b style={{ color: 'var(--an-accent)' }}>{count}</b></div>)}
           </div>
           <div style={{ background: 'var(--an-surface-raised)', borderRadius: 10, padding: 12 }}>
-            <strong style={{ color: 'var(--an-ink)', fontSize: '.8rem' }}>Acquisition sources, last {liveLongWindowLabel}</strong>
+            <strong style={{ color: 'var(--an-ink)', fontSize: '.8rem' }}>Acquisition sources, last {shownWindowLabel}</strong>
             {liveSourceCounts.map(([source, count]) => <div key={source} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, color: 'var(--an-ink-muted)', fontSize: '.72rem', marginTop: 7 }}><span>{source}</span><b style={{ color: 'var(--an-positive)' }}>{count}</b></div>)}
           </div>
         </div>
