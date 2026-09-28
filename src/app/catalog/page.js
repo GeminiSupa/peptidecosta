@@ -17,6 +17,9 @@ import {
   translateCategoryLabel,
   isMetabolicCategory,
   productComposition,
+  catalogFacingCompound,
+  catalogFacingName,
+  withRetatrutideLead,
   buildAzList,
   groupCatalogCards,
   visibleSizeChips,
@@ -4473,10 +4476,10 @@ export default function CatalogPage() {
                         : '';
                       return <div className="card-scarcity">{scarcity}</div>;
                     })()}
-                    <h3 className="product-name">{showSizes ? card.compound : p.product}</h3>
+                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound) : catalogFacingName(p.product)}</h3>
                     {(() => {
                       const blurb = productComposition(p.product, lang)
-                        || String(lang === 'en' ? p.descriptionEn : p.descriptionEs || '').trim();
+                        || withRetatrutideLead(p.product, lang === 'en' ? p.descriptionEn : p.descriptionEs, lang);
                       if (!blurb) return null;
                       return <div className="product-card-blurb">{blurb}</div>;
                     })()}
@@ -5723,7 +5726,7 @@ export default function CatalogPage() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                 <h2 id="product-detail-title" style={{ fontSize: '1.5rem', color: 'var(--text-main)', fontWeight: '800', margin: 0 }}>
-                  {selectedProduct.product}
+                  {catalogFacingName(selectedProduct.product)}
                 </h2>
                 <button 
                   onClick={(e) => handleShareProduct(e, selectedProduct)}
@@ -5785,9 +5788,9 @@ export default function CatalogPage() {
               )}
             </div>
 
-            {((lang === 'en' && selectedProduct.descriptionEn) || (lang === 'es' && selectedProduct.descriptionEs)) && (
+            {withRetatrutideLead(selectedProduct.product, lang === 'en' ? selectedProduct.descriptionEn : selectedProduct.descriptionEs, lang) && (
               <div className="product-detail-description">
-                {lang === 'en' ? selectedProduct.descriptionEn : selectedProduct.descriptionEs}
+                {withRetatrutideLead(selectedProduct.product, lang === 'en' ? selectedProduct.descriptionEn : selectedProduct.descriptionEs, lang)}
               </div>
             )}
 

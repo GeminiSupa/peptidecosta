@@ -116,6 +116,38 @@ const COMPOSITIONS = [
   { test: /lipotropic|fat blaster/i, en: 'Lipotropic blend, 10 ml solution', es: 'Mezcla lipotrópica, solución de 10 ml' },
 ];
 
+const RETATRUTIDE_DISPLAY = 'GLP-1 – Triple Agonist';
+const RETATRUTIDE_LEAD = {
+  en: 'Research peptide with agonist activity at the GIP, GLP-1, and glucagon receptors.',
+  es: 'Péptido de investigación con actividad agonista sobre los receptores GIP, GLP-1 y glucagón.',
+};
+
+function isRetatrutide(name) {
+  return /^retatrutide\b/i.test(String(name ?? '').trim());
+}
+
+/** The name on the catalog card. The stored name stays Retatrutide for orders. */
+export function catalogFacingCompound(compound) {
+  return isRetatrutide(compound) ? RETATRUTIDE_DISPLAY : String(compound ?? '');
+}
+
+/** Full customer-facing name, size included: "GLP-1 – Triple Agonist 12mg". */
+export function catalogFacingName(storedName) {
+  const { compound, size } = splitCompoundAndSize(storedName);
+  if (!isRetatrutide(compound)) return String(storedName ?? '');
+  return size ? `${RETATRUTIDE_DISPLAY} ${size}` : RETATRUTIDE_DISPLAY;
+}
+
+/** Puts the triple-agonist sentence in front of a Retatrutide description. */
+export function withRetatrutideLead(storedName, description, lang = 'es') {
+  const text = String(description ?? '').trim();
+  if (!isRetatrutide(splitCompoundAndSize(storedName).compound)) return text;
+  const lead = String(lang).toLowerCase().startsWith('en') ? RETATRUTIDE_LEAD.en : RETATRUTIDE_LEAD.es;
+  if (!text) return lead;
+  if (text.toLowerCase().startsWith(lead.toLowerCase())) return text;
+  return `${lead} ${text}`;
+}
+
 /** The composition line for a product, or '' when it is a single compound. */
 export function productComposition(name, lang = 'es') {
   const entry = COMPOSITIONS.find((c) => c.test.test(String(name ?? '')));
