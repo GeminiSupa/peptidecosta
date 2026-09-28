@@ -53,6 +53,19 @@ import { parseAiSummary } from '@/lib/aiSummaryMarkdown.mjs';
 import { formatPrice } from '@/lib/money.mjs';
 import { orderNetRevenue } from '@/lib/orderRevenue.mjs';
 
+/**
+ * How far back "right now" reaches, and how often this panel re-asks.
+ *
+ * This used to be 45 seconds, measured against a page that was fetched once
+ * and never refreshed again — so the live count read zero within a minute of
+ * opening the tab, however busy the storefront was. Google's Realtime report
+ * headlines "active users in the last 30 minutes" and shows a 5-minute figure
+ * beside it; five minutes is the comparable number, and it stops the panel
+ * reading zero between two heartbeats on a quiet afternoon.
+ */
+const LIVE_WINDOW_MINUTES = 5;
+const LIVE_POLL_MS = 20000;
+
 /** Money, formatted the way every other screen formats it. */
 const formatUsd = (value) => formatPrice(value, 'USD');
 
@@ -433,6 +446,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   // Database analytics state
   const [dbSessions, setDbSessions] = useState([]);
+  // Who is on the site right now, kept separate from dbSessions because it is
+  // polled on its own short timer while the rest of the page stays put.
+  const [liveSessions, setLiveSessions] = useState([]);
+  const [liveWindowMinutes, setLiveWindowMinutes] = useState(LIVE_WINDOW_MINUTES);
   const [dbProductViews, setDbProductViews] = useState([]);
   const [dbOrders, setDbOrders] = useState([]);
   const [dbCarts, setDbCarts] = useState([]);
@@ -528,6 +545,41 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey, windowKey, compareMode]);
 
+  // Who is on the site right now, on its own timer.
+  //
+  // The big fetch above runs once and then only when someone changes the range
+  // or presses Refresh, which is correct for a report about last week and wrong
+  // for a panel headed "now". This asks one small endpoint for the current
+  // visitors every twenty seconds, and stops while the tab is in the
+  // background so an admin screen left open overnight is not polling all night.
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLiveVisitors = async () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      try {
+        const response = await adminFetch(`/api/admin/live-visitors?minutes=${LIVE_WINDOW_MINUTES}`);
+        const payload = await response.json();
+        if (cancelled || !response.ok) return;
+        setLiveSessions(Array.isArray(payload.sessions) ? payload.sessions : []);
+        setLiveWindowMinutes(Number(payload.windowMinutes) || LIVE_WINDOW_MINUTES);
+      } catch {
+        // A dropped poll is not worth an error banner; the next one is twenty
+        // seconds away and the panel keeps showing the last good answer.
+      }
+    };
+
+    loadLiveVisitors();
+    const timer = setInterval(loadLiveVisitors, LIVE_POLL_MS);
+    const onVisible = () => { if (document.visibilityState === 'visible') loadLiveVisitors(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshKey]);
+
   // The filters a reader set were gone on reload, so a question worth asking
   // twice had to be re-picked every time. Restored once, on mount, before
   // anything is fetched with the defaults.
@@ -620,11 +672,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   const { orders, carts, sessions, productViews, clicks } = getProcessedData();
 
-  // Calculate currently active live users (heartbeat within last 45 seconds)
-  const activeThreshold = new Date(Date.now() - 45000);
-  const activeLiveSessions = dbSessions
-    .filter((session) => session.last_active && new Date(session.last_active) >= activeThreshold)
+  // Who is on the site right now. The endpoint applies the window against the
+  // server's clock and returns only what is inside it, so this is already
+  // "live" — filtering again here against the admin's own laptop clock is what
+  // used to make a skewed or simply stale page report nobody.
+  const activeLiveSessions = [...liveSessions]
     .sort((left, right) => new Date(right.last_active) - new Date(left.last_active));
+  const liveWindowLabel = liveWindowMinutes === 1 ? 'minute' : `${liveWindowMinutes} minutes`;
   const activeLiveUsers = activeLiveSessions.length;
   const knownActiveUsers = activeLiveSessions.filter((session) => session.known_customer).length;
   const activeDomains = new Set(activeLiveSessions.map((session) => session.hostname).filter(Boolean)).size;
@@ -2638,7 +2692,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         <div className="analytics-header-status">
           <span className="analytics-status-live">
             {isLive && <span className="active-pulse-dot" />}
-            {activeLiveUsers} across tracked sites now
+            {activeLiveUsers} across tracked sites in the last {liveWindowLabel}
           </span>
           <span>·</span>
           <span>{loading ? 'Refreshing…' : analyticsErrors.length > 0 ? 'Partial data' : isLive ? 'Live data' : `Nothing tracked ${rangeLabel}`}</span>
@@ -2665,10 +2719,10 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
           <div>
             <div style={{ color: 'var(--an-accent)', fontSize: '.7rem', fontWeight: 900, letterSpacing: '.08em', textTransform: 'uppercase' }}>Live visitor journeys</div>
             <h3 style={{ margin: '4px 0', fontSize: '1rem', color: 'var(--an-ink)' }}>Who is on which page, and how they arrived</h3>
-            <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker.</p>
+            <p style={{ margin: 0, color: 'var(--an-ink-muted)', fontSize: '.78rem' }}>First-party heartbeat data across every domain using the shared tracker. Counts anyone active in the last {liveWindowLabel}, refreshed every {Math.round(LIVE_POLL_MS / 1000)} seconds.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['Active', activeLiveUsers], ['Known customers', knownActiveUsers], ['Team on site', teamOnSiteCount], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
+            {[['Active now', activeLiveUsers], ['Known customers', knownActiveUsers], ['Team on site', teamOnSiteCount], ['Domains', activeDomains], ['Journey events', totalJourneyEvents]].map(([label, value]) => (
               <div key={label} style={{ background: 'var(--an-surface-raised)', borderRadius: 9, padding: '8px 11px', minWidth: 90 }}>
                 <div style={{ color: 'var(--an-ink)', fontWeight: 900, fontSize: '1rem' }}>{value}</div>
                 <div style={{ color: 'var(--an-ink-faint)', fontSize: '.66rem' }}>{label}</div>
@@ -2678,7 +2732,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         </div>
 
         {activeLiveSessions.length === 0 ? (
-          <div style={{ color: 'var(--an-ink-faint)', fontSize: '.8rem', padding: '18px 0' }}>No visitor heartbeat in the last 45 seconds.</div>
+          <div style={{ color: 'var(--an-ink-faint)', fontSize: '.8rem', padding: '18px 0' }}>No visitor heartbeat in the last {liveWindowLabel}.</div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.76rem' }}>
@@ -3950,7 +4004,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
             <p style={{ fontSize: '0.875rem', color: 'var(--an-ink-muted)', marginBottom: '16px', marginTop: '-10px' }}>
               {clicks.length === 0
                 ? 'No mobile click telemetry recorded yet for this period. Data appears here as visitors interact with the catalog.'
-                : `${activeLiveUsers} active visitor session(s) in the last 45 seconds. Showing ${clicks.length} recorded mobile click(s).`}
+                : `${activeLiveUsers} active visitor session(s) in the last ${liveWindowLabel}. Showing ${clicks.length} recorded mobile click(s).`}
             </p>
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
