@@ -215,7 +215,20 @@
   .offerLine { gap: 5px; }
   .offerLine strong { font-size: 0.72rem; line-height: 1.25; }
   .offerLine > svg { width: 13px; height: 13px; }
-  .stripMore { display: none; }
+  /* The tap hint used to be hidden here for room, so the card read as a
+     poster with nothing to tap. It shares the bottom row with the timer
+     instead, as a bordered pill so it reads as the thing you press. */
+  .stripActions { grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: stretch; gap: 8px; }
+  .stripMore {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    border-radius: 9px;
+    border: 1px solid rgba(21, 128, 61, 0.35);
+    background: rgba(21, 128, 61, 0.08);
+    font-size: 0.76rem;
+  }
   .countdown { min-width: 0; gap: 2px; padding: 4px 6px; border-radius: 8px; }
   .countdown small { font-size: 0.5rem; letter-spacing: 0; }
   .countdown small svg { width: 10px; height: 10px; }
