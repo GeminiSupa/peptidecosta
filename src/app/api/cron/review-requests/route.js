@@ -51,11 +51,25 @@ export async function GET(request) {
     const eligibleBefore = new Date();
     eligibleBefore.setDate(eligibleBefore.getDate() - reviewSettings.waitDays);
 
+    // Phone-only orders are excluded here, not skipped in the loop below.
+    //
+    // This queue is the oldest 100 unasked orders, and the loop used to skip an
+    // order with no address without marking it — so it came back tomorrow, and
+    // every day after, forever. By 28 Sep 2026 fifty-four of the hundred were
+    // those, they were the oldest so they sorted to the front, and every one of
+    // the run's fifty slots went to an order that could never be emailed: the
+    // job sent nothing at all for three days while seventy-five real orders sat
+    // behind the window where it never looked.
+    //
+    // Filtering rather than marking them keeps the rows untouched, so a phone
+    // number is still there to ask over WhatsApp if that is ever built.
     const { data: candidateOrders, error } = await supabase
       .from('orders')
       .select('id, order_number, customer_email, customer_name, customer_phone, currency, payment_method, total_usd, total_crc, created_at, activity_log')
       .in('status', reviewSettings.triggerStatuses)
       .is('review_requested_at', null)
+      .not('customer_email', 'is', null)
+      .neq('customer_email', '')
       .order('created_at', { ascending: true })
       .limit(100); // Process in batches to avoid timeouts
 
