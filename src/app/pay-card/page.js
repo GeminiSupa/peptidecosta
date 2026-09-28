@@ -8,6 +8,8 @@ import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPausedForClient } from '@/lib/cardPaymentsPaused.mjs';
 import { buildWhatsAppLink } from '@/lib/whatsappLink.mjs';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
+import { safeSessionStorage } from '@/lib/storage';
+import { SA_STORAGE_KEY, buildShopperApprovedRecord } from '@/lib/shopperApproved.mjs';
 
 // Read once at module scope: this is a build-time constant, and re-reading it
 // per render would only invite someone to think it can change mid-session.
@@ -211,7 +213,20 @@ function CardPaymentContent() {
                 ? `Thank you. Your payment for order ${order.orderNumber} was approved.`
                 : `Gracias. Su pago para la orden ${order.orderNumber} fue aprobado.`}
             </p>
-            <Link href={`/thank-you?lang=${lang}&order=${encodeURIComponent(order.orderNumber)}`}>
+            <Link
+              href={`/thank-you?lang=${lang}&order=${encodeURIComponent(order.orderNumber)}`}
+              onClick={() => {
+                try {
+                  safeSessionStorage.setItem(SA_STORAGE_KEY, JSON.stringify(buildShopperApprovedRecord({
+                    orderId: order.orderNumber,
+                    email: order.customerEmail || form.email,
+                    name: order.customerName,
+                  })));
+                } catch {
+                  // A missing survey is not a reason to block the confirmation page.
+                }
+              }}
+            >
               {isEn ? 'View confirmation' : 'Ver confirmación'}
             </Link>
           </div>

@@ -56,6 +56,7 @@ import { shouldScheduleWaReprompt, WA_REPROMPT_DELAY_MS } from '@/lib/waReprompt
 import { shouldScheduleAccessGate, CATALOG_GATE_DELAY_MS } from '@/lib/catalogGate.mjs';
 import { formatPrice as formatPriceVal, roundToCents } from '@/lib/money.mjs';
 import { GCR_STORAGE_KEY, buildReviewOptInRecord } from '@/lib/googleCustomerReviews.mjs';
+import { SA_STORAGE_KEY, buildShopperApprovedRecord } from '@/lib/shopperApproved.mjs';
 import {
   identityMessage,
   normalizeCustomerName,
@@ -557,6 +558,11 @@ export default function CatalogPage() {
       safeSessionStorage.setItem(GCR_STORAGE_KEY, JSON.stringify(buildReviewOptInRecord({
         orderId: orderNumber,
         email: customerEmail,
+      })));
+      safeSessionStorage.setItem(SA_STORAGE_KEY, JSON.stringify(buildShopperApprovedRecord({
+        orderId: orderNumber,
+        email: customerEmail,
+        name: customerName,
       })));
     } catch {
       // A missing review prompt is not a reason to interrupt a paid order.
