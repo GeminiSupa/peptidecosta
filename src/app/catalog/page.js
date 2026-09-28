@@ -119,6 +119,10 @@ const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 // Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
+// Below this many vials a cart line keeps the − / + buttons. At or above it the
+// line shows a dropdown instead, so someone buying in quantity picks the number
+// straight off a list rather than clicking + over and over.
+const CART_QTY_DROPDOWN_AT = 4;
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
 const percentLabel = (value) => {
   const number = Number(value) || 0;
@@ -2250,6 +2254,52 @@ export default function CatalogPage() {
       // applies, so the message about it should not linger.
       setStockNotice(null);
     }
+  };
+
+  // Once a line is up to CART_QTY_DROPDOWN_AT vials the − / + buttons stop being
+  // the quick way to change it, so the cart swaps them for a dropdown. Picking a
+  // number sets the quantity outright, which updateCartQty cannot do — it only
+  // nudges by one — so the dropdown gets its own setter with the same stock
+  // ceiling and the same "only N left" notice.
+  const setCartQty = (productName, nextQty) => {
+    const wanted = Number(nextQty);
+    if (!Number.isFinite(wanted)) return;
+
+    let hitLimit = null;
+
+    const next = cart.map(item => {
+      if (item.product !== productName) return item;
+      if (wanted < 1) return null;
+      if (item.inventoryCount !== null && item.inventoryCount !== undefined && wanted > item.inventoryCount) {
+        hitLimit = item.inventoryCount;
+        return { ...item, qty: item.inventoryCount };
+      }
+      return { ...item, qty: wanted };
+    }).filter(Boolean);
+
+    setCart(next);
+
+    if (hitLimit !== null) {
+      flagStockLimit(productName, hitLimit);
+    } else if (stockNotice?.product === productName) {
+      setStockNotice(null);
+    }
+  };
+
+  // The numbers the dropdown offers. It stops at whatever stock allows, and
+  // otherwise at ten above the current quantity, so picking the last entry always
+  // opens a longer list rather than scrolling through hundreds of rows at once.
+  const cartQtyOptions = (item) => {
+    const stockCeiling = (item.inventoryCount === null || item.inventoryCount === undefined)
+      ? Infinity
+      : item.inventoryCount;
+    const top = Math.max(1, Math.min(stockCeiling, Math.max(item.qty + 10, 20)));
+    const options = [];
+    for (let n = 1; n <= top; n += 1) options.push(n);
+    // A cart restored from an older visit can sit above today's stock. Show its
+    // own number so the dropdown is not blank on the way down.
+    if (!options.includes(item.qty)) options.push(item.qty);
+    return options;
   };
 
   const removeFromCart = (productName) => {
@@ -4813,9 +4863,26 @@ export default function CatalogPage() {
                     <strong>{formatPriceVal(getPriceAsNumber(item, currency) * item.qty, currency)}</strong>
                   </div>
                   <div className="cart-item-qty">
-                    <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, -1)}><Minus size={12} /></button>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{item.qty}</span>
-                    <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, 1)}><Plus size={12} /></button>
+                    {item.qty < CART_QTY_DROPDOWN_AT ? (
+                      <>
+                        <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, -1)}><Minus size={12} /></button>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{item.qty}</span>
+                        <button className="cart-qty-btn" onClick={() => updateCartQty(item.product, 1)}><Plus size={12} /></button>
+                      </>
+                    ) : (
+                      <select
+                        className="cart-qty-select"
+                        value={item.qty}
+                        aria-label={lang === 'en'
+                          ? `Quantity of ${item.product}`
+                          : `Cantidad de ${item.product}`}
+                        onChange={(e) => setCartQty(item.product, e.target.value)}
+                      >
+                        {cartQtyOptions(item).map((n) => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   {stockNotice?.product === item.product && (
                     <p id="field-stock" role="alert" tabIndex={-1} className="cart-item-stock-note">

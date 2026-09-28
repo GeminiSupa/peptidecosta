@@ -1858,6 +1858,22 @@ body {
     color: var(--text-main);
 }
 
+/* Shown in place of the − / + buttons once a line reaches four or more, so a
+   bigger order is picked off a list instead of clicked up one at a time. */
+.cart-qty-select {
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-main);
+    height: 28px;
+    min-width: 58px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
 .cart-item-remove {
     background: transparent;
     border: none;
