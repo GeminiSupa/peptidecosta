@@ -1379,8 +1379,10 @@ body {
 }
 
 .product-page-photo img {
-    width: min(280px, 100%);
+    width: auto;
     height: auto;
+    max-width: min(280px, 100%);
+    max-height: 320px;
     object-fit: contain;
 }
 
@@ -1577,12 +1579,65 @@ body {
 }
 
 @media (max-width: 760px) {
+    .product-page {
+        padding: 12px 14px 88px;
+    }
     .product-page-hero,
     .product-page-facts {
         grid-template-columns: 1fr;
+        gap: 16px;
     }
     .product-page-photo {
-        min-height: 220px;
+        min-height: 0;
+        padding: 12px;
+    }
+    .product-page-photo img {
+        max-width: min(150px, 42vw);
+        max-height: 190px;
+    }
+    .product-page-buy h2 {
+        font-size: clamp(1.35rem, 6vw, 1.7rem);
+    }
+    .product-page-price strong {
+        font-size: clamp(1.35rem, 5.5vw, 1.8rem);
+    }
+    .product-page-copy {
+        font-size: 0.92rem;
+    }
+    .product-page-size,
+    .product-page-qty button {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+    .product-page-qty button {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+    }
+    .product-page-nudge {
+        font-size: 0.88rem;
+    }
+    .product-page-add {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        padding: 12px 16px;
+        font-size: clamp(0.9rem, 3.6vw, 1rem);
+    }
+    .product-page-info h3,
+    .product-page .reviews-section h3 {
+        font-size: 1.15rem;
+    }
+}
+
+@media (max-width: 380px) {
+    .product-page-photo img {
+        max-width: min(120px, 38vw);
+        max-height: 160px;
+    }
+    .product-page-size {
+        padding: 5px 10px;
+        font-size: 0.78rem;
     }
 }
 
@@ -3952,7 +4007,7 @@ body {
 
 .product-grid.grid-view .product-image {
     width: 100%;
-    height: 160px;
+    height: clamp(110px, 32vw, 160px);
     font-size: 48px;
     border-radius: 8px;
 }
@@ -7472,17 +7527,21 @@ body:has(.product-grid.grid-view) {
 }
 
 .product-grid.grid-view .add-to-cart-btn {
-    width: 78%;
-    min-height: 26px;
-    padding: 5px 10px;
+    width: 100%;
+    max-width: 100%;
+    min-height: 32px;
+    padding: 6px 8px;
     border-radius: 999px;
-    font-size: 0.56rem;
-    font-weight: 900;
+    font-size: clamp(0.64rem, 2.7vw, 0.78rem);
+    font-weight: 800;
+    gap: 4px;
+    white-space: nowrap;
 }
 
 .product-grid.grid-view .add-to-cart-btn svg {
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
 }
 
 .product-grid.grid-view .complimentary-note {

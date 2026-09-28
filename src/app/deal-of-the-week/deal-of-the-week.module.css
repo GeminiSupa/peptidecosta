@@ -21,7 +21,7 @@
 .heroCompact h1 { font-size: clamp(1.6rem, 3.2vw, 2.3rem); }
 .lead { max-width: 640px; margin: 0 auto 16px; font-size: 1rem; line-height: 1.55; color: #4b5563; }
 .summaryLine { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 16px; color: #374151; font-weight: 700; }
-.summaryLine span { display: inline-flex; align-items: center; gap: 6px; }
+.summaryLine span { display: inline-flex; align-items: flex-start; gap: 6px; max-width: 100%; text-align: left; }
 .summaryLine svg { width: 16px; height: 16px; color: var(--offer); }
 
 .offerGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-width: 620px; margin: 0 auto 14px; }
@@ -67,11 +67,11 @@
 .saving { align-self: flex-start; padding: 3px 9px; border-radius: 999px; background: var(--money-soft); border: 1px solid var(--money-line); color: var(--money); font-size: 0.8rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 
 .countdown { display: flex; width: fit-content; max-width: 100%; box-sizing: border-box; flex-direction: column; align-items: center; gap: 8px; margin: 4px auto 24px; padding: 14px 18px; border-radius: 16px; background: var(--urgent-soft); border: 1px solid var(--urgent-line); }
-.countdownLabel { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--urgent); }
-.countdownLabel svg { width: 15px; height: 15px; }
-.countdownDigits { display: flex; gap: 10px; }
-.countdownUnit { display: flex; flex-direction: column; align-items: center; min-width: 56px; font-size: 0.72rem; color: #6b7280; text-transform: uppercase; }
-.countdownUnit strong { font-size: 1.7rem; line-height: 1.1; color: var(--urgent); font-variant-numeric: tabular-nums; }
+.countdownLabel { display: inline-flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; max-width: 100%; margin: 0; font-size: 0.82rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--urgent); text-align: center; }
+.countdownLabel svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.countdownDigits { display: flex; justify-content: center; gap: 10px; max-width: 100%; }
+.countdownUnit { display: flex; flex-direction: column; align-items: center; min-width: 52px; flex: 0 0 auto; font-size: 0.72rem; color: #6b7280; text-transform: uppercase; }
+.countdownUnit strong { font-size: clamp(1.2rem, 4.2vw, 1.7rem); line-height: 1.1; color: var(--urgent); font-variant-numeric: tabular-nums; }
 .soldOut { font-size: 0.82rem; font-weight: 800; color: #b91c1c; }
 .productLink { margin-top: auto; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; width: 100%; border: 0; cursor: pointer; font: inherit; font-weight: 800; border-radius: 12px; background: var(--accent); color: #fff; text-decoration: none; }
 
@@ -139,18 +139,28 @@
   .facts span { min-width: 130px; flex: 1 1 40%; }
   .grid { gap: 12px; }
   .card { flex-basis: calc(50% - 6px); }
-  .cardImage { padding: 12px; }
-  .cardBody { padding: 12px 12px 14px; }
-  .cardBody h3 { font-size: 0.92rem; }
-  .price strong { font-size: 1.15rem; }
-  /* Two cards per row on a phone: the button text was filling the button. */
-  .productLink { min-height: 42px; padding: 0 8px; font-size: 0.86rem; letter-spacing: 0; }
-  .stepper { min-height: 42px; }
-  .stepper button { width: 34px; height: 34px; }
-  .stepper > span { font-size: 0.8rem; }
+  .cardImage { padding: 10px; }
+  .cardBody { padding: 10px 10px 12px; }
+  .cardBody h3 { font-size: clamp(0.78rem, 3.2vw, 0.92rem); }
+  .price strong { font-size: clamp(0.95rem, 3.6vw, 1.15rem); }
+  .price s, .priceNote { font-size: clamp(0.68rem, 2.6vw, 0.8rem); }
+  /* Two cards per row. The label and the photo shrink with the card. */
+  .productLink {
+    min-height: 38px;
+    padding: 6px 6px;
+    font-size: clamp(0.68rem, 2.8vw, 0.86rem);
+    line-height: 1.15;
+    letter-spacing: 0;
+    text-align: center;
+  }
+  .stepper { min-height: 38px; }
+  .stepper button { width: 32px; height: 32px; }
+  .stepper > span { font-size: 0.78rem; }
+  .summaryLine { flex-direction: column; align-items: center; gap: 8px; }
+  .countdown { padding: 10px 12px; }
   .countdownDigits { gap: 6px; }
-  .countdownUnit { min-width: 46px; }
-  .countdownUnit strong { font-size: 1.4rem; }
+  .countdownUnit { min-width: 44px; }
+  .countdownLabel { font-size: 0.72rem; letter-spacing: 0; }
   .checkBack { padding: 22px; }
 }
 

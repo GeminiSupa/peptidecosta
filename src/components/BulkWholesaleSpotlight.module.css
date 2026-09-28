@@ -181,8 +181,10 @@
 @media (max-width: 700px) {
   .spotlight { grid-template-columns: 1fr; padding: 21px; }
   .action { width: 100%; }
+  /* The timer used to share the title's row, and on a phone it sat on top of
+     "Deal of the Week". It now takes the row under the offers. */
   .strip {
-    grid-template-columns: 72px minmax(0, 1fr) auto;
+    grid-template-columns: 72px minmax(0, 1fr);
     gap: 8px 10px;
     align-items: center;
   }
@@ -194,11 +196,17 @@
   }
   .stripBrand { grid-column: 2; grid-row: 1; min-width: 0; }
   .stripCopy { grid-column: 1 / -1; grid-row: 2; order: initial; gap: 4px; }
-  .stripActions { grid-column: 3; grid-row: 1; align-self: center; }
+  .stripActions {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-items: start;
+    align-self: stretch;
+  }
+  .countdown { min-width: 0; width: fit-content; max-width: 100%; }
 }
 
 @media (max-width: 430px) {
-  .strip { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 6px 8px; margin: 6px auto; padding: 8px; }
+  .strip { grid-template-columns: 64px minmax(0, 1fr); gap: 6px 8px; margin: 6px auto; padding: 8px; }
   .stripThumb { width: 64px; height: 64px; }
   .stripBrand { gap: 0; }
   .stripIcon { display: none; }
