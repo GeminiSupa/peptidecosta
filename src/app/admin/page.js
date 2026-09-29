@@ -3722,6 +3722,40 @@ Core Rules:
     }
   };
 
+  // Take an order back out of the fulfillment queue.
+  //
+  // The hand-off was one-way: once an order was marked ready to prepare there
+  // was no way to undo it short of completing or cancelling the order, so a
+  // misclick left something in the packer's queue that nobody could remove.
+  // Clearing the same two columns puts it back exactly where it was.
+  const handleUndoReadyToPrepare = async (orderId) => {
+    const order = orders.find((o) => o.id === orderId);
+    const label = order?.order_number ? `#${order.order_number}` : 'this order';
+    if (!window.confirm(`Take ${label} back out of Fulfillment? It returns to the Orders tab and can be handed off again.`)) return;
+    try {
+      const response = await adminFetch('/api/admin/orders/update', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          orderId,
+          updates: {
+            ready_to_prepare_at: null,
+            ready_to_prepare_by: null,
+          },
+          activity: {
+            type: 'ready_to_prepare_undone',
+            message: 'Taken back out of fulfillment — returned to Orders',
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not take this order back');
+      handleOrderUpdated(data.order);
+    } catch (error) {
+      console.error('Undo ready to prepare error:', error);
+      alert(`Could not take this order out of fulfillment: ${error.message}`);
+    }
+  };
+
   // Delete a single order
   const handleDeleteOrder = async (orderId) => {
     const order = orders.find((o) => o.id === orderId);
@@ -5680,6 +5714,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             isSuperadmin={!!adminProfile?.is_superadmin}
             onOrderUpdated={handleOrderUpdated}
             handleMarkReadyToPrepare={handleMarkReadyToPrepare}
+            onUndoReadyToPrepare={handleUndoReadyToPrepare}
             setSelectedOrderDetails={setSelectedOrderDetails}
             openWhatsAppComposer={openWhatsAppComposer}
             handleDeleteOrder={handleDeleteOrder}
@@ -5706,6 +5741,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               orders={orders}
               setSelectedOrderDetails={setSelectedOrderDetails}
               onRefreshOrders={refreshOrders}
+              onUndoReadyToPrepare={handleUndoReadyToPrepare}
               ordersRefreshError={ordersRefreshError}
               paused={Boolean(selectedOrderDetails)}
             />

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Package, Clock, MapPin, Phone, User, RefreshCw } from 'lucide-react';
+import { Package, Clock, MapPin, User, RefreshCw, ChevronRight } from 'lucide-react';
 import { formatCrDate } from '@/lib/crTime.mjs';
 
 // How often the queue re-reads itself while the tab is open.
@@ -52,6 +52,7 @@ export default function FulfillmentManager({
   orders = [],
   setSelectedOrderDetails,
   onRefreshOrders,
+  onUndoReadyToPrepare,
   ordersRefreshError = '',
   // True while an order detail panel is open over this tab.
   //
@@ -236,14 +237,35 @@ export default function FulfillmentManager({
                   <br />
                   {formatCrDate(order.ready_to_prepare_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                 </span>
+                {/* "Open & mark shipped" was a lie: this only opens the order.
+                    Marking it shipped is two more steps inside the panel, and a
+                    button that claims to have done them is how an order gets
+                    packed, closed, and never actually completed. It says what
+                    it does; the tooltip says what comes next. */}
                 <button
                   type="button"
                   className="admin-btn admin-btn-primary"
                   onClick={() => setSelectedOrderDetails?.(order)}
-                  style={{ fontSize: '.8rem', padding: '8px 14px' }}
+                  style={{ fontSize: '.8rem', padding: '8px 14px', display: 'inline-flex', alignItems: 'center' }}
+                  title="Open this order to add the tracking number and set it to Order Complete"
                 >
-                  <Phone size={13} style={{ marginRight: 6 }} /> Open & mark shipped
+                  Open order <ChevronRight size={14} style={{ marginLeft: 4 }} />
                 </button>
+
+                {/* The way out that is not "complete it". Deliberately quiet and
+                    below the main action: it is the rarer choice, and an order
+                    vanishing from a packer's queue by accident is worse than one
+                    extra click. */}
+                {onUndoReadyToPrepare && (
+                  <button
+                    type="button"
+                    onClick={() => onUndoReadyToPrepare(order.id)}
+                    style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', fontSize: '.72rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                    title="Remove this order from Fulfillment and put it back in the Orders tab"
+                  >
+                    Send back to Orders
+                  </button>
+                )}
               </div>
             </article>
           ))}

@@ -235,6 +235,7 @@ export default function OrdersManager({
   handleOrderStatusUpdate,
   handleOrderOwnerAction,
   handleMarkReadyToPrepare,
+  onUndoReadyToPrepare,
   setSelectedOrderDetails,
   openWhatsAppComposer,
   handleDeleteOrder,
@@ -999,12 +1000,22 @@ export default function OrdersManager({
                           {/* Hand-off to the Fulfillment queue — see FulfillmentManager. */}
                           {(group.id === 'paid' || group.id === 'processing') && (
                             order.ready_to_prepare_at ? (
-                              <span
-                                title={`Ready to prepare since ${new Date(order.ready_to_prepare_at).toLocaleString()}${order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}`}
-                                style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              // Clicking it undoes the hand-off. It used to be a
+                              // dead label: once an order went to fulfillment
+                              // there was no way back short of completing or
+                              // cancelling it, so a misclick stuck in the
+                              // packer's queue with nobody able to clear it.
+                              <button
+                                type="button"
+                                onClick={onUndoReadyToPrepare ? () => onUndoReadyToPrepare(order.id) : undefined}
+                                disabled={!onUndoReadyToPrepare}
+                                title={onUndoReadyToPrepare
+                                  ? `In Fulfillment since ${new Date(order.ready_to_prepare_at).toLocaleString()}${order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''} — click to take it back out`
+                                  : `Ready to prepare since ${new Date(order.ready_to_prepare_at).toLocaleString()}${order.ready_to_prepare_by ? ` (by ${order.ready_to_prepare_by})` : ''}`}
+                                style={{ padding: '6px 10px', fontSize: '0.75rem', background: 'rgba(251, 191, 36, 0.12)', border: '1px solid rgba(251, 191, 36, 0.3)', color: '#fbbf24', borderRadius: '6px', fontWeight: 'bold', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: onUndoReadyToPrepare ? 'pointer' : 'default' }}
                               >
                                 📦 Ready
-                              </span>
+                              </button>
                             ) : (
                               <button
                                 className="admin-btn admin-cta-btn"
