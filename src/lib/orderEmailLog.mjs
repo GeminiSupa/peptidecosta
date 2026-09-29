@@ -22,6 +22,7 @@ const EMAIL_LABELS = {
   'customer-receipt': 'Order receipt',
   'receipt-resend': 'Order receipt (resent)',
   'completion-receipt': 'Completion receipt',
+  'trustpilot-afs-trigger': 'Trustpilot AFS trigger',
   'accounting-copy': 'Accounting copy',
   'refund-notice': 'Refund notice',
   'payment-result': 'Payment result',

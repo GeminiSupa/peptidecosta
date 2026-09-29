@@ -5,6 +5,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { getReviewSettings } from '@/lib/reviewSettings.mjs';
 import { trustpilotAfsSnippet } from '@/lib/trustpilotAfs.mjs';
+import { resolveTrustpilotTriggerMailer, sendTrustpilotTrigger } from '@/lib/trustpilotTrigger.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,18 +15,13 @@ export const dynamic = 'force-dynamic';
  *
  * WHY THIS IS NEEDED
  *
- * Nothing about a Trustpilot invitation is observable from our side. We BCC an
- * address and Trustpilot mails the customer days later; if the address is
- * wrong, or Trustpilot has stopped accepting our mail, the BCC is delivered to
- * nowhere and every single signal we have still reads "sent". Between August
- * and September 2026 that silence ran for two months — 75 invitations recorded
- * as sent in September alone, and Trustpilot's own dashboard reporting zero
- * invitations delivered in the same period.
+ * The old BCC was not observable separately from the customer receipt. The
+ * preferred path now sends Trustpilot a dedicated trigger through Rackspace,
+ * with its own SMTP result and message id. Deployments without that mailbox
+ * retain the old Elastic BCC as a safe fallback.
  *
- * So the only honest test is to send one real message through the real path and
- * then look at Trustpilot's Invitations screen. This sends exactly what a
- * customer receipt sends — same sender, same SMTP account, same BCC, same AFS
- * data block — to an address the admin nominates.
+ * So the only honest test is to send one real message through whichever path is
+ * live and then look at Trustpilot's Invitations screen.
  *
  * It really does ask Trustpilot to send a review invitation to that address, so
  * it is meant for the team's own inboxes, never a customer's.
@@ -50,13 +46,16 @@ export async function POST(request) {
       || 'peptidescostarica.net+7777886f21@invite.trustpilot.com';
 
     const { smtp, from } = getOrderMailSettings();
-    if (!smtp.configured) {
+    const trustpilotMailer = resolveTrustpilotTriggerMailer();
+    const useRackspaceTrigger = settings.trustpilotDeliveryMode === 'trigger'
+      && trustpilotMailer.configured;
+    if (!useRackspaceTrigger && !smtp.configured) {
       return NextResponse.json({
-        error: 'Transactional email is not configured, so nothing could be sent.',
+        error: 'Neither the Rackspace trigger nor transactional email is configured, so nothing could be sent.',
       }, { status: 500 });
     }
 
-    const transporter = nodemailer.createTransport({
+    const transporter = useRackspaceTrigger ? null : nodemailer.createTransport({
       host: smtp.host,
       port: smtp.port,
       secure: smtp.secure,
@@ -67,6 +66,39 @@ export async function POST(request) {
     // A reference Trustpilot has certainly never seen, so this cannot collide
     // with a real order and the invitation is easy to find in their list.
     const reference = `TEST-${Date.now().toString(36).toUpperCase()}`;
+
+    // The test has to exercise whichever method is actually live, or it proves
+    // the wrong path — which is the whole failure this card was built to catch.
+    if (useRackspaceTrigger) {
+      const result = await sendTrustpilotTrigger({
+        transporter: trustpilotMailer.transporter,
+        from: trustpilotMailer.from,
+        to: bcc,
+        recipientEmail: to,
+        recipientName: 'Trustpilot test',
+        referenceId: reference,
+        locale: 'en-US',
+        logPrefix: '[admin/reviews/trustpilot-test]',
+        transport: trustpilotMailer.source,
+      });
+      return NextResponse.json({
+        sent: result.sent,
+        method: 'trigger',
+        reference,
+        to,
+        bcc,
+        bccSource: settings.trustpilotAfsBcc ? 'panel' : (process.env.TRUSTPILOT_AFS_BCC ? 'env' : 'default'),
+        from: trustpilotMailer.from,
+        smtpHost: trustpilotMailer.host,
+        accepted: result.accepted || [],
+        rejected: result.rejected || [],
+        bccAccepted: result.sent,
+        messageId: result.messageId || '',
+        message: result.sent
+          ? `Rackspace accepted the trigger for ${to}. Now open Trustpilot -> Invitations and look for ${reference}. If it is not there, the remaining fault is after Rackspace accepted it: downstream delivery or Trustpilot's AFS intake.`
+          : `Rackspace did not accept the Trustpilot trigger: ${result.error}`,
+      });
+    }
 
     const html = `
       <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;line-height:1.6;max-width:600px;margin:0 auto;">
@@ -100,6 +132,7 @@ export async function POST(request) {
 
     return NextResponse.json({
       sent: true,
+      method: 'bcc',
       reference,
       to,
       bcc,
@@ -111,8 +144,8 @@ export async function POST(request) {
       bccAccepted,
       messageId: info.messageId || '',
       message: bccAccepted
-        ? `Sent. Now open Trustpilot -> Analytics -> Performance -> Invitations and look for ${reference}. If it is not there within a few minutes, Trustpilot is not receiving our BCC and the address above is wrong or no longer active.`
-        : `The mail server did not accept ${bcc}, so Trustpilot was never sent anything. That address is wrong.`,
+        ? `Elastic accepted the receipt and Trustpilot BCC. Now open Trustpilot -> Analytics -> Performance -> Invitations and look for ${reference}. If it is not there, SMTP acceptance alone cannot distinguish downstream delivery from a Trustpilot AFS intake failure.`
+        : `The mail server did not accept ${bcc}, so no Trustpilot invitation was submitted. Check the address and the mail-provider response.`,
     });
   } catch (err) {
     console.error('[admin/reviews/trustpilot-test]', err);

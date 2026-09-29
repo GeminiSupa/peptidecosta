@@ -61,6 +61,20 @@ export const DEFAULT_REVIEW_SETTINGS = {
   // Copy it from the Trustpilot dashboard: Home -> "This is your unique
   // Trustpilot email address".
   trustpilotAfsBcc: '',
+  // Which of Trustpilot's two documented methods starts an invitation.
+  //
+  //   'trigger' — a separate small email addressed to Trustpilot alone.
+  //   'bcc'     — Trustpilot copied on the customer's own receipt.
+  //
+  // Never both: each one that lands is an invitation and the plan counts them.
+  //
+  // 'trigger' is the default because the BCC cannot be observed. It rides
+  // inside the customer's receipt, so nothing on our side can say whether the
+  // invitation went out or only the receipt did — which is precisely how two
+  // months passed with 75 invitations a month recorded as sent and Trustpilot
+  // reporting zero. It also keeps the <script> block out of the customer's
+  // mail, where it is a spam signal and nothing else.
+  trustpilotDeliveryMode: 'trigger',
   // The review email, per language. Blank means "use the built-in wording",
   // which is the sane default and what every send used before this existed.
   emailSubjectEs: '',
@@ -101,6 +115,18 @@ function trustpilotBcc(value) {
   const raw = trimmed(value).toLowerCase();
   if (!raw) return '';
   return /^[^\s@]+@invite\.trustpilot\.com$/.test(raw) ? raw : '';
+}
+
+/**
+ * Which invitation method is in force.
+ *
+ * Anything unrecognised falls back rather than becoming blank. A blank here
+ * would mean "neither method", i.e. Trustpilot silently switched off, and no
+ * typo in a settings row should be able to do that.
+ */
+function deliveryMode(value, fallback) {
+  const raw = trimmed(value).toLowerCase();
+  return raw === 'bcc' || raw === 'trigger' ? raw : fallback;
 }
 
 /** Only http(s) links are worth storing; anything else is a typo, not a link. */
@@ -181,6 +207,10 @@ export function normalizeReviewSettings(stored, env = process.env) {
     facebookReviewUrl: safeUrl(pick(row.facebookReviewUrl, env?.REVIEW_LINK_FACEBOOK)),
     trustpilotReviewUrl: safeUrl(pick(row.trustpilotReviewUrl, env?.REVIEW_LINK_TRUSTPILOT)),
     trustpilotAfsBcc: trustpilotBcc(pick(row.trustpilotAfsBcc, env?.TRUSTPILOT_AFS_BCC)),
+    trustpilotDeliveryMode: deliveryMode(
+      pick(row.trustpilotDeliveryMode, env?.TRUSTPILOT_DELIVERY_MODE),
+      d.trustpilotDeliveryMode,
+    ),
     emailSubjectEs: String(row.emailSubjectEs ?? '').trim(),
     emailBodyEs: emailBody(row.emailBodyEs),
     emailSubjectEn: String(row.emailSubjectEn ?? '').trim(),

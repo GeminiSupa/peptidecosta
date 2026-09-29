@@ -24,15 +24,18 @@ test('the accounting copy is not sent the Trustpilot script block', async () => 
   );
 });
 
-test('the customer copy still carries it, since Trustpilot reads it off the BCC', async () => {
+test('the customer copy carries the block only for the BCC fallback', async () => {
   const src = await routeSrc();
   const sendAt = src.indexOf('to: order.customer_email.trim()');
   assert.ok(sendAt > 0);
   const customerCall = src.slice(Math.max(0, sendAt - 300), sendAt + 300);
   assert.match(customerCall, /html: customerHtmlWithTrustpilot/);
+  assert.match(src, /wantsInvitation && !useTriggerEmail\s*\? customerHtml \+ trustpilotSnippet/);
+  assert.match(src, /wantsInvitation && !useTriggerEmail \? trustpilotAddress : null/);
 });
 
-test('the Trustpilot block is still only added when Trustpilot is the chosen site', async () => {
+test('Trustpilot is contacted only when an eligible invitation is wanted', async () => {
   const src = await routeSrc();
-  assert.match(src, /shouldSendCustomer && !alreadyInvited && useTrustpilot/);
+  assert.match(src, /shouldSendCustomer && useTrustpilot && !alreadyInvited && Boolean\(trustpilotAddress\)/);
+  assert.match(src, /if \(useTriggerEmail && wantsInvitation && customerInfo\)/);
 });

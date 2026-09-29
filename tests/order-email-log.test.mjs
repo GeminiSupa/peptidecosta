@@ -30,7 +30,7 @@ test('a skipped email is neither a success nor a failure', () => {
 });
 
 test('every kind has a human label', () => {
-  for (const kind of ['admin-alert', 'customer-receipt', 'completion-receipt', 'accounting-copy', 'refund-notice', 'payment-result']) {
+  for (const kind of ['admin-alert', 'customer-receipt', 'completion-receipt', 'trustpilot-afs-trigger', 'accounting-copy', 'refund-notice', 'payment-result']) {
     assert.notEqual(emailKindLabel(kind), kind, `${kind} should read as English`);
   }
 });

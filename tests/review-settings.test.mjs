@@ -11,6 +11,13 @@ test('nothing saved and nothing in the environment gives the defaults', () => {
   assert.deepEqual(norm(undefined, {}), DEFAULT_REVIEW_SETTINGS);
 });
 
+test('Trustpilot uses the standalone trigger by default and only accepts known modes', () => {
+  assert.equal(norm({}, {}).trustpilotDeliveryMode, 'trigger');
+  assert.equal(norm({ trustpilotDeliveryMode: 'bcc' }, {}).trustpilotDeliveryMode, 'bcc');
+  assert.equal(norm({ trustpilotDeliveryMode: 'TRIGGER' }, {}).trustpilotDeliveryMode, 'trigger');
+  assert.equal(norm({ trustpilotDeliveryMode: 'disabled-by-typo' }, {}).trustpilotDeliveryMode, 'trigger');
+});
+
 test('the saved row wins over the environment', () => {
   const s = norm({ googleSharePct: 70 }, { REVIEW_GOOGLE_SHARE: '20' });
   assert.equal(s.googleSharePct, 70);

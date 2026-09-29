@@ -60,6 +60,21 @@ email** sends the customer receipt and a new accounting copy. **Resend
 accounting only** sends only PBAG's private copy, so backfills never duplicate a
 customer receipt or a Trustpilot invitation.
 
+## Trustpilot AFS triggers
+
+Customer shipping receipts remain on the transactional Elastic Email account.
+When the Social Reviews setting uses the recommended **separate email** mode,
+the application sends a second, small Automatic Feedback Service trigger
+directly to the configured `@invite.trustpilot.com` address through the existing
+low-volume `OWN_DOMAIN_SMTP_*` Rackspace mailbox. The trigger has its own SMTP
+result and activity-log entry and never contains the customer's receipt.
+
+If `OWN_DOMAIN_SMTP_*` is unavailable, the application keeps the previous
+behavior: it BCCs Trustpilot on the Elastic customer receipt. It never sends
+both trigger methods for one order. The admin test button exercises whichever
+method is active and sends a real Trustpilot invitation, so use only a team
+inbox when testing.
+
 ## Marketing campaign pacing
 
 The safe defaults are 50 recipients per batch, 30 minutes between batches,

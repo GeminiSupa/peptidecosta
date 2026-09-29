@@ -14,6 +14,7 @@ import { getReviewSettings } from '@/lib/reviewSettings.mjs';
 import { decideForOrder, recordReviewAsk } from '@/lib/reviewAskHistory.mjs';
 import { writeDroppingMissingColumns, ORDER_REVIEW_PLATFORM_COLUMNS } from '@/lib/optionalColumns.mjs';
 import { isTrustpilotAfsAddress, trustpilotAfsSnippet } from '@/lib/trustpilotAfs.mjs';
+import { resolveTrustpilotTriggerMailer, sendTrustpilotTrigger } from '@/lib/trustpilotTrigger.mjs';
 
 // Read at request time, never at module scope.
 //
@@ -36,18 +37,18 @@ function getMailSettings() {
   };
 }
 
-// Trustpilot Automatic Feedback Service (AFS): BCC this address on the
-// order-complete email and Trustpilot sends the customer a verified review
+// Trustpilot Automatic Feedback Service (AFS): tell this address about a
+// completed order and Trustpilot sends the customer a verified review
 // invitation (default 7-day delay, configured in the Trustpilot dashboard).
+//
+// Two documented ways to tell it, chosen by trustpilotDeliveryMode and never
+// both at once: a separate trigger email addressed to Trustpilot alone
+// (default), or this address BCC'd on the customer's own receipt.
 //
 // The Social Reviews panel owns this now, with TRUSTPILOT_AFS_BCC as the
 // fallback for a site that has never set it. The environment variable is marked
-// sensitive in Vercel, which means nobody — not the panel, not `vercel env
-// pull`, not the person who set it — can read back what production is actually
-// BCC'ing. Trustpilot regenerates the address when the account changes, and a
-// stale one fails in complete silence: the mail is accepted, delivered to an
-// address that no longer routes anywhere, and no invitation is ever sent.
-// Reviews simply stop, which is what happened after 1 Aug 2026.
+// sensitive in Vercel, so the panel also shows the effective address and gives
+// the owner one place to compare it with Trustpilot's current AFS address.
 const FALLBACK_TRUSTPILOT_AFS_BCC = process.env.TRUSTPILOT_AFS_BCC || 'peptidescostarica.net+7777886f21@invite.trustpilot.com';
 
 /**
@@ -303,6 +304,7 @@ export async function POST(request) {
       }
     }) : null;
     const accountingMailer = resolveTaxRecordsMailer();
+    const trustpilotMailer = resolveTrustpilotTriggerMailer();
 
     const customerSubject = orderLang === 'en'
       ? `Your Order ${order.order_number || ''} has Shipped! - Peptides Costa Rica`
@@ -388,16 +390,46 @@ export async function POST(request) {
     const reviewPlatform = reviewDecision.platform;
     const useTrustpilot = reviewPlatform === 'trustpilot';
 
-    // Trustpilot AFS structured data (read by Trustpilot from the BCC'd copy).
-    // Not visible to the customer; gives Trustpilot the name, order ref, and language.
-    // Shared with the panel's test send, so a passing test proves this block.
+    // Trustpilot AFS structured data. In BCC mode Trustpilot reads it from its
+    // copy of the receipt; trigger mode builds the same block into its separate
+    // message. It gives Trustpilot the name, order ref, and language.
     const trustpilotSnippet = trustpilotAfsSnippet({
       recipientEmail: order.customer_email,
       recipientName: order.customer_name || 'Cliente',
       referenceId: normalizedOrder.orderNumber || '',
       locale: orderLang === 'en' ? 'en-US' : 'es-ES',
     });
-    const customerHtmlWithTrustpilot = shouldSendCustomer && !alreadyInvited && useTrustpilot
+    // The invitation address, resolved before the body is built because it now
+    // decides whether the body carries the block at all.
+    //
+    // Guarded: an address that is not a Trustpilot invitation address has no
+    // business being BCC'd a copy of this receipt — it carries the customer's
+    // name, shipping address, items and totals — so a mistyped setting sends
+    // no invitation at all rather than forwarding the lot to a stranger.
+    const configuredBcc = reviewSettings.trustpilotAfsBcc || FALLBACK_TRUSTPILOT_AFS_BCC;
+    const trustpilotAddress = isTrustpilotAfsAddress(configuredBcc) ? configuredBcc : '';
+    if (configuredBcc && !trustpilotAddress) {
+      console.error(`[Order Shipped Notification] Trustpilot address "${configuredBcc}" is not an @invite.trustpilot.com address; no invitation sent.`);
+    }
+
+    // Trustpilot's two documented methods, never both — each one that lands is
+    // an invitation and the plan counts them separately. 'trigger' sends
+    // Trustpilot its own small message after the receipt; 'bcc' copies them on
+    // the receipt itself. Panel setting, so switching back needs no deploy.
+    const triggerRequested = reviewSettings.trustpilotDeliveryMode === 'trigger';
+    // If Rackspace is unavailable, retain the existing BCC rather than silently
+    // switching Trustpilot off. Production has OWN_DOMAIN_SMTP_*; this fallback
+    // keeps previews and partially configured deployments no worse than before.
+    const useTriggerEmail = triggerRequested && trustpilotMailer.configured;
+    if (triggerRequested && !trustpilotMailer.configured) {
+      console.error('[Order Shipped Notification] Rackspace AFS transport is not configured; using the Elastic BCC fallback.');
+    }
+    const wantsInvitation = shouldSendCustomer && useTrustpilot && !alreadyInvited && Boolean(trustpilotAddress);
+
+    // Only the BCC method puts the block in the customer's mail. In trigger
+    // mode the customer's receipt is plain, which is where it always belonged:
+    // a <script> tag is a strong spam signal and the customer cannot read it.
+    const customerHtmlWithTrustpilot = wantsInvitation && !useTriggerEmail
       ? customerHtml + trustpilotSnippet
       : customerHtml;
 
@@ -422,19 +454,11 @@ export async function POST(request) {
         : `¿Necesita ayuda? Contacte a soporte al ${links.whatsappDisplay} o responda a este correo.`
     ].join('\n');
 
-    // Customer-facing mail carries no internal BCC. Trustpilot stays: the AFS
-    // invitation is triggered by that BCC'd copy, not by an internal watcher.
-    // Guarded: this receipt carries the customer's name, shipping address,
-    // items and totals. An address that is not a Trustpilot invitation address
-    // has no business receiving a silent copy of it, so a mistyped setting
-    // sends no BCC at all rather than forwarding the lot to a stranger.
-    const configuredBcc = reviewSettings.trustpilotAfsBcc || FALLBACK_TRUSTPILOT_AFS_BCC;
-    const trustpilotBccAddress = isTrustpilotAfsAddress(configuredBcc) ? configuredBcc : '';
-    if (configuredBcc && !trustpilotBccAddress) {
-      console.error(`[Order Shipped Notification] Trustpilot BCC "${configuredBcc}" is not an @invite.trustpilot.com address; no invitation sent.`);
-    }
+    // Customer-facing mail carries no internal BCC. Trustpilot is here only in
+    // BCC mode; in trigger mode it gets its own message further down and this
+    // list is empty.
     const bccList = [
-      alreadyInvited || !useTrustpilot ? null : trustpilotBccAddress,
+      wantsInvitation && !useTriggerEmail ? trustpilotAddress : null,
     ].filter(Boolean);
 
     // The customer's receipt carries no accounting CC. This route is still the
@@ -444,9 +468,14 @@ export async function POST(request) {
     // accounting now gets its own message below rather than a header on this one.
     let customerInfo = null;
     let customerError = null;
-    // Set when the mail server refuses the Trustpilot address. The receipt
-    // still went to the customer; only the invitation did not happen.
-    let trustpilotBccRejected = false;
+    // Set when the invitation demonstrably did not go out. The receipt still
+    // went to the customer; only the invitation did not happen.
+    //
+    // Starts true when Trustpilot was chosen and there is no usable address,
+    // because that case sent nothing either. It used to leave this false, so a
+    // mistyped address stamped the customer as invited and barred them from
+    // Trustpilot for good on the strength of a message that never existed.
+    let trustpilotInviteFailed = useTrustpilot && !alreadyInvited && !trustpilotAddress;
     if (shouldSendCustomer) {
       if (!transporter) {
         customerError = 'Transactional SMTP is not configured';
@@ -478,11 +507,11 @@ export async function POST(request) {
           // from here - so nothing downstream should read this as "invited".
           if (bccList.length) {
             const accepted = (customerInfo.accepted || []).map((a) => String(a).toLowerCase());
-            if (!accepted.includes(trustpilotBccAddress.toLowerCase())) {
-              trustpilotBccRejected = true;
+            if (!accepted.includes(trustpilotAddress.toLowerCase())) {
+              trustpilotInviteFailed = true;
               const rejected = (customerInfo.rejected || []).map((a) => String(a).toLowerCase());
-              const how = rejected.includes(trustpilotBccAddress.toLowerCase()) ? 'REJECTED' : 'silently dropped';
-              console.error(`[Order Shipped Notification] Trustpilot BCC ${trustpilotBccAddress} was ${how} by ${smtp.host}; no invitation for ${order.order_number || order.id}. accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)} messageId=${customerInfo.messageId || ''}`);
+              const how = rejected.includes(trustpilotAddress.toLowerCase()) ? 'REJECTED' : 'silently dropped';
+              console.error(`[Order Shipped Notification] Trustpilot BCC ${trustpilotAddress} was ${how} by ${smtp.host}; no invitation for ${order.order_number || order.id}. accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)} messageId=${customerInfo.messageId || ''}`);
             } else {
               // The submission id, so a message can be traced with the provider
               // or handed to Trustpilot support. It is the only identifier that
@@ -497,6 +526,30 @@ export async function POST(request) {
           console.error('[Order Shipped Notification] Customer receipt failed to send:', custErr);
         }
       }
+    }
+
+    // The invitation, as its own message to Trustpilot.
+    //
+    // Only after the receipt actually went out: Trustpilot invites the customer
+    // days later, and asking someone to review a delivery whose receipt bounced
+    // is worse than not asking. Never throws — a failed invitation must not
+    // cost the customer their receipt or the accountant their copy — so a
+    // failure here only records itself and leaves the order unstamped, which is
+    // what lets the review cron pick it up again.
+    let trustpilotTrigger = null;
+    if (useTriggerEmail && wantsInvitation && customerInfo) {
+      trustpilotTrigger = await sendTrustpilotTrigger({
+        transporter: trustpilotMailer.transporter,
+        from: trustpilotMailer.from,
+        to: trustpilotAddress,
+        recipientEmail: order.customer_email,
+        recipientName: order.customer_name || 'Cliente',
+        referenceId: normalizedOrder.orderNumber || '',
+        locale: orderLang === 'en' ? 'en-US' : 'es-ES',
+        logPrefix: `[Order Shipped Notification] Trustpilot trigger ${order.order_number || order.id}:`,
+        transport: trustpilotMailer.source,
+      });
+      if (!trustpilotTrigger.sent) trustpilotInviteFailed = true;
     }
 
     // PBAG is a Rackspace mailbox, so its configured accounting/Rackspace SMTP
@@ -526,14 +579,14 @@ export async function POST(request) {
     // Only the Trustpilot half is stamped here. Stamping the Google half too
     // would close the very door the cron looks through, which is how the
     // Google/Facebook email came to never send at all.
-    // trustpilotBccRejected keeps the order unstamped: the invitation demonstrably
+    // trustpilotInviteFailed keeps the order unstamped: the invitation demonstrably
     // did not go out, so marking the customer as asked would retire them on the
     // strength of a message the mail server refused to carry.
     if (customerInfo && !alreadyInvited && supabase && !reviewDecision.retry
-      && !(useTrustpilot && trustpilotBccRejected)
+      && !(useTrustpilot && trustpilotInviteFailed)
       && (useTrustpilot || !reviewDecision.ask)) {
       // Two cases stamp the order here. A Trustpilot invitation has just gone
-      // out with the BCC above. And a decision NOT to ask is stamped too, so
+      // out, by trigger or by BCC. And a decision NOT to ask is stamped too, so
       // the cron does not pick the order up later and ask anyway — the column
       // is the only thing standing between "already handled" and "still owed".
       // The Google half is deliberately left unstamped for the cron.
@@ -594,6 +647,12 @@ export async function POST(request) {
           sent: Boolean(customerInfo),
           error: customerError,
         }) : null,
+        trustpilotTrigger ? orderEmailActivity({
+          kind: 'trustpilot-afs-trigger',
+          to: trustpilotAddress,
+          sent: Boolean(trustpilotTrigger.sent),
+          error: trustpilotTrigger.error,
+        }) : null,
         taxCopy?.skipped ? null : orderEmailActivity({
           kind: 'accounting-copy',
           to: taxCopy?.to,
@@ -623,8 +682,16 @@ export async function POST(request) {
             error: customerError,
           },
       accountingCopy: taxCopy,
-      trustpilotInvited: Boolean(customerInfo) && !alreadyInvited && useTrustpilot && !trustpilotBccRejected,
-      trustpilotBccRejected,
+      trustpilotInvited: Boolean(customerInfo) && !alreadyInvited && useTrustpilot && !trustpilotInviteFailed,
+      // Which method was used and what it did, so "was this customer actually
+      // invited?" is answerable from the response instead of inferred from the
+      // receipt having sent.
+      trustpilotMethod: useTriggerEmail ? 'rackspace-trigger' : 'elastic-bcc',
+      trustpilotTrigger,
+      trustpilotInviteFailed,
+      // Kept under its old name: it is what the previous behaviour reported and
+      // nothing should have to change to keep reading it.
+      trustpilotBccRejected: trustpilotInviteFailed,
       reviewPlatform,
       completionNotificationStatus: accountingOnly ? undefined : deliveryStatus,
       completionNotificationError: accountingOnly ? undefined : deliveryError,
