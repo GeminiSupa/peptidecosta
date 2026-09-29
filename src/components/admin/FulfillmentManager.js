@@ -52,7 +52,6 @@ export default function FulfillmentManager({
   orders = [],
   setSelectedOrderDetails,
   onRefreshOrders,
-  refreshingOrders = false,
   ordersRefreshError = '',
 }) {
   const queue = (orders || [])
@@ -60,17 +59,38 @@ export default function FulfillmentManager({
     .sort((a, b) => new Date(a.ready_to_prepare_at) - new Date(b.ready_to_prepare_at));
 
   const [lastRefreshed, setLastRefreshed] = useState(null);
+  // Only a refresh the user asked for is allowed to show a spinner.
+  //
+  // `refreshingOrders` from the parent goes true for BOTH kinds, so driving the
+  // button off it made the icon spin and the label flip to "Checking…" every
+  // thirty seconds on its own. On a screen someone stares at all day that is
+  // movement in the corner of their eye with nothing behind it. The automatic
+  // re-read stays completely silent; the only thing it changes is the "Updated"
+  // time, which is the point of it.
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   // Held in a ref so the interval below never has to be torn down and rebuilt
   // when the parent hands us a new function identity on every render — which it
   // does, because refreshOrders is redefined each time the admin page renders.
   const refreshRef = useRef(onRefreshOrders);
   refreshRef.current = onRefreshOrders;
 
-  const refreshNow = useCallback(async () => {
+  // The silent one, used by the timer.
+  const refreshQuietly = useCallback(async () => {
     if (!refreshRef.current) return;
     await refreshRef.current();
     setLastRefreshed(new Date());
   }, []);
+
+  // The one behind the button, which does show it is working.
+  const refreshNow = useCallback(async () => {
+    if (!refreshRef.current) return;
+    setManualRefreshing(true);
+    try {
+      await refreshQuietly();
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refreshQuietly]);
 
   useEffect(() => {
     if (!onRefreshOrders) return undefined;
@@ -81,13 +101,13 @@ export default function FulfillmentManager({
     // is current rather than up to thirty seconds stale.
     const tick = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
-      refreshNow();
+      refreshQuietly();
     };
 
     const timer = setInterval(tick, AUTO_REFRESH_MS);
 
     const onVisible = () => {
-      if (typeof document !== 'undefined' && !document.hidden) refreshNow();
+      if (typeof document !== 'undefined' && !document.hidden) refreshQuietly();
     };
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', onVisible);
@@ -100,7 +120,7 @@ export default function FulfillmentManager({
       }
     };
     // onRefreshOrders is read through the ref, so only its presence matters.
-  }, [Boolean(onRefreshOrders), refreshNow]);
+  }, [Boolean(onRefreshOrders), refreshQuietly]);
 
   return (
     <div className="admin-tab-panel">
@@ -119,23 +139,23 @@ export default function FulfillmentManager({
 
         {onRefreshOrders && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            {/* manualRefreshing, never refreshingOrders: the automatic re-read
+                must not announce itself. */}
             <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-              {refreshingOrders
-                ? 'Checking…'
-                : lastRefreshed
-                  ? `Updated ${lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · checks every 30s`
-                  : 'Checks for new orders every 30 seconds'}
+              {lastRefreshed
+                ? `Updated ${lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · checks every 30s`
+                : 'Checks for new orders every 30 seconds'}
             </span>
             <button
               type="button"
               className="admin-btn admin-btn-secondary"
               onClick={refreshNow}
-              disabled={refreshingOrders}
+              disabled={manualRefreshing}
               title="Check for new orders now, without reloading the page"
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <RefreshCw size={14} style={refreshingOrders ? { animation: 'spin 0.8s linear infinite' } : undefined} />
-              {refreshingOrders ? 'Refreshing…' : 'Refresh'}
+              <RefreshCw size={14} style={manualRefreshing ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+              {manualRefreshing ? 'Refreshing…' : 'Refresh'}
             </button>
           </div>
         )}

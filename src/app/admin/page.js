@@ -5706,7 +5706,6 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
               orders={orders}
               setSelectedOrderDetails={setSelectedOrderDetails}
               onRefreshOrders={refreshOrders}
-              refreshingOrders={refreshingOrders}
               ordersRefreshError={ordersRefreshError}
             />
           </ErrorBoundary>
