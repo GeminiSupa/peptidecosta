@@ -60,17 +60,35 @@ export async function GET(request) {
     affiliateNames = Object.fromEntries((data || []).map((row) => [row.id, row.name || row.email]));
   }
 
+  const orderIds = [...new Set((ownerRes.data || []).map((row) => row.order_id).filter(Boolean))];
+  let orderFacts = {};
+  if (orderIds.length > 0) {
+    const { data } = await supabase.from('orders').select('id, order_number, customer_name').in('id', orderIds);
+    orderFacts = Object.fromEntries((data || []).map((row) => [row.id, row]));
+  }
+
   const requests = [
-    ...(ownerRes.data || []).map((row) => ({
-      id: row.id,
-      kind: 'order_owner',
-      createdAt: row.created_at,
-      title: `Move order ${row.order_number || ''} to ${row.to_agent}`.trim(),
-      detail: row.from_agent
-        ? `Currently ${row.from_agent}. Reason given: ${row.reason}`
-        : `Reason given: ${row.reason}`,
-      askedBy: row.requested_by_name || row.requested_by_email || 'Someone',
-    })),
+    ...(ownerRes.data || []).map((row) => {
+      const order = orderFacts[row.order_id] || {};
+      const orderNumber = row.order_number || order.order_number || '';
+      const customerName = order.customer_name || '';
+      const askedBy = row.requested_by_name || row.requested_by_email || 'Someone';
+      return {
+        id: row.id,
+        kind: 'order_owner',
+        createdAt: row.created_at,
+        orderId: row.order_id,
+        orderNumber,
+        customerName,
+        fromAgent: row.from_agent || '',
+        toAgent: row.to_agent || '',
+        title: orderNumber
+          ? `Order #${orderNumber}${customerName ? ` · ${customerName}` : ''}`
+          : `An order${customerName ? ` for ${customerName}` : ''}`,
+        detail: `${askedBy} wants this sale moved from ${row.from_agent || 'Unassigned'} to ${row.to_agent}. Reason: ${row.reason}`,
+        askedBy,
+      };
+    }),
     ...(affiliateRes.data || []).map((row) => ({
       id: row.id,
       kind: 'affiliate_email',

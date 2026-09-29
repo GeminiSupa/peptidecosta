@@ -3,7 +3,7 @@ import { Database, Download, MessageCircle, Plus, RefreshCw, Trash2 } from 'luci
 import { getAdminVolumeDiscountPct, manualDiscountReplacesVolume, storedOrderVolumePct } from '@/lib/adminOrderTotals.mjs';
 import { CUSTOMER_HISTORY_SOURCE } from '@/lib/agentAttribution.mjs';
 import { commissionSourceLabel } from '@/lib/salesAgentAffiliate.mjs';
-import { formatCrDate } from '@/lib/crTime.mjs';
+import { formatCrDate, formatCrInstant } from '@/lib/crTime.mjs';
 import {
   ALL_ORDER_AGENTS,
   UNASSIGNED_ORDER_AGENT,
@@ -248,6 +248,8 @@ export default function OrdersManager({
   statusFilterRequest = null,
   isSuperadmin = false,
   onOrderUpdated,
+  ownerSaleRequests = [],
+  onReviewOwnerRequests,
 }) {
   // These four only ever drove this table. Holding them in the 7,900-line admin
   // page meant every keystroke re-rendered the whole dashboard; owning them here
@@ -322,6 +324,7 @@ export default function OrdersManager({
     setOrderStatusFilter(`group:${groupId}`);
     setOrdersCurrentPage(1);
   };
+  const ownerAskFor = (order) => ownerSaleRequests.find((row) => row.orderId === order.id);
   const formatItemsCount = (order) => {
     const items = Array.isArray(order.items) ? order.items : [];
     return `${items.length} ${items.length === 1 ? 'item' : 'items'}`;
@@ -499,6 +502,44 @@ export default function OrdersManager({
         </div>
       </div>
 
+      {isSuperadmin && ownerSaleRequests.length > 0 && (
+        <section
+          aria-label="Ownership requests"
+          style={{
+            margin: '0 0 14px', padding: '12px 14px', borderRadius: '10px',
+            background: 'rgba(251, 191, 36, 0.1)', border: '1px solid rgba(251, 191, 36, 0.45)',
+          }}
+        >
+          <strong style={{ display: 'block', color: '#fbbf24', marginBottom: 8 }}>
+            {ownerSaleRequests.length === 1
+              ? '1 ownership request is waiting'
+              : `${ownerSaleRequests.length} ownership requests are waiting`}
+          </strong>
+          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 8 }}>
+            {ownerSaleRequests.map((row) => (
+              <li key={row.id} style={{ color: '#e2e8f0', fontSize: '0.86rem', lineHeight: 1.45 }}>
+                <strong>Order #{row.orderNumber || 'unknown'}</strong>
+                {row.customerName ? ` · ${row.customerName}` : ''}
+                <div style={{ color: '#fbbf24', fontWeight: 800 }}>Asked {formatCrInstant(row.createdAt)}</div>
+                <div style={{ color: '#cbd5e1' }}>
+                  {row.askedBy} wants it moved from {row.fromAgent || 'Unassigned'} to {row.toAgent || 'someone'}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {onReviewOwnerRequests && (
+            <button
+              type="button"
+              className="admin-btn admin-btn-primary"
+              onClick={onReviewOwnerRequests}
+              style={{ marginTop: 10 }}
+            >
+              Review these requests
+            </button>
+          )}
+        </section>
+      )}
+
       {ordersRefreshError && (
         <div
           role="status"
@@ -582,6 +623,11 @@ export default function OrdersManager({
                     <span className="order-mobile-status">{group.label}</span>
                     {cardBadge && <span className="order-mobile-payment" style={{ color: cardBadge.color, background: cardBadge.bg }}>{cardBadge.label}</span>}
                     {order.sales_agent && <span className="order-mobile-agent">Owner: {order.sales_agent}</span>}
+                    {ownerAskFor(order) && (
+                      <span className="order-mobile-agent" style={{ color: '#fbbf24' }}>
+                        Ownership asked {formatCrInstant(ownerAskFor(order).createdAt)}
+                      </span>
+                    )}
                   </div>
                 </button>
                 <div className="order-mobile-control-grid">
@@ -891,6 +937,11 @@ export default function OrdersManager({
                           <span style={{ color: order.sales_agent ? '#a78bfa' : '#64748b', fontSize: '0.66rem', fontWeight: 800 }}>
                             {getOrderAgentSourceLabel(order)}
                           </span>
+                          {ownerAskFor(order) && (
+                            <span style={{ color: '#fbbf24', fontSize: '0.72rem', fontWeight: 800 }}>
+                              Ownership asked {formatCrInstant(ownerAskFor(order).createdAt)}
+                            </span>
+                          )}
                           {!isSuperadmin && (order.sales_agent || !isAwaitingPayment(order.status)) && (
                             <button
                               type="button"

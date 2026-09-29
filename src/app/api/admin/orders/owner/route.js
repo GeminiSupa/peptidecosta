@@ -12,6 +12,7 @@ import {
   sameOwner,
 } from '@/lib/orderOwnership.mjs';
 import { customerOwnerFor, loadTeamProfiles } from '@/lib/orderOwnershipServer';
+import { formatCrInstant } from '@/lib/crTime.mjs';
 
 /**
  * The one place an order's owner changes.
@@ -218,9 +219,9 @@ export async function POST(request) {
       if (superadmin) {
         await notify(supabase, {
           type: 'owner_change_request',
-          title: `Owner change request: ${order.order_number || 'order'}`,
-          body: `${actorOwner}: ${currentOwner || 'Unassigned'} → ${targetOwner}. ${reason}`.slice(0, 500),
-          link_tab: 'orders',
+          title: `Ownership request: #${order.order_number || 'order'}${order.customer_name ? ` · ${order.customer_name}` : ''}`,
+          body: `${actorOwner} asked ${formatCrInstant(new Date())} to move this sale from ${currentOwner || 'Unassigned'} to ${targetOwner}. ${reason}`.slice(0, 500),
+          link_tab: 'requests',
           link_ref: order.order_number || order.id,
           recipient_email: String(superadmin.email).trim().toLowerCase(),
         });
