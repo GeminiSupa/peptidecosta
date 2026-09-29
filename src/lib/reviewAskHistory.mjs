@@ -11,10 +11,22 @@
  */
 
 import { decideReviewAsk, normaliseCustomerKey } from './reviewAskPolicy.mjs';
+import { missingColumnFrom } from './optionalColumns.mjs';
 import { LIVE_SITE_URL } from './publicUrl.js';
 
 /**
  * Every previous ask for this customer.
+ *
+ * Released asks are skipped. A release means the invitation was never actually
+ * delivered — Trustpilot took the BCC and dropped it, being over its monthly
+ * allowance — so the row is a record of an attempt, not of the customer having
+ * been asked anything. Counting it would keep them locked out for good.
+ *
+ * `released_at` arrives via add-review-ask-release.sql. When the deploy lands
+ * before the SQL does, the filter is dropped and the history reads exactly as
+ * it did before. It must never fail the whole lookup instead: this function
+ * fails towards NOT asking, so a missing column would quietly stop every review
+ * request on the site rather than losing one filter.
  *
  * @returns {Promise<{rows: Array, ok: boolean}>} ok is false when the history
  *          could not be read at all, which callers must treat as "do not ask"
@@ -24,13 +36,21 @@ export async function loadReviewAskHistory(supabase, email) {
   const key = normaliseCustomerKey(email);
   if (!supabase || !key) return { rows: [], ok: false };
 
-  try {
-    const { data, error } = await supabase
+  const read = (skipReleased) => {
+    let query = supabase
       .from('review_asks')
       .select('platforms, clicked_platform, asked_at')
-      .eq('customer_email', key)
-      .order('asked_at', { ascending: false })
-      .limit(50);
+      .eq('customer_email', key);
+    if (skipReleased) query = query.is('released_at', null);
+    return query.order('asked_at', { ascending: false }).limit(50);
+  };
+
+  try {
+    let { data, error } = await read(true);
+
+    if (error && missingColumnFrom(error) === 'released_at') {
+      ({ data, error } = await read(false));
+    }
 
     if (error) {
       // The table arrives via add-review-asks.sql. Until it is run, nothing can

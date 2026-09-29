@@ -49,6 +49,18 @@ export const DEFAULT_REVIEW_SETTINGS = {
   googleReviewUrl: '',
   facebookReviewUrl: '',
   trustpilotReviewUrl: '',
+  // The Trustpilot AFS address the order-complete email is BCC'd to. This is
+  // what actually triggers a Trustpilot invitation, and it belongs here rather
+  // than only in TRUSTPILOT_AFS_BCC because that variable is marked sensitive
+  // in Vercel: it cannot be read back by anyone, including `vercel env pull`,
+  // so a wrong or out-of-date address is completely invisible. Trustpilot
+  // regenerates this address when the account changes, and nothing on our side
+  // would ever report that the BCCs had stopped arriving — which is exactly
+  // what happened between August and September 2026.
+  //
+  // Copy it from the Trustpilot dashboard: Home -> "This is your unique
+  // Trustpilot email address".
+  trustpilotAfsBcc: '',
   // The review email, per language. Blank means "use the built-in wording",
   // which is the sane default and what every send used before this existed.
   emailSubjectEs: '',
@@ -75,6 +87,20 @@ function boundedInt(value, { min, max, fallback }) {
   if (rounded < min) return min;
   if (max !== undefined && rounded > max) return max;
   return rounded;
+}
+
+/**
+ * A Trustpilot invitation address, or blank.
+ *
+ * Only ever an @invite.trustpilot.com address. Anything else pasted in here
+ * would be BCC'd a copy of every customer receipt — names, addresses and order
+ * totals — to whoever owns it, so a typo is not merely a setting that does not
+ * work. Blank falls back to the environment and then the built-in address.
+ */
+function trustpilotBcc(value) {
+  const raw = trimmed(value).toLowerCase();
+  if (!raw) return '';
+  return /^[^\s@]+@invite\.trustpilot\.com$/.test(raw) ? raw : '';
 }
 
 /** Only http(s) links are worth storing; anything else is a typo, not a link. */
@@ -154,6 +180,7 @@ export function normalizeReviewSettings(stored, env = process.env) {
     googleReviewUrl: safeUrl(pick(row.googleReviewUrl, env?.REVIEW_LINK_GOOGLE)),
     facebookReviewUrl: safeUrl(pick(row.facebookReviewUrl, env?.REVIEW_LINK_FACEBOOK)),
     trustpilotReviewUrl: safeUrl(pick(row.trustpilotReviewUrl, env?.REVIEW_LINK_TRUSTPILOT)),
+    trustpilotAfsBcc: trustpilotBcc(pick(row.trustpilotAfsBcc, env?.TRUSTPILOT_AFS_BCC)),
     emailSubjectEs: String(row.emailSubjectEs ?? '').trim(),
     emailBodyEs: emailBody(row.emailBodyEs),
     emailSubjectEn: String(row.emailSubjectEn ?? '').trim(),

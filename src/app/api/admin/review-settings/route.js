@@ -55,6 +55,18 @@ export async function GET(request) {
         google: effective.google,
         facebook: effective.facebook,
         trustpilot: effective.trustpilot,
+        // The address the order-complete email is ACTUALLY BCC'd to right now,
+        // resolved server-side. TRUSTPILOT_AFS_BCC is a sensitive variable in
+        // Vercel, so this is the only place it can be read back at all — and an
+        // address nobody can read is an address nobody can check against the
+        // Trustpilot dashboard, which is how invitations stopped arriving for
+        // two months without anything reporting a fault.
+        trustpilotBcc: settings.trustpilotAfsBcc
+          || process.env.TRUSTPILOT_AFS_BCC
+          || 'peptidescostarica.net+7777886f21@invite.trustpilot.com',
+        trustpilotBccSource: settings.trustpilotAfsBcc
+          ? 'panel'
+          : (process.env.TRUSTPILOT_AFS_BCC ? 'env' : 'default'),
       },
     });
   } catch (err) {

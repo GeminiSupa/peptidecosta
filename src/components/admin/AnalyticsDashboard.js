@@ -11,6 +11,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
 import DealPageExperimentCard from './DealPageExperimentCard';
+import ReviewRequestsChart from './ReviewRequestsChart';
 import { adminFetch } from '@/lib/adminApi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, BarChart, Bar } from 'recharts';
 import { FALLBACK_EXCHANGE_RATE } from '@/lib/pricing';
@@ -77,6 +78,7 @@ const ANALYTICS_SECTIONS = Object.freeze([
   { id: 'an-campaigns', label: 'Campaigns' },
   { id: 'an-revenue', label: 'Revenue' },
   { id: 'an-behaviour', label: 'Behaviour' },
+  { id: 'an-reviews', label: 'Reviews' },
   { id: 'an-abtests', label: 'A/B tests' },
   { id: 'an-products', label: 'Products' },
 ]);
@@ -4191,6 +4193,13 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
         )}
 
       </div>
+
+      {/* Review requests. Its own section rather than a line on a marketing
+          panel: review volume is the only warning anyone gets that the review
+          pipeline has stopped, and it stopped for twenty-two days in September
+          2026 without a single screen here showing it. */}
+      <div id="an-reviews" className="analytics-section-anchor" />
+      <ReviewRequestsChart defaultDays={30} />
 
       {/* A/B tests */}
       <div id="an-abtests" className="analytics-section-anchor" />

@@ -4,15 +4,25 @@ import { readFile } from 'node:fs/promises';
 import { decideForOrder, loadReviewAskHistory, recordReviewAsk, reviewClickUrl } from '../src/lib/reviewAskHistory.mjs';
 import { buildReviewRequestEmail } from '../src/lib/reviewRequestEmail.mjs';
 
-/** A Supabase stand-in: enough chaining for the two queries these helpers make. */
-function fakeDb({ selectResult, insertResult }) {
+/**
+ * A Supabase stand-in: enough chaining for the two queries these helpers make.
+ *
+ * `is` is here because the history query filters out released asks with
+ * `.is('released_at', null)`. `results` may be a list, consumed one call at a
+ * time, so a test can make the first attempt fail on the missing column and the
+ * retry succeed — which is what happens on a deploy that lands before
+ * add-review-ask-release.sql has been pasted in.
+ */
+function fakeDb({ selectResult, results, insertResult, onIs = () => {} }) {
+  const queue = results ? [...results] : null;
   return {
     from() {
       const chain = {
         select: () => chain,
         eq: () => chain,
+        is: (column, value) => { onIs(column, value); return chain; },
         order: () => chain,
-        limit: () => Promise.resolve(selectResult),
+        limit: () => Promise.resolve(queue ? (queue.shift() ?? { data: [], error: null }) : selectResult),
         insert: () => ({ select: () => ({ single: () => Promise.resolve(insertResult) }) }),
       };
       return chain;
@@ -32,6 +42,40 @@ test('a readable history produces a final decision', async () => {
   const d = await decideForOrder(db, { customer_email: 'ana@example.com' }, { firstChoice: 'google' });
   assert.equal(d.ask, true);
   assert.equal(d.retry, false);
+});
+
+test('released asks are filtered out of the history', async () => {
+  // A release means the invitation was never actually delivered, so the row
+  // must not count as the customer having been asked. The filter is applied in
+  // the query rather than after it, or the 50-row limit would fill with
+  // released rows and hide the real ones.
+  const seen = [];
+  const db = fakeDb({
+    selectResult: { data: [], error: null },
+    onIs: (column, value) => seen.push([column, value]),
+  });
+
+  const { ok } = await loadReviewAskHistory(db, 'ana@example.com');
+
+  assert.equal(ok, true);
+  assert.deepEqual(seen, [['released_at', null]]);
+});
+
+test('a missing released_at column drops the filter instead of stopping every ask', async () => {
+  // add-review-ask-release.sql is hand-run and can land days after the deploy.
+  // loadReviewAskHistory fails towards NOT asking, so a missing column that was
+  // allowed to fail the lookup would silently stop review requests site-wide.
+  const db = fakeDb({
+    results: [
+      { data: null, error: { code: '42703', message: 'column review_asks.released_at does not exist' } },
+      { data: [{ platforms: ['google'], clicked_platform: null, asked_at: '2026-09-01T00:00:00Z' }], error: null },
+    ],
+  });
+
+  const { ok, rows } = await loadReviewAskHistory(db, 'ana@example.com');
+
+  assert.equal(ok, true, 'must fall back, not report the history as unreadable');
+  assert.equal(rows.length, 1);
 });
 
 test('a customer with no email is never looked up', async () => {

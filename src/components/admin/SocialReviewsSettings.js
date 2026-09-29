@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { adminFetch } from '@/lib/adminApi';
 import SocialReviewResults from './SocialReviewResults';
 import ReviewEmailEditor from './ReviewEmailEditor';
+import ReviewRequestsChart from './ReviewRequestsChart';
+import TrustpilotConnectionCard from './TrustpilotConnectionCard';
+import TrustpilotRecoveryCard from './TrustpilotRecoveryCard';
 
 /**
  * The Social Reviews tab: how review requests are sent, editable without a
@@ -170,9 +173,19 @@ export default function SocialReviewsSettings() {
         </div>
       </div>
 
+      {/* Is anything getting through at all? That question comes before every
+          other one on this screen: a wrong Trustpilot address makes all the
+          numbers below look healthy while nothing arrives. */}
+      <TrustpilotConnectionCard settings={settings} onChange={set} effective={effectiveLinks} />
+
+      {/* Day by day, because the totals hid a three-week outage in plain sight. */}
+      <ReviewRequestsChart defaultDays={30} />
+
       {/* Results first: the settings below are worth changing only in response
           to what the numbers say. */}
       <SocialReviewResults />
+
+      <TrustpilotRecoveryCard />
 
       {/* ── When a request is sent ─────────────────────────────────────── */}
       <div style={card}>
