@@ -53,6 +53,16 @@ export default function FulfillmentManager({
   setSelectedOrderDetails,
   onRefreshOrders,
   ordersRefreshError = '',
+  // True while an order detail panel is open over this tab.
+  //
+  // refreshOrders replaces the whole orders list AND re-points the open detail
+  // panel at the freshly read row. Triggered by a button that is fine: someone
+  // asked for it. Triggered by a timer under someone who is halfway through
+  // typing a customer's address, it would pull the row out from under them
+  // every thirty seconds. The queue is a few seconds stale for as long as the
+  // panel is open, which costs nothing - they are looking at one order, not the
+  // list - and it resumes the moment they close it.
+  paused = false,
 }) {
   const queue = (orders || [])
     .filter(isInFulfillmentQueue)
@@ -92,14 +102,20 @@ export default function FulfillmentManager({
     }
   }, [refreshQuietly]);
 
+  // Read through a ref for the same reason as the callback: the timer is set up
+  // once, and must see the current value of `paused` without being rebuilt.
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+
   useEffect(() => {
     if (!onRefreshOrders) return undefined;
 
-    // Paused while the tab is in the background. A packer leaves this open all
-    // day behind other windows, and polling a screen nobody is looking at is
-    // just load. Coming back re-reads immediately, so what they see on return
-    // is current rather than up to thirty seconds stale.
+    // Also paused while the tab is in the background. A packer leaves this open
+    // all day behind other windows, and polling a screen nobody is looking at
+    // is just load. Coming back re-reads immediately, so what they see on
+    // return is current rather than up to thirty seconds stale.
     const tick = () => {
+      if (pausedRef.current) return;
       if (typeof document !== 'undefined' && document.hidden) return;
       refreshQuietly();
     };
@@ -107,6 +123,7 @@ export default function FulfillmentManager({
     const timer = setInterval(tick, AUTO_REFRESH_MS);
 
     const onVisible = () => {
+      if (pausedRef.current) return;
       if (typeof document !== 'undefined' && !document.hidden) refreshQuietly();
     };
     if (typeof document !== 'undefined') {
@@ -119,7 +136,8 @@ export default function FulfillmentManager({
         document.removeEventListener('visibilitychange', onVisible);
       }
     };
-    // onRefreshOrders is read through the ref, so only its presence matters.
+    // onRefreshOrders and paused are read through refs, so only the presence of
+    // a refresh function matters here.
   }, [Boolean(onRefreshOrders), refreshQuietly]);
 
   return (
@@ -142,9 +160,11 @@ export default function FulfillmentManager({
             {/* manualRefreshing, never refreshingOrders: the automatic re-read
                 must not announce itself. */}
             <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-              {lastRefreshed
-                ? `Updated ${lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · checks every 30s`
-                : 'Checks for new orders every 30 seconds'}
+              {paused
+                ? 'Paused while an order is open'
+                : lastRefreshed
+                  ? `Updated ${lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · checks every 30s`
+                  : 'Checks for new orders every 30 seconds'}
             </span>
             <button
               type="button"
