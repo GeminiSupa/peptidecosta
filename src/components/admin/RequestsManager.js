@@ -19,7 +19,7 @@ const KIND_LABEL = {
   affiliate_email: 'Affiliate email',
 };
 
-export default function RequestsManager({ onCountChange }) {
+export default function RequestsManager({ onCountChange, onOpenOrder }) {
   const [requests, setRequests] = useState([]);
   const [migrationsMissing, setMigrationsMissing] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,9 +34,10 @@ export default function RequestsManager({ onCountChange }) {
       const res = await adminFetch('/api/admin/requests');
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || 'Could not load requests.');
-      setRequests(body.requests || []);
+      const rows = body.requests || [];
+      setRequests(rows);
       setMigrationsMissing(body.migrationsMissing || []);
-      if (onCountChange) onCountChange((body.requests || []).length);
+      if (onCountChange) onCountChange(rows);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -100,16 +101,32 @@ export default function RequestsManager({ onCountChange }) {
           {requests.map((row) => (
             <div key={row.id} style={card}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'baseline' }}>
-                <strong style={{ fontSize: '0.95rem' }}>{row.title}</strong>
+                <strong style={{ fontSize: '1.05rem' }}>
+                  {row.kind === 'order_owner'
+                    ? `Order #${row.orderNumber || 'unknown'}${row.customerName ? ` · ${row.customerName}` : ''}`
+                    : row.title}
+                </strong>
                 <span style={pill}>{KIND_LABEL[row.kind] || row.kind}</span>
               </div>
-              <p style={{ margin: '8px 0 0', color: '#94a3b8', fontSize: '0.85rem', lineHeight: 1.6 }}>
+              {row.kind === 'order_owner' && (
+                <p style={{ margin: '8px 0 0', color: '#fbbf24', fontSize: '0.92rem', fontWeight: 800 }}>
+                  Asked {formatCrInstant(row.createdAt)}
+                </p>
+              )}
+              <p style={{ margin: '8px 0 0', color: '#cbd5e1', fontSize: '0.88rem', lineHeight: 1.6 }}>
                 {row.detail}
               </p>
-              <p style={{ margin: '6px 0 0', color: '#64748b', fontSize: '0.78rem' }}>
-                Asked by {row.askedBy} · {formatCrInstant(row.createdAt)}
-              </p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              {row.kind !== 'order_owner' && (
+                <p style={{ margin: '6px 0 0', color: '#94a3b8', fontSize: '0.82rem' }}>
+                  Asked by {row.askedBy} · {formatCrInstant(row.createdAt)}
+                </p>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {row.kind === 'order_owner' && row.orderId && (
+                  <button style={openOrder} disabled={!onOpenOrder} onClick={() => onOpenOrder(row.orderId)}>
+                    Open this order
+                  </button>
+                )}
                 <button style={approve} disabled={busyId === row.id} onClick={() => answer(row, 'approve')}>
                   {busyId === row.id ? 'Working…' : 'Approve'}
                 </button>
@@ -138,5 +155,6 @@ function Banner({ tone, children }) {
 
 const card = { background: '#0e1626', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 12, padding: 16 };
 const pill = { padding: '4px 10px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 700, color: '#38bdf8', background: 'rgba(56,189,248,0.12)', whiteSpace: 'nowrap' };
+const openOrder = { padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(147,197,253,0.5)', background: 'transparent', color: '#93c5fd', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' };
 const approve = { padding: '8px 16px', borderRadius: 8, border: 'none', background: '#4ade80', color: '#0e1626', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' };
 const reject = { padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(248,113,113,0.5)', background: 'transparent', color: '#f87171', cursor: 'pointer', fontSize: '0.85rem' };

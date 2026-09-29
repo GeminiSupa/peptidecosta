@@ -1625,11 +1625,39 @@ Core Rules:
   };
 
   // Anything waiting on a superadmin's yes — shown on the Requests tab badge.
+  // Owner-sale rows are kept too, so the Orders screen can name the order and
+  // the time without waiting for someone to open the Requests tab first.
   const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [ownerSaleRequests, setOwnerSaleRequests] = useState([]);
+  const rememberRequests = useCallback((rows) => {
+    const list = Array.isArray(rows) ? rows : [];
+    setPendingRequestCount(list.length);
+    setOwnerSaleRequests(list.filter((row) => row.kind === 'order_owner'));
+  }, []);
 
   // RBAC Profile State
   const [adminProfile, setAdminProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
+
+  useEffect(() => {
+    if (!adminProfile?.is_superadmin) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await adminFetch('/api/admin/requests');
+        const body = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok) rememberRequests(body.requests || []);
+      } catch {
+        // The badge keeps the last count. A failed refresh is not a reason to hide a request.
+      }
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [adminProfile?.is_superadmin, rememberRequests]);
 
   const fetchAdminProfile = async (userId, { showLoading = false, force = false } = {}) => {
     if (!isSupabaseConfigured || !supabase) return;
@@ -5661,6 +5689,8 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             currentAgentName={adminProfile?.name || ''}
             currentAgentEmail={adminProfile?.email || ''}
             statusFilterRequest={ordersStatusRequest}
+            ownerSaleRequests={ownerSaleRequests}
+            onReviewOwnerRequests={() => navigateToTab('requests')}
           />
           </ErrorBoundary>
         )}
@@ -7253,7 +7283,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
 
         {activeTab === 'requests' && (
           <div className="admin-orders-tab admin-tab-panel">
-            <RequestsManager onCountChange={setPendingRequestCount} />
+            <RequestsManager
+              onCountChange={rememberRequests}
+              onOpenOrder={(orderId) => {
+                const found = orders.find((order) => order.id === orderId);
+                if (found) setSelectedOrderDetails(found);
+              }}
+            />
           </div>
         )}
 
