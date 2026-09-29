@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Package, Clock, MapPin, User, RefreshCw, ChevronRight } from 'lucide-react';
+import { Package, Clock, MapPin, User, RefreshCw, ChevronRight, Info } from 'lucide-react';
 import { formatCrDate } from '@/lib/crTime.mjs';
 
 // How often the queue re-reads itself while the tab is open.
@@ -79,6 +79,8 @@ export default function FulfillmentManager({
   // re-read stays completely silent; the only thing it changes is the "Updated"
   // time, which is the point of it.
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  // Collapsed by default: it is for the first week on the tab, not every day.
+  const [showHelp, setShowHelp] = useState(false);
   // Held in a ref so the interval below never has to be torn down and rebuilt
   // when the parent hands us a new function identity on every render — which it
   // does, because refreshOrders is redefined each time the admin page renders.
@@ -149,7 +151,29 @@ export default function FulfillmentManager({
             <Package size={22} />
           </div>
           <div>
-            <h2 className="admin-section-title" style={{ margin: 0 }}>Fulfillment</h2>
+            <h2 className="admin-section-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Fulfillment
+              {/* Nothing on this screen says where its orders come from, how one
+                  leaves, or that either is reversible. Someone new to it has to
+                  be told by a colleague, which is how a queue grows a backlog
+                  nobody understands. It is collapsed, so it explains itself
+                  once and then stays out of the way. */}
+              <button
+                type="button"
+                onClick={() => setShowHelp((v) => !v)}
+                aria-expanded={showHelp}
+                title="How this tab works"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+                  background: showHelp ? 'rgba(251,191,36,0.18)' : 'rgba(148,163,184,0.12)',
+                  border: `1px solid ${showHelp ? 'rgba(251,191,36,0.45)' : 'rgba(255,255,255,0.12)'}`,
+                  color: showHelp ? '#fbbf24' : '#94a3b8', padding: 0,
+                }}
+              >
+                <Info size={13} />
+              </button>
+            </h2>
             <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>
               {queue.length} order{queue.length === 1 ? '' : 's'} handed off by sales, waiting to be packed
             </p>
@@ -181,6 +205,54 @@ export default function FulfillmentManager({
           </div>
         )}
       </div>
+
+      {showHelp && (
+        <div style={{ background: 'rgba(251,191,36,0.05)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, marginBottom: 10 }}>
+            <strong style={{ color: '#fbbf24', fontSize: '0.92rem' }}>How this tab works</strong>
+            <button
+              type="button"
+              onClick={() => setShowHelp(false)}
+              style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.78rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+            >
+              Hide
+            </button>
+          </div>
+
+          <ol style={{ margin: 0, paddingLeft: 18, color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.75 }}>
+            <li>
+              <strong style={{ color: '#e2e8f0' }}>Getting an order here.</strong> In the{' '}
+              <strong style={{ color: '#e2e8f0' }}>Orders</strong> tab, find an order that is{' '}
+              <strong style={{ color: '#e2e8f0' }}>Paid</strong> or <strong style={{ color: '#e2e8f0' }}>Processing</strong>,
+              and click the yellow <strong style={{ color: '#fbbf24' }}>📦 Ready to prepare</strong> button on the right
+              of its row. It is a button, not a status — you will not find it in the status dropdown.
+            </li>
+            <li>
+              <strong style={{ color: '#e2e8f0' }}>Packing it.</strong> Click{' '}
+              <strong style={{ color: '#e2e8f0' }}>Open order</strong> here. That opens the order — it does not
+              ship anything by itself. Inside, add the <strong style={{ color: '#e2e8f0' }}>tracking number</strong>{' '}
+              and set the status to <strong style={{ color: '#e2e8f0' }}>Order Complete</strong>. That is what emails
+              the customer to say it is on the way.
+            </li>
+            <li>
+              <strong style={{ color: '#e2e8f0' }}>It disappears from here</strong> as soon as the order is{' '}
+              <strong style={{ color: '#e2e8f0' }}>Order Complete</strong> — or Cancelled, Declined or Refunded.
+              Nothing else removes it, so anything sitting here is genuinely still waiting to be packed.
+            </li>
+            <li>
+              <strong style={{ color: '#e2e8f0' }}>Sent here by mistake?</strong> Click{' '}
+              <strong style={{ color: '#e2e8f0' }}>Send back to Orders</strong> on the order below, or click the
+              yellow <strong style={{ color: '#fbbf24' }}>📦 Ready</strong> tag on its row in the Orders tab. It
+              asks you to confirm, and you can hand it off again any time.
+            </li>
+          </ol>
+
+          <p style={{ margin: '12px 0 0', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.6 }}>
+            This list updates itself every 30 seconds — you never need to reload the page. It holds still while
+            you have an order open, so nothing you are typing gets wiped.
+          </p>
+        </div>
+      )}
 
       {ordersRefreshError && (
         <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, color: '#fecaca', fontSize: '0.85rem' }}>
