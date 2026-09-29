@@ -465,13 +465,29 @@ export async function POST(request) {
           // Per-recipient, straight from the SMTP conversation. Until now the
           // only record of an invitation was that the receipt sent at all, so a
           // BCC the server refused still stamped the customer as invited and
-          // locked them out of Trustpilot for good. If Trustpilot's address was
-          // rejected, say so and leave the order unstamped to be retried.
+          // locked them out of Trustpilot for good.
+          //
+          // The test must be "was it ACCEPTED", not "was it absent from
+          // rejected". A recipient the server silently dropped appears in
+          // neither list, and reading that as success is how this whole problem
+          // stayed invisible: every weak signal we had said "sent".
+          //
+          // Even this only proves our mail server took the address. Whether
+          // Elastic then delivered it to Trustpilot, and whether Trustpilot
+          // turned it into an invitation, are two further steps we cannot see
+          // from here - so nothing downstream should read this as "invited".
           if (bccList.length) {
-            const rejected = (customerInfo.rejected || []).map((a) => String(a).toLowerCase());
-            if (rejected.includes(trustpilotBccAddress.toLowerCase())) {
+            const accepted = (customerInfo.accepted || []).map((a) => String(a).toLowerCase());
+            if (!accepted.includes(trustpilotBccAddress.toLowerCase())) {
               trustpilotBccRejected = true;
-              console.error(`[Order Shipped Notification] Trustpilot BCC ${trustpilotBccAddress} was REJECTED by ${smtp.host}; no invitation will be sent for ${order.order_number || order.id}.`);
+              const rejected = (customerInfo.rejected || []).map((a) => String(a).toLowerCase());
+              const how = rejected.includes(trustpilotBccAddress.toLowerCase()) ? 'REJECTED' : 'silently dropped';
+              console.error(`[Order Shipped Notification] Trustpilot BCC ${trustpilotBccAddress} was ${how} by ${smtp.host}; no invitation for ${order.order_number || order.id}. accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)} messageId=${customerInfo.messageId || ''}`);
+            } else {
+              // The submission id, so a message can be traced with the provider
+              // or handed to Trustpilot support. It is the only identifier that
+              // exists on both sides of the handoff.
+              console.log(`[Order Shipped Notification] Trustpilot BCC accepted for ${order.order_number || order.id}; messageId=${customerInfo.messageId || ''} smtpResponse=${customerInfo.response || ''}`);
             }
           }
         } catch (custErr) {
