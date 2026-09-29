@@ -1,8 +1,16 @@
 "use client";
 
-import React from 'react';
-import { Package, Clock, MapPin, Phone, User } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Package, Clock, MapPin, Phone, User, RefreshCw } from 'lucide-react';
 import { formatCrDate } from '@/lib/crTime.mjs';
+
+// How often the queue re-reads itself while the tab is open.
+//
+// This screen is watched, not visited: whoever is packing leaves it up and
+// works from it, so an order handed over by sales has to appear on its own.
+// Thirty seconds is fast enough that nobody sits waiting and slow enough that
+// a full day on the tab is a few hundred queries, not a few thousand.
+const AUTO_REFRESH_MS = 30000;
 
 // Orders leave this queue the same way they leave "packing" in real life:
 // once they are marked Order Complete (with a tracking number), which is the
@@ -40,10 +48,59 @@ function orderTotalLabel(order) {
     : `₡${Number(order.total_crc || 0).toLocaleString('es-CR')}`;
 }
 
-export default function FulfillmentManager({ orders = [], setSelectedOrderDetails }) {
+export default function FulfillmentManager({
+  orders = [],
+  setSelectedOrderDetails,
+  onRefreshOrders,
+  refreshingOrders = false,
+  ordersRefreshError = '',
+}) {
   const queue = (orders || [])
     .filter(isInFulfillmentQueue)
     .sort((a, b) => new Date(a.ready_to_prepare_at) - new Date(b.ready_to_prepare_at));
+
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  // Held in a ref so the interval below never has to be torn down and rebuilt
+  // when the parent hands us a new function identity on every render — which it
+  // does, because refreshOrders is redefined each time the admin page renders.
+  const refreshRef = useRef(onRefreshOrders);
+  refreshRef.current = onRefreshOrders;
+
+  const refreshNow = useCallback(async () => {
+    if (!refreshRef.current) return;
+    await refreshRef.current();
+    setLastRefreshed(new Date());
+  }, []);
+
+  useEffect(() => {
+    if (!onRefreshOrders) return undefined;
+
+    // Paused while the tab is in the background. A packer leaves this open all
+    // day behind other windows, and polling a screen nobody is looking at is
+    // just load. Coming back re-reads immediately, so what they see on return
+    // is current rather than up to thirty seconds stale.
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      refreshNow();
+    };
+
+    const timer = setInterval(tick, AUTO_REFRESH_MS);
+
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && !document.hidden) refreshNow();
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisible);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible);
+      }
+    };
+    // onRefreshOrders is read through the ref, so only its presence matters.
+  }, [Boolean(onRefreshOrders), refreshNow]);
 
   return (
     <div className="admin-tab-panel">
@@ -59,7 +116,36 @@ export default function FulfillmentManager({ orders = [], setSelectedOrderDetail
             </p>
           </div>
         </div>
+
+        {onRefreshOrders && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              {refreshingOrders
+                ? 'Checking…'
+                : lastRefreshed
+                  ? `Updated ${lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · checks every 30s`
+                  : 'Checks for new orders every 30 seconds'}
+            </span>
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={refreshNow}
+              disabled={refreshingOrders}
+              title="Check for new orders now, without reloading the page"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <RefreshCw size={14} style={refreshingOrders ? { animation: 'spin 0.8s linear infinite' } : undefined} />
+              {refreshingOrders ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+        )}
       </div>
+
+      {ordersRefreshError && (
+        <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 10, padding: '10px 14px', marginBottom: 12, color: '#fecaca', fontSize: '0.85rem' }}>
+          {ordersRefreshError}
+        </div>
+      )}
 
       {queue.length === 0 ? (
         <div className="admin-empty-state" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '16px', padding: '60px 20px', border: '1px dashed rgba(255,255,255,0.1)' }}>

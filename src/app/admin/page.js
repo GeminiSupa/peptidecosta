@@ -5668,7 +5668,17 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
         {/* TAB 2b: FULFILLMENT QUEUE */}
         {activeTab === 'fulfillment' && (
           <ErrorBoundary>
-            <FulfillmentManager orders={orders} setSelectedOrderDetails={setSelectedOrderDetails} />
+            {/* The same orders-only refetch the Orders tab uses. This screen is
+                watched rather than visited — whoever is packing works from it —
+                so it also polls on its own and a colleague's hand-off appears
+                without anyone reloading the page. */}
+            <FulfillmentManager
+              orders={orders}
+              setSelectedOrderDetails={setSelectedOrderDetails}
+              onRefreshOrders={refreshOrders}
+              refreshingOrders={refreshingOrders}
+              ordersRefreshError={ordersRefreshError}
+            />
           </ErrorBoundary>
         )}
 
