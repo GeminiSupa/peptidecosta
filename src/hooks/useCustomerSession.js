@@ -90,6 +90,13 @@ export function useStorefrontLang() {
     } catch {
       // Private browsing with storage disabled — the in-memory choice still holds.
     }
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set('lang', resolved);
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      // The in-memory choice still holds for this page.
+    }
   }, []);
 
   return [lang, changeLang];

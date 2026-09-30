@@ -9,8 +9,12 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
+import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
 import ComingSoon from '../ComingSoon';
 import '../account.css';
+
+const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
+const showTurnstile = Boolean(turnstileSiteKey) && !isDummyTurnstileKey(turnstileSiteKey);
 
 const RESEND_SECONDS = 60;
 
@@ -25,10 +29,12 @@ function LoginForm() {
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [verifyType, setVerifyType] = useState('magiclink');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [testLoginEnabled, setTestLoginEnabled] = useState(false);
   const codeInputRef = useRef(null);
 
   // Where to land after signing in. Only same-site paths are honoured, so a
@@ -52,6 +58,68 @@ function LoginForm() {
     if (step === 'code') codeInputRef.current?.focus();
   }, [step]);
 
+  useEffect(() => {
+    let active = true;
+    fetch('/api/account/test-login')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.enabled) setTestLoginEnabled(true);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const signInAsTestAccount = async () => {
+    setError('');
+    setBusy(true);
+
+    const supabase = getCustomerSupabase();
+    if (!supabase) {
+      setError(isEn ? 'Sign-in is unavailable.' : 'El acceso no está disponible.');
+      setBusy(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/account/test-login', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.access_token || !data?.refresh_token) {
+        setError(data?.error || (isEn ? 'The test account could not be opened.' : 'No se pudo abrir la cuenta de prueba.'));
+        return;
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+      if (sessionError) {
+        setError(isEn ? 'The test account could not be opened.' : 'No se pudo abrir la cuenta de prueba.');
+        return;
+      }
+
+      try {
+        await fetch('/api/account/claim-orders', {
+          method: 'POST',
+          headers: {
+          Authorization: `Bearer ${data.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang }),
+        });
+      } catch {
+        // Non-fatal, same as a normal sign-in.
+      }
+
+      router.replace(next);
+    } catch {
+      setError(isEn
+        ? 'Connection problem. Please try again.'
+        : 'Problema de conexión. Inténtelo de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const requestCode = async (event) => {
     event?.preventDefault();
     setError('');
@@ -66,11 +134,13 @@ function LoginForm() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data?.error || (isEn ? 'Could not send the code.' : 'No se pudo enviar el código.'));
+        const serverError = isEn ? data?.errorEn : data?.errorEs;
+        setError(serverError || data?.error || (isEn ? 'Could not send the code.' : 'No se pudo enviar el código.'));
         return;
       }
 
       setStep('code');
+      setVerifyType(data?.verifyType === 'signup' ? 'signup' : 'magiclink');
       setCooldown(RESEND_SECONDS);
     } catch {
       setError(isEn
@@ -97,7 +167,7 @@ function LoginForm() {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email: email.trim().toLowerCase(),
         token: code.trim(),
-        type: 'email',
+        type: verifyType === 'signup' ? 'signup' : 'magiclink',
       });
 
       if (verifyError || !data?.session) {
@@ -114,7 +184,11 @@ function LoginForm() {
       try {
         await fetch('/api/account/claim-orders', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${data.session.access_token}` },
+          headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang }),
         });
       } catch {
         // Non-fatal by design.
@@ -159,11 +233,11 @@ function LoginForm() {
 
         {step === 'email' ? (
           <>
-            <p className="account-auth-lead">
-              {isEn
-                ? 'Enter your email and we will send you a six-digit sign-in code. No password needed.'
-                : 'Ingrese su correo y le enviaremos un código de seis dígitos para entrar. No necesita contraseña.'}
-            </p>
+              <p className="account-auth-lead">
+                {isEn
+                  ? 'Enter your email and we will send you a sign-in code. No password needed.'
+                  : 'Ingrese su correo y le enviaremos un código para entrar. No necesita contraseña.'}
+              </p>
 
             <form onSubmit={requestCode}>
               <label htmlFor="account-email">
@@ -182,15 +256,17 @@ function LoginForm() {
 
               {error ? <p className="account-auth-error">{error}</p> : null}
 
-              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-                <Turnstile
-                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                  onSuccess={(token) => setTurnstileToken(token)}
-                  options={{ theme: 'light' }}
-                />
-              </div>
+              {showTurnstile ? (
+                <div className="account-turnstile">
+                  <Turnstile
+                    siteKey={turnstileSiteKey}
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    options={{ theme: 'light', appearance: 'interaction-only' }}
+                  />
+                </div>
+              ) : null}
 
-              <button type="submit" className="account-btn-primary" disabled={busy || !email || !turnstileToken}>
+              <button type="submit" className="account-btn-primary" disabled={busy || !email || (showTurnstile && !turnstileToken)}>
                 {busy
                   ? (isEn ? 'Sending…' : 'Enviando…')
                   : (isEn ? 'Send me a code' : 'Enviarme un código')}
@@ -201,13 +277,13 @@ function LoginForm() {
           <>
             <p className="account-auth-lead">
               {isEn
-                ? <>We sent a six-digit code to <strong>{email}</strong>. It expires in a few minutes.</>
-                : <>Enviamos un código de seis dígitos a <strong>{email}</strong>. Vence en unos minutos.</>}
+                ? <>We sent a code to <strong>{email}</strong>. It expires in a few minutes.</>
+                : <>Enviamos un código a <strong>{email}</strong>. Vence en unos minutos.</>}
             </p>
 
             <form onSubmit={verifyCode}>
               <label htmlFor="account-code">
-                {isEn ? 'Six-digit code' : 'Código de seis dígitos'}
+                {isEn ? 'Code from the email' : 'Código del correo'}
               </label>
               <input
                 id="account-code"
@@ -216,12 +292,12 @@ function LoginForm() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={10}
                 required
                 value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))}
                 className="account-code-input"
-                placeholder="000000"
+                placeholder="00000000"
               />
 
               {error ? <p className="account-auth-error">{error}</p> : null}
@@ -258,6 +334,27 @@ function LoginForm() {
             </div>
           </>
         )}
+
+        {testLoginEnabled ? (
+          <div style={{ marginTop: 16 }}>
+            <button
+              type="button"
+              className="account-btn-secondary"
+              style={{ width: '100%' }}
+              disabled={busy}
+              onClick={signInAsTestAccount}
+            >
+              {busy
+                ? (isEn ? 'Opening…' : 'Abriendo…')
+                : (isEn ? 'Sign in to the test account' : 'Entrar a la cuenta de prueba')}
+            </button>
+            <p className="account-muted" style={{ marginTop: 8, textAlign: 'center' }}>
+              {isEn
+                ? 'No email code. This button is only here while the test switch is on.'
+                : 'Sin código de correo. Este botón solo aparece mientras el interruptor de prueba está activo.'}
+            </p>
+          </div>
+        ) : null}
 
         <p className="account-auth-foot">
           <Link href={`/catalog?lang=${lang}`}>

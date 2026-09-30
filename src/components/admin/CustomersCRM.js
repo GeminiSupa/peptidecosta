@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import ExportModal from './ExportModal';
+import CustomerAccountsPanel from './CustomerAccountsPanel';
 import { formatCrInstant } from '@/lib/crTime.mjs';
 import { adminFetch } from '@/lib/adminApi';
 import { calculateCustomerReorderStats } from '@/lib/reorderTracking.mjs';
@@ -582,7 +583,7 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
   };
 
   const handleDeleteCustomer = async (cust) => {
-    if (!window.confirm(`Are you absolutely sure you want to permanently delete ${cust.name}? This will remove all their orders, carts, and lead history and cannot be undone.`)) {
+    if (!window.confirm(`Delete ${cust.name}? Their orders, carts and leads go to the Bin. If they have a login, that account is deleted and cannot be restored.`)) {
       return;
     }
     
@@ -1420,6 +1421,8 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
           </div>
         </div>
       </div>
+
+      <CustomerAccountsPanel />
 
       <div className="crm-header">
         <div className="crm-title">

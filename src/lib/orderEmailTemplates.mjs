@@ -478,6 +478,11 @@ export const buildCustomerHtml = (order, paymentLabel, totalPrimary, totalUsd, t
         </div>
         ` : ''}
 
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:20px;text-align:center;max-width:500px;margin:0 auto 24px;">
+          <p style="margin:0 0 14px;color:#0f172a;font-size:15px;font-weight:700;">${isEn ? 'This order is saved in your account.' : 'Este pedido queda guardado en su cuenta.'}</p>
+          <a href="https://catalog.peptidescostarica.net/account?lang=${isEn ? 'en' : 'es'}" style="display:inline-block;background-color:#BF4F0B;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:12px;font-weight:800;font-size:15px;">${isEn ? 'View your order' : 'Ver su pedido'}</a>
+        </div>
+
         <!-- Support CTA Block -->
         <div style="background:#f0fdf4;border:1px dashed #059669;border-radius:16px;padding:24px;text-align:center;max-width:500px;margin:0 auto;">
           <h4 style="margin:0 0 8px;color:#047857;font-size:16px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;">🔬 ${strings.supportTitle}</h4>

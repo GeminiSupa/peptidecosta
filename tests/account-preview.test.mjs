@@ -3,16 +3,11 @@ import assert from 'node:assert/strict';
 
 import { isAccountsLive, resolveAccountAccess } from '../src/lib/accountPreview.mjs';
 
-test('accounts stay gated unless the flag is exactly "true"', () => {
-  assert.equal(isAccountsLive('true'), true);
-  assert.equal(isAccountsLive(' TRUE '), true);
-  // Anything else keeps the feature hidden. An unset or fat-fingered env var
-  // must never be the thing that launches it.
-  assert.equal(isAccountsLive('1'), false);
-  assert.equal(isAccountsLive('yes'), false);
+test('accounts stay on coming soon while the screens are unfinished', () => {
+  assert.equal(isAccountsLive('true'), false);
+  assert.equal(isAccountsLive(' TRUE '), false);
   assert.equal(isAccountsLive(''), false);
   assert.equal(isAccountsLive(undefined), false);
-  assert.equal(isAccountsLive(null), false);
 });
 
 test('a customer with no preview sees coming soon', () => {

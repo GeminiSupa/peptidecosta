@@ -9,6 +9,7 @@ import {
   orderDeliveryState,
   orderItems,
   orderPaymentState,
+  orderTimeline,
   paymentLabel,
 } from '../src/lib/customerOrderView.mjs';
 
@@ -122,4 +123,52 @@ test('the count holds up on carts that earn no gift', () => {
     ]),
     1,
   );
+});
+
+function states(order, lang) {
+  return orderTimeline(order, lang).steps.map((step) => `${step.id}:${step.state}`);
+}
+
+test('a paid order that has not shipped is packing', () => {
+  assert.deepEqual(states({ status: 'Paid' }), [
+    'placed:done',
+    'paid:done',
+    'preparing:current',
+    'shipped:upcoming',
+    'delivered:upcoming',
+  ]);
+});
+
+test('a tracking number moves the timeline to shipped', () => {
+  assert.deepEqual(states({ status: 'Paid', tracking_number: 'CR123' }), [
+    'placed:done',
+    'paid:done',
+    'preparing:done',
+    'shipped:current',
+    'delivered:upcoming',
+  ]);
+});
+
+test('a completed order marks every step done', () => {
+  const timeline = orderTimeline({ status: 'Order Complete' }, 'en');
+  assert.equal(timeline.stopped, false);
+  assert.deepEqual(timeline.steps.map((step) => step.state), ['done', 'done', 'done', 'done', 'done']);
+  assert.equal(timeline.steps[0].label, 'Order placed');
+});
+
+test('a payment that has not cleared stops on that step', () => {
+  assert.deepEqual(states({ status: 'Pending - Card 3DS' }, 'en'), [
+    'placed:done',
+    'paid:current',
+    'preparing:upcoming',
+    'shipped:upcoming',
+    'delivered:upcoming',
+  ]);
+});
+
+test('a failed or cancelled order does not look like it is still traveling', () => {
+  assert.deepEqual(states({ status: 'Declined' }), ['placed:done', 'failed:stopped']);
+  assert.deepEqual(states({ status: 'Cancelled', tracking_number: 'CR999' }), ['placed:done', 'cancelled:stopped']);
+  assert.deepEqual(states({ status: 'Refunded' }, 'es'), ['placed:done', 'refunded:stopped']);
+  assert.equal(orderTimeline({ status: 'Refunded' }, 'es').steps[1].label, 'Reembolsado');
 });

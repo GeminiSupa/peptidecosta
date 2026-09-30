@@ -1,9 +1,8 @@
 // Launch gate for the customer account area.
 //
-// The whole feature ships, but customers see "coming soon" until it is turned
-// on deliberately. Gating in the UI rather than by removing routes means the
-// switch is a single env var, and nothing has to be rebuilt or re-reviewed on
-// launch day.
+// The whole feature ships, but customers see "coming soon" until the screens
+// are finished. The launch flag is ignored for now. A preview link still
+// opens the real pages.
 //
 // This gate decides what to RENDER. It is not a security boundary and must
 // never be treated as one — what a signed-in customer can actually read is
@@ -20,12 +19,12 @@ export const PREVIEW_PARAM = 'account_preview';
 /**
  * Has the feature been launched for everyone?
  *
- * Reads NEXT_PUBLIC_ACCOUNTS_LIVE. Next inlines NEXT_PUBLIC_* at build time, so
- * flipping this needs a redeploy — which is the point: launching is a decision,
- * not a toggle someone can trip by accident.
+ * Held closed while the account screens are unfinished. Customers see coming
+ * soon even if NEXT_PUBLIC_ACCOUNTS_LIVE is set. A preview link still opens
+ * the real pages. Restore the flag check when the account is ready to open.
  */
-export function isAccountsLive(value) {
-  return String(value ?? '').trim().toLowerCase() === 'true';
+export function isAccountsLive() {
+  return false;
 }
 
 /**

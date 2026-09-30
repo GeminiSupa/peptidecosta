@@ -4,83 +4,61 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
-  badgeTone,
-  deliveryLabel,
   formatOrderDate,
   formatOrderTotal,
-  orderDeliveryState,
   orderItems,
-  orderPaymentState,
-  paymentLabel,
   billableItemCount,
 } from '@/lib/customerOrderView.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
-import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
+import { isGiftLine } from '@/lib/bacWater.mjs';
+import ProductFace from './ProductFace';
+import OrderTimeline from './OrderTimeline';
 
-/** One row in the order list: number, date, status, total, and a reorder action. */
+/** One past order, shown like a product card with a buy-again button. */
 export default function OrderCard({ order, lang = 'es' }) {
   const router = useRouter();
   const isEn = lang === 'en';
   const items = orderItems(order, lang);
   const itemCount = billableItemCount(items);
+  const buyAgain = items.filter((item) => !isGiftLine(item) && item?.product);
 
   const reorder = () => {
     if (stashReorder({ ...order, items })) router.push(`/catalog?reorder=1&lang=${lang}`);
   };
 
   return (
-    <div className="account-order">
-      <div>
-        <Link href={`/account/orders/${encodeURIComponent(order.order_number)}`} className="account-order-number">
-          {order.order_number}
-        </Link>
-        <div className="account-order-meta">
-          {formatOrderDate(order.created_at, lang)}
-          {' · '}
-          {itemCount}
-          {' '}
-          {itemCount === 1
-            ? (isEn ? 'item' : 'artículo')
-            : (isEn ? 'items' : 'artículos')}
-        </div>
-        <div className="account-badges">
-          <span className={`account-badge ${badgeTone(orderPaymentState(order))}`}>
-            {paymentLabel(order, lang)}
-          </span>
-          <span className={`account-badge ${badgeTone(orderDeliveryState(order))}`}>
-            {deliveryLabel(order, lang)}
-          </span>
-        </div>
-        {hasTrackingNumber(order.tracking_number) ? (
+    <article className="shop-order">
+      <Link href={`/account/orders/${encodeURIComponent(order.order_number)}`} className="shop-order-top">
+        <div>
+          <div className="account-order-number">{order.order_number}</div>
           <div className="account-order-meta">
-            {isEn ? 'Tracking: ' : 'Seguimiento: '}
-            <span className="account-tracking">{order.tracking_number}</span>
-            {' '}
-            <a
-              className="account-track-link"
-              href={CORREOS_TRACKING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {isEn ? 'Track on Correos ↗' : 'Rastrear en Correos ↗'}
-            </a>
+            {formatOrderDate(order.created_at, lang)}
+            {' · '}
+            {formatOrderTotal(order)}
           </div>
-        ) : null}
-      </div>
+        </div>
+      </Link>
+      <OrderTimeline order={order} lang={lang} compact />
 
-      <div>
-        <div className="account-order-total">{formatOrderTotal(order)}</div>
-        {itemCount > 0 ? (
-          <button
-            type="button"
-            className="account-btn-secondary"
-            style={{ marginTop: 8 }}
-            onClick={reorder}
-          >
-            {isEn ? 'Order again' : 'Pedir de nuevo'}
-          </button>
-        ) : null}
-      </div>
-    </div>
+      {buyAgain.length > 0 ? (
+        <ul className="shop-lines">
+          {buyAgain.slice(0, 4).map((item, index) => (
+            <li key={`${item.product}-${index}`}>
+              <ProductFace name={item.product} />
+              <span className="shop-buy-copy">
+                <strong>{item.product}</strong>
+                <span className="account-muted">× {item.qty}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {itemCount > 0 ? (
+        <button type="button" className="account-btn-primary" onClick={reorder}>
+          {isEn ? 'Buy again' : 'Comprar de nuevo'}
+        </button>
+      ) : null}
+    </article>
   );
 }
