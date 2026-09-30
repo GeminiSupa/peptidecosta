@@ -86,7 +86,35 @@ export async function DELETE(request) {
 
     const total = Object.values(removed).reduce((sum, count) => sum + count, 0);
 
-    if (problems.length > 0 && total === 0) {
+    let accountRemoved = false;
+    if (email) {
+      const { data: profile } = await supabase
+        .from('customer_profiles')
+        .select('user_id, email')
+        .ilike('email', email)
+        .maybeSingle();
+
+      if (profile?.user_id) {
+        const { data: staff } = await supabase
+          .from('admin_profiles')
+          .select('user_id')
+          .eq('user_id', profile.user_id)
+          .maybeSingle();
+
+        if (staff) {
+          problems.push('account: that email is a staff login, so the account was left in place');
+        } else {
+          const { error: deleteError } = await supabase.auth.admin.deleteUser(profile.user_id);
+          if (deleteError) {
+            problems.push(`account: ${deleteError.message}`);
+          } else {
+            accountRemoved = true;
+          }
+        }
+      }
+    }
+
+    if (problems.length > 0 && total === 0 && !accountRemoved) {
       return NextResponse.json(
         { error: `Nothing was deleted. ${problems.join('; ')}` },
         { status: 500 },
@@ -96,10 +124,11 @@ export async function DELETE(request) {
     return NextResponse.json({
       ok: true,
       removed,
+      accountRemoved,
       warnings: problems,
-      message: total === 0
+      message: total === 0 && !accountRemoved
         ? 'No records matched that customer — nothing was deleted.'
-        : `${total} record${total === 1 ? '' : 's'} moved to the Bin. Restore them from the Bin tab if this was a mistake.`,
+        : `${total} record${total === 1 ? '' : 's'} moved to the Bin.${accountRemoved ? ' Their login account was deleted.' : ''} Restore orders from the Bin if this was a mistake. The login cannot be restored.`,
     });
   } catch (error) {
     console.error('[admin/crm/customer/delete]', error);

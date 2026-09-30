@@ -85,6 +85,7 @@ import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession } from '@/hooks/useCustomerSession';
 import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@/lib/reorderCart.mjs';
 import { takeReorder } from '@/lib/reorderHandoff';
+import { parseBuyAgainParam } from '@/lib/refillReminder.mjs';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferNextTierNudge, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
 import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
@@ -1448,7 +1449,23 @@ export default function CatalogPage() {
   useEffect(() => {
     if (products.length === 0) return;
 
-    const pending = takeReorder();
+    // The refill email opens /catalog?buy=... with names and quantities only.
+    // Read it before the account handoff, then drop the param so a refresh
+    // does not add the same items again.
+    let pending = null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const buy = params.get('buy');
+      if (buy) {
+        pending = parseBuyAgainParam(buy);
+        params.delete('buy');
+        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
+        window.history.replaceState(null, '', next);
+      }
+    } catch {
+      pending = null;
+    }
+    if (!pending) pending = takeReorder();
     if (!pending) return;
 
     const { lines, unavailable, missing } = buildReorderLines(pending.items, products);

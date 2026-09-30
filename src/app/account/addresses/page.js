@@ -193,7 +193,7 @@ export default function AccountAddressesPage() {
   };
 
   return (
-    <AccountShell title={{ en: 'Addresses', es: 'Direcciones' }}>
+    <AccountShell title={{ en: 'Ship to', es: 'Envío' }}>
       {notice ? <div className={`account-notice ${notice.tone}`}>{notice.text}</div> : null}
 
       <div className="account-card">

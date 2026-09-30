@@ -29,6 +29,7 @@ function LoginForm() {
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [turnstileToken, setTurnstileToken] = useState('');
+  const [testLoginEnabled, setTestLoginEnabled] = useState(false);
   const codeInputRef = useRef(null);
 
   // Where to land after signing in. Only same-site paths are honoured, so a
@@ -51,6 +52,64 @@ function LoginForm() {
   useEffect(() => {
     if (step === 'code') codeInputRef.current?.focus();
   }, [step]);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/account/test-login')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.enabled) setTestLoginEnabled(true);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const signInAsTestAccount = async () => {
+    setError('');
+    setBusy(true);
+
+    const supabase = getCustomerSupabase();
+    if (!supabase) {
+      setError(isEn ? 'Sign-in is unavailable.' : 'El acceso no está disponible.');
+      setBusy(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/account/test-login', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.access_token || !data?.refresh_token) {
+        setError(data?.error || (isEn ? 'The test account could not be opened.' : 'No se pudo abrir la cuenta de prueba.'));
+        return;
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+      if (sessionError) {
+        setError(isEn ? 'The test account could not be opened.' : 'No se pudo abrir la cuenta de prueba.');
+        return;
+      }
+
+      try {
+        await fetch('/api/account/claim-orders', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${data.access_token}` },
+        });
+      } catch {
+        // Non-fatal, same as a normal sign-in.
+      }
+
+      router.replace(next);
+    } catch {
+      setError(isEn
+        ? 'Connection problem. Please try again.'
+        : 'Problema de conexión. Inténtelo de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const requestCode = async (event) => {
     event?.preventDefault();
@@ -258,6 +317,27 @@ function LoginForm() {
             </div>
           </>
         )}
+
+        {testLoginEnabled ? (
+          <div style={{ marginTop: 16 }}>
+            <button
+              type="button"
+              className="account-btn-secondary"
+              style={{ width: '100%' }}
+              disabled={busy}
+              onClick={signInAsTestAccount}
+            >
+              {busy
+                ? (isEn ? 'Opening…' : 'Abriendo…')
+                : (isEn ? 'Sign in to the test account' : 'Entrar a la cuenta de prueba')}
+            </button>
+            <p className="account-muted" style={{ marginTop: 8, textAlign: 'center' }}>
+              {isEn
+                ? 'No email code. This button is only here while the test switch is on.'
+                : 'Sin código de correo. Este botón solo aparece mientras el interruptor de prueba está activo.'}
+            </p>
+          </div>
+        ) : null}
 
         <p className="account-auth-foot">
           <Link href={`/catalog?lang=${lang}`}>

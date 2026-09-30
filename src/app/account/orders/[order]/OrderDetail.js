@@ -105,8 +105,7 @@ export default function OrderDetail({ orderNumber }) {
         </div>
       ) : (
         <>
-          <div className="account-card">
-            <h2>{isEn ? 'Status' : 'Estado'}</h2>
+          <div className="shop-order">
             <div className="account-badges">
               <span className={`account-badge ${badgeTone(orderPaymentState(order))}`}>
                 {paymentLabel(order, lang)}
@@ -121,79 +120,68 @@ export default function OrderDetail({ orderNumber }) {
             </p>
             {order.tracking_number ? (
               <p style={{ marginTop: 10, marginBottom: 0 }}>
-                <span className="account-muted">{isEn ? 'Tracking number: ' : 'Número de seguimiento: '}</span>
+                <span className="account-muted">{isEn ? 'Tracking: ' : 'Seguimiento: '}</span>
                 <span className="account-tracking">{order.tracking_number}</span>
               </p>
             ) : null}
-          </div>
 
-          <div className="account-card">
-            <h2>{isEn ? 'Items' : 'Artículos'}</h2>
-            <table className="account-items">
-              <thead>
-                <tr>
-                  <th>{isEn ? 'Product' : 'Producto'}</th>
-                  <th>{isEn ? 'Qty' : 'Cant.'}</th>
-                  <th>{isEn ? 'Price' : 'Precio'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => {
-                  const coaUrl = item?.coa || productCoas[String(item?.product || '').toLowerCase().trim()];
-                  const validCoaUrl = coaUrl && coaUrl !== '—' && coaUrl.trim() !== ''
-                    ? (coaUrl.startsWith('http') ? coaUrl : `https://${coaUrl}`)
-                    : null;
+            <ul className="shop-lines">
+              {items.map((item, index) => {
+                const coaUrl = item?.coa || productCoas[String(item?.product || '').toLowerCase().trim()];
+                const validCoaUrl = coaUrl && coaUrl !== '—' && String(coaUrl).trim() !== ''
+                  ? (String(coaUrl).startsWith('http') ? coaUrl : `https://${coaUrl}`)
+                  : null;
+                const label = String(item?.product || '').trim();
 
-                  return (
-                    <tr key={`${item?.product}-${index}`}>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{item?.product}</div>
-                        {validCoaUrl && (
-                          <div style={{ marginTop: 4 }}>
-                            <a
-                              href={validCoaUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="account-btn-link"
-                              style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#38bdf8' }}
-                            >
-                              📄 {isEn ? 'Download COA' : 'Descargar COA'}
-                            </a>
-                          </div>
-                        )}
-                      </td>
-                      <td>{item?.qty}</td>
-                      {/* A gift reads as free, not as the em dash an unpriced
-                          line would otherwise get. */}
-                      <td>{isGiftLine(item) ? (isEn ? 'Free' : 'Gratis') : formatItemPrice(item?.price, order.currency)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                return (
+                  <li key={`${label}-${index}`}>
+                    <span className="shop-thumb">{label.charAt(0).toUpperCase() || '•'}</span>
+                    <span className="shop-buy-copy">
+                      <strong>{label}</strong>
+                      <span className="account-muted">
+                        × {item?.qty}
+                        {' · '}
+                        {isGiftLine(item) ? (isEn ? 'Free' : 'Gratis') : formatItemPrice(item?.price, order.currency)}
+                      </span>
+                      {validCoaUrl ? (
+                        <a
+                          href={validCoaUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="account-btn-link"
+                          style={{ fontSize: '0.78rem' }}
+                        >
+                          {isEn ? 'Lab paper (COA)' : 'Papel de laboratorio (COA)'}
+                        </a>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
 
-            <p style={{ marginTop: 14, marginBottom: 0, textAlign: 'right', fontWeight: 700 }}>
-              {isEn ? 'Total: ' : 'Total: '}
+            <p style={{ marginTop: 14, marginBottom: 0, fontWeight: 800, fontSize: '1.05rem' }}>
+              {isEn ? 'Total ' : 'Total '}
               {formatOrderTotal(order)}
             </p>
 
             {itemCount > 0 ? (
-              <p style={{ marginTop: 14, marginBottom: 0 }}>
-                <button type="button" className="account-btn-secondary" onClick={reorder}>
-                  {isEn ? 'Order again' : 'Pedir de nuevo'}
+              <>
+                <button type="button" className="account-btn-primary" onClick={reorder}>
+                  {isEn ? 'Buy again' : 'Comprar de nuevo'}
                 </button>
                 <span className="account-muted" style={{ display: 'block', marginTop: 8, fontSize: '0.8rem' }}>
                   {isEn
-                    ? 'Items are added to your cart at today’s prices and availability.'
-                    : 'Los artículos se agregan a su carrito con los precios y la disponibilidad de hoy.'}
+                    ? 'Added to your cart at today’s prices.'
+                    : 'Se agrega al carrito con los precios de hoy.'}
                 </span>
-              </p>
+              </>
             ) : null}
           </div>
 
           {order.shipping_address ? (
-            <div className="account-card">
-              <h2>{isEn ? 'Delivery' : 'Entrega'}</h2>
+            <div className="shop-order">
+              <h2 className="shop-section-title" style={{ marginTop: 0 }}>{isEn ? 'Ships to' : 'Envío a'}</h2>
               <p className="account-muted" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
                 {order.customer_name ? `${order.customer_name}\n` : ''}
                 {order.shipping_address}

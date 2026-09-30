@@ -15,72 +15,64 @@ import {
   billableItemCount,
 } from '@/lib/customerOrderView.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
+import { isGiftLine } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 
-/** One row in the order list: number, date, status, total, and a reorder action. */
+/** One past order, shown like a product card with a buy-again button. */
 export default function OrderCard({ order, lang = 'es' }) {
   const router = useRouter();
   const isEn = lang === 'en';
   const items = orderItems(order, lang);
   const itemCount = billableItemCount(items);
+  const buyAgain = items.filter((item) => !isGiftLine(item) && item?.product);
 
   const reorder = () => {
     if (stashReorder({ ...order, items })) router.push(`/catalog?reorder=1&lang=${lang}`);
   };
 
   return (
-    <div className="account-order">
-      <div>
-        <Link href={`/account/orders/${encodeURIComponent(order.order_number)}`} className="account-order-number">
-          {order.order_number}
-        </Link>
-        <div className="account-order-meta">
-          {formatOrderDate(order.created_at, lang)}
-          {' · '}
-          {itemCount}
-          {' '}
-          {itemCount === 1
-            ? (isEn ? 'item' : 'artículo')
-            : (isEn ? 'items' : 'artículos')}
-        </div>
-        <div className="account-badges">
-          <span className={`account-badge ${badgeTone(orderPaymentState(order))}`}>
-            {paymentLabel(order, lang)}
-          </span>
-          <span className={`account-badge ${badgeTone(orderDeliveryState(order))}`}>
-            {deliveryLabel(order, lang)}
-          </span>
-        </div>
-        {hasTrackingNumber(order.tracking_number) ? (
+    <article className="shop-order">
+      <Link href={`/account/orders/${encodeURIComponent(order.order_number)}`} className="shop-order-top">
+        <div>
+          <div className="account-order-number">{order.order_number}</div>
           <div className="account-order-meta">
-            {isEn ? 'Tracking: ' : 'Seguimiento: '}
-            <span className="account-tracking">{order.tracking_number}</span>
-            {' '}
-            <a
-              className="account-track-link"
-              href={CORREOS_TRACKING_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {isEn ? 'Track on Correos ↗' : 'Rastrear en Correos ↗'}
-            </a>
+            {formatOrderDate(order.created_at, lang)}
+            {' · '}
+            {formatOrderTotal(order)}
           </div>
-        ) : null}
-      </div>
+        </div>
+        <span className={`account-badge ${badgeTone(orderDeliveryState(order) === 'shipped' ? orderDeliveryState(order) : orderPaymentState(order))}`}>
+          {orderDeliveryState(order) === 'shipped' ? deliveryLabel(order, lang) : paymentLabel(order, lang)}
+        </span>
+      </Link>
 
-      <div>
-        <div className="account-order-total">{formatOrderTotal(order)}</div>
-        {itemCount > 0 ? (
-          <button
-            type="button"
-            className="account-btn-secondary"
-            style={{ marginTop: 8 }}
-            onClick={reorder}
-          >
-            {isEn ? 'Order again' : 'Pedir de nuevo'}
-          </button>
-        ) : null}
-      </div>
-    </div>
+      {buyAgain.length > 0 ? (
+        <ul className="shop-lines">
+          {buyAgain.slice(0, 4).map((item, index) => (
+            <li key={`${item.product}-${index}`}>
+              <span className="shop-thumb">{String(item.product).trim().charAt(0).toUpperCase()}</span>
+              <span className="shop-buy-copy">
+                <strong>{item.product}</strong>
+                <span className="account-muted">× {item.qty}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {hasTrackingNumber(order.tracking_number) ? (
+        <div className="account-order-meta" style={{ marginTop: 8 }}>
+          <a className="account-track-link" href={CORREOS_TRACKING_URL} target="_blank" rel="noopener noreferrer">
+            {isEn ? 'Track package' : 'Rastrear paquete'}
+          </a>
+        </div>
+      ) : null}
+
+      {itemCount > 0 ? (
+        <button type="button" className="account-btn-primary" onClick={reorder}>
+          {isEn ? 'Buy again' : 'Comprar de nuevo'}
+        </button>
+      ) : null}
+    </article>
   );
 }
