@@ -37,7 +37,7 @@ import {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 function message(isEn, en, es) {
-  return isEn ? en : es;
+  return { error: isEn ? en : es, errorEn: en, errorEs: es };
 }
 
 export async function POST(request) {
@@ -54,13 +54,11 @@ export async function POST(request) {
 
   if (!email || !EMAIL_PATTERN.test(email)) {
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'Please enter a valid email address.',
-          'Por favor ingrese un correo electrónico válido.',
-        ),
-      },
+      message(
+        isEn,
+        'Please enter a valid email address.',
+        'Por favor ingrese un correo electrónico válido.',
+      ),
       { status: 400 },
     );
   }
@@ -69,13 +67,11 @@ export async function POST(request) {
   const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA'; // testing secret
   if (!turnstileToken) {
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'Please complete the security check.',
-          'Por favor complete el control de seguridad.',
-        ),
-      },
+      message(
+        isEn,
+        'Please complete the security check.',
+        'Por favor complete el control de seguridad.',
+      ),
       { status: 400 },
     );
   }
@@ -98,26 +94,22 @@ export async function POST(request) {
     const cfData = await cfRes.json();
     if (!cfData.success) {
       return NextResponse.json(
-        {
-          error: message(
-            isEn,
-            'Security check failed. Please try again.',
-            'El control de seguridad falló. Inténtelo de nuevo.',
-          ),
-        },
+        message(
+          isEn,
+          'Security check failed. Please try again.',
+          'El control de seguridad falló. Inténtelo de nuevo.',
+        ),
         { status: 400 },
       );
     }
   } catch (error) {
     console.error('[account/request-code] Turnstile verification failed:', error);
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'Security check failed. Please try again.',
-          'El control de seguridad falló. Inténtelo de nuevo.',
-        ),
-      },
+      message(
+        isEn,
+        'Security check failed. Please try again.',
+        'El control de seguridad falló. Inténtelo de nuevo.',
+      ),
       { status: 500 },
     );
   }
@@ -129,13 +121,11 @@ export async function POST(request) {
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   if (!rateLimit(`account-code-ip:${ip}`, 10) || !rateLimit(`account-code-email:${email}`, 5)) {
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'Too many attempts. Please wait a few minutes and try again.',
-          'Demasiados intentos. Espere unos minutos e inténtelo de nuevo.',
-        ),
-      },
+      message(
+        isEn,
+        'Too many attempts. Please wait a few minutes and try again.',
+        'Demasiados intentos. Espere unos minutos e inténtelo de nuevo.',
+      ),
       { status: 429 },
     );
   }
@@ -150,13 +140,11 @@ export async function POST(request) {
 
     if (blocked) {
       return NextResponse.json(
-        {
-          error: message(
-            isEn,
-            'This email is linked to orders placed for several different customers, so it cannot be used for an account. Please contact us and we will set one up for you.',
-            'Este correo está vinculado a pedidos de varios clientes distintos, por lo que no puede usarse para una cuenta. Contáctenos y le ayudamos a crearla.',
-          ),
-        },
+        message(
+          isEn,
+          'This email is linked to orders placed for several different customers, so it cannot be used for an account. Please contact us and we will set one up for you.',
+          'Este correo está vinculado a pedidos de varios clientes distintos, por lo que no puede usarse para una cuenta. Contáctenos y le ayudamos a crearla.',
+        ),
         { status: 403 },
       );
     }
@@ -164,13 +152,11 @@ export async function POST(request) {
     // A blocklist lookup that fails must not become an open door.
     console.error('[account/request-code] blocklist lookup failed:', error);
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'We could not start the sign-in right now. Please try again shortly.',
-          'No pudimos iniciar el acceso en este momento. Inténtelo de nuevo en unos minutos.',
-        ),
-      },
+      message(
+        isEn,
+        'We could not start the sign-in right now. Please try again shortly.',
+        'No pudimos iniciar el acceso en este momento. Inténtelo de nuevo en unos minutos.',
+      ),
       { status: 503 },
     );
   }
@@ -191,13 +177,11 @@ export async function POST(request) {
   } catch (error) {
     console.error('[account/request-code] could not create a code:', error?.message || error);
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'We could not send the code. Please try again shortly.',
-          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
-        ),
-      },
+      message(
+        isEn,
+        'We could not send the code. Please try again shortly.',
+        'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+      ),
       { status: 503 },
     );
   }
@@ -206,19 +190,17 @@ export async function POST(request) {
     console.error('[account/request-code] generateLink failed:', link.error.message);
     const throttled = link.error.status === 429 || /rate|seconds/i.test(link.error.message || '');
     return NextResponse.json(
-      {
-        error: throttled
-          ? message(
-            isEn,
-            'A code was just sent. Please wait a moment before asking for another.',
-            'Acabamos de enviar un código. Espere un momento antes de pedir otro.',
-          )
-          : message(
-            isEn,
-            'We could not send the code. Please check the address and try again.',
-            'No pudimos enviar el código. Verifique la dirección e inténtelo de nuevo.',
-          ),
-      },
+      throttled
+        ? message(
+          isEn,
+          'A code was just sent. Please wait a moment before asking for another.',
+          'Acabamos de enviar un código. Espere un momento antes de pedir otro.',
+        )
+        : message(
+          isEn,
+          'We could not send the code. Please check the address and try again.',
+          'No pudimos enviar el código. Verifique la dirección e inténtelo de nuevo.',
+        ),
       { status: throttled ? 429 : 502 },
     );
   }
@@ -226,15 +208,13 @@ export async function POST(request) {
   const code = signInCodeFromLink(link.data);
   const verifyType = verifyTypeFromLink(link.data);
   if (!code || !verifyType) {
-    console.error('[account/request-code] login link did not include a six-digit code');
+    console.error('[account/request-code] login link did not include a code');
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'We could not send the code. Please try again shortly.',
-          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
-        ),
-      },
+      message(
+        isEn,
+        'We could not send the code. Please try again shortly.',
+        'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+      ),
       { status: 502 },
     );
   }
@@ -243,13 +223,11 @@ export async function POST(request) {
   if (!smtp.configured) {
     console.error('[account/request-code] order mail is not configured');
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'We could not send the code. Please try again shortly.',
-          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
-        ),
-      },
+      message(
+        isEn,
+        'We could not send the code. Please try again shortly.',
+        'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+      ),
       { status: 503 },
     );
   }
@@ -272,13 +250,11 @@ export async function POST(request) {
   } catch (error) {
     console.error('[account/request-code] mail failed:', error?.message || error);
     return NextResponse.json(
-      {
-        error: message(
-          isEn,
-          'We could not send the code. Please try again shortly.',
-          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
-        ),
-      },
+      message(
+        isEn,
+        'We could not send the code. Please try again shortly.',
+        'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+      ),
       { status: 502 },
     );
   }

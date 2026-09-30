@@ -126,7 +126,8 @@ function LoginForm() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        setError(data?.error || (isEn ? 'Could not send the code.' : 'No se pudo enviar el código.'));
+        const serverError = isEn ? data?.errorEn : data?.errorEs;
+        setError(serverError || data?.error || (isEn ? 'Could not send the code.' : 'No se pudo enviar el código.'));
         return;
       }
 
@@ -220,11 +221,11 @@ function LoginForm() {
 
         {step === 'email' ? (
           <>
-            <p className="account-auth-lead">
-              {isEn
-                ? 'Enter your email and we will send you a six-digit sign-in code. No password needed.'
-                : 'Ingrese su correo y le enviaremos un código de seis dígitos para entrar. No necesita contraseña.'}
-            </p>
+              <p className="account-auth-lead">
+                {isEn
+                  ? 'Enter your email and we will send you a sign-in code. No password needed.'
+                  : 'Ingrese su correo y le enviaremos un código para entrar. No necesita contraseña.'}
+              </p>
 
             <form onSubmit={requestCode}>
               <label htmlFor="account-email">
@@ -262,13 +263,13 @@ function LoginForm() {
           <>
             <p className="account-auth-lead">
               {isEn
-                ? <>We sent a six-digit code to <strong>{email}</strong>. It expires in a few minutes.</>
-                : <>Enviamos un código de seis dígitos a <strong>{email}</strong>. Vence en unos minutos.</>}
+                ? <>We sent a code to <strong>{email}</strong>. It expires in a few minutes.</>
+                : <>Enviamos un código a <strong>{email}</strong>. Vence en unos minutos.</>}
             </p>
 
             <form onSubmit={verifyCode}>
               <label htmlFor="account-code">
-                {isEn ? 'Six-digit code' : 'Código de seis dígitos'}
+                {isEn ? 'Code from the email' : 'Código del correo'}
               </label>
               <input
                 id="account-code"
@@ -277,12 +278,12 @@ function LoginForm() {
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={10}
                 required
                 value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))}
                 className="account-code-input"
-                placeholder="000000"
+                placeholder="00000000"
               />
 
               {error ? <p className="account-auth-error">{error}</p> : null}
