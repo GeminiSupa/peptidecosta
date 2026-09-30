@@ -9,8 +9,12 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
+import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
 import ComingSoon from '../ComingSoon';
 import '../account.css';
+
+const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '';
+const showTurnstile = Boolean(turnstileSiteKey) && !isDummyTurnstileKey(turnstileSiteKey);
 
 const RESEND_SECONDS = 60;
 
@@ -252,15 +256,17 @@ function LoginForm() {
 
               {error ? <p className="account-auth-error">{error}</p> : null}
 
-              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
-                <Turnstile
-                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
-                  onSuccess={(token) => setTurnstileToken(token)}
-                  options={{ theme: 'light' }}
-                />
-              </div>
+              {showTurnstile ? (
+                <div className="account-turnstile">
+                  <Turnstile
+                    siteKey={turnstileSiteKey}
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    options={{ theme: 'light', appearance: 'interaction-only' }}
+                  />
+                </div>
+              ) : null}
 
-              <button type="submit" className="account-btn-primary" disabled={busy || !email || !turnstileToken}>
+              <button type="submit" className="account-btn-primary" disabled={busy || !email || (showTurnstile && !turnstileToken)}>
                 {busy
                   ? (isEn ? 'Sending…' : 'Enviando…')
                   : (isEn ? 'Send me a code' : 'Enviarme un código')}

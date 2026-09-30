@@ -509,10 +509,19 @@
   text-indent: 0.5em;
 }
 
+.account-auth-card form .account-btn-primary { margin-top: 16px; }
+
+.account-turnstile {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+  overflow: hidden;
+}
+
 .account-auth-error {
   color: var(--danger);
   font-size: 0.85rem;
-  margin: 10px 0;
+  margin: 10px 0 0;
   text-align: center;
 }
 

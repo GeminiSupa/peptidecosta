@@ -14,6 +14,7 @@ import {
   verifyTypeFromLink,
 } from '@/lib/accountSignInCode.mjs';
 import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
+import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
 
 // Step one of customer login: email a six-digit code.
 //
@@ -64,9 +65,11 @@ export async function POST(request) {
     );
   }
 
-  // Turnstile verification
-  const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA'; // testing secret
-  if (!turnstileToken) {
+  // Only a real Cloudflare key is checked. The published dummy key draws a
+  // "For testing only" box on the live sign-in page, so it is ignored.
+  const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || '';
+  const checkTurnstile = !isDummyTurnstileKey(turnstileSecret);
+  if (checkTurnstile && !turnstileToken) {
     return NextResponse.json(
       message(
         isEn,
@@ -77,7 +80,7 @@ export async function POST(request) {
     );
   }
 
-  try {
+  if (checkTurnstile) try {
     const cfFormData = new URLSearchParams();
     cfFormData.append('secret', turnstileSecret);
     cfFormData.append('response', turnstileToken);
