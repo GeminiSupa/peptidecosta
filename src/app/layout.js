@@ -5,6 +5,7 @@ import UTMTracker from "@/components/UTMTracker";
 import GlobalContactForm from "@/components/GlobalContactForm";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import EntryDisclaimer from "@/components/EntryDisclaimer";
+import CatchAccountSignIn from "@/components/CatchAccountSignIn";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
@@ -226,6 +227,7 @@ export default async function RootLayout({ children }) {
           />
         </noscript>
         {children}
+        <CatchAccountSignIn />
         <AnalyticsTracker />
         <UTMTracker />
         <GlobalContactForm />

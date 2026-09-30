@@ -25,6 +25,7 @@ function LoginForm() {
   const [step, setStep] = useState('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [verifyType, setVerifyType] = useState('magiclink');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -130,6 +131,7 @@ function LoginForm() {
       }
 
       setStep('code');
+      setVerifyType(data?.verifyType === 'signup' ? 'signup' : 'magiclink');
       setCooldown(RESEND_SECONDS);
     } catch {
       setError(isEn
@@ -156,7 +158,7 @@ function LoginForm() {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({
         email: email.trim().toLowerCase(),
         token: code.trim(),
-        type: 'email',
+        type: verifyType === 'signup' ? 'signup' : 'magiclink',
       });
 
       if (verifyError || !data?.session) {

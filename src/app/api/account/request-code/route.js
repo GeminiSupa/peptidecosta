@@ -1,15 +1,27 @@
+import { randomBytes } from 'node:crypto';
+
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import nodemailer from 'nodemailer';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { rateLimit } from '@/lib/rateLimit.mjs';
 import { normalizeEmail } from '@/lib/customerAccount.mjs';
+import { getOrderMailSettings } from '@/lib/transactionalSmtp';
+import {
+  buildSignInCodeEmail,
+  isMissingAuthUser,
+  signInCodeFromLink,
+  verifyTypeFromLink,
+} from '@/lib/accountSignInCode.mjs';
 
-// Step one of customer login: send a six-digit code.
+// Step one of customer login: email a six-digit code.
 //
-// The code itself is issued and verified by Supabase Auth; this route exists to
-// put a gate in front of it. Two things have to happen before Supabase is asked
-// to create anything:
+// Supabase Auth still creates the code. We do not let Supabase send it. Its
+// default message is a "Sign in" link that opens the catalog and leaves the
+// person signed out. The shop mail sends the digits, and the person types
+// them back into the account page.
+//
+// Two things have to happen before a code is created:
 //
 //   1. The address is checked against order_claim_blocklist. Staff addresses and
 //      placeholders sit on dozens of other people's orders, so they must not be
@@ -128,12 +140,6 @@ export async function POST(request) {
     );
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
-  }
-
   try {
     const admin = getSupabaseAdmin();
     const { data: blocked } = await admin
@@ -169,18 +175,36 @@ export async function POST(request) {
     );
   }
 
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  let link;
+  try {
+    const admin = getSupabaseAdmin();
+    link = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+    if (link.error && isMissingAuthUser(link.error)) {
+      // First visit. A signup code creates the login. The password is never
+      // shown or stored by us; the person signs in with the six digits.
+      link = await admin.auth.admin.generateLink({
+        type: 'signup',
+        email,
+        password: randomBytes(24).toString('base64url'),
+      });
+    }
+  } catch (error) {
+    console.error('[account/request-code] could not create a code:', error?.message || error);
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'We could not send the code. Please try again shortly.',
+          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+        ),
+      },
+      { status: 503 },
+    );
+  }
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: true },
-  });
-
-  if (error) {
-    console.error('[account/request-code] signInWithOtp failed:', error.message);
-    const throttled = error.status === 429 || /rate|seconds/i.test(error.message || '');
+  if (link?.error) {
+    console.error('[account/request-code] generateLink failed:', link.error.message);
+    const throttled = link.error.status === 429 || /rate|seconds/i.test(link.error.message || '');
     return NextResponse.json(
       {
         error: throttled
@@ -199,5 +223,65 @@ export async function POST(request) {
     );
   }
 
-  return NextResponse.json({ ok: true, email });
+  const code = signInCodeFromLink(link.data);
+  const verifyType = verifyTypeFromLink(link.data);
+  if (!code || !verifyType) {
+    console.error('[account/request-code] login link did not include a six-digit code');
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'We could not send the code. Please try again shortly.',
+          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+        ),
+      },
+      { status: 502 },
+    );
+  }
+
+  const { smtp, from } = getOrderMailSettings();
+  if (!smtp.configured) {
+    console.error('[account/request-code] order mail is not configured');
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'We could not send the code. Please try again shortly.',
+          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+        ),
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.pass },
+    });
+    const letter = buildSignInCodeEmail(code);
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: letter.subject,
+      text: letter.text,
+      html: letter.html,
+    });
+  } catch (error) {
+    console.error('[account/request-code] mail failed:', error?.message || error);
+    return NextResponse.json(
+      {
+        error: message(
+          isEn,
+          'We could not send the code. Please try again shortly.',
+          'No pudimos enviar el código. Inténtelo de nuevo en unos minutos.',
+        ),
+      },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, email, verifyType });
 }
