@@ -17,6 +17,7 @@ import {
 import { stashReorder } from '@/lib/reorderHandoff';
 import { isGiftLine } from '@/lib/bacWater.mjs';
 import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
+import ProductFace from './ProductFace';
 
 /** One past order, shown like a product card with a buy-again button. */
 export default function OrderCard({ order, lang = 'es' }) {
@@ -50,7 +51,7 @@ export default function OrderCard({ order, lang = 'es' }) {
         <ul className="shop-lines">
           {buyAgain.slice(0, 4).map((item, index) => (
             <li key={`${item.product}-${index}`}>
-              <span className="shop-thumb">{String(item.product).trim().charAt(0).toUpperCase()}</span>
+              <ProductFace name={item.product} />
               <span className="shop-buy-copy">
                 <strong>{item.product}</strong>
                 <span className="account-muted">× {item.qty}</span>

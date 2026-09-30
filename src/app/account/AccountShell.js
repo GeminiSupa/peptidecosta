@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
+import { getCustomerAccessToken } from '@/lib/customerSupabase';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
 import ComingSoon from './ComingSoon';
 import './account.css';
@@ -79,6 +80,23 @@ export default function AccountShell({ children, title }) {
   const { user, loading, configured, signOut } = useCustomerSession();
   const { allowed, checking } = useAccountAccess();
   const isEn = lang === 'en';
+
+  useEffect(() => {
+    if (!user) return undefined;
+    let active = true;
+    getCustomerAccessToken().then((token) => {
+      if (!active || !token) return null;
+      return fetch('/api/account/claim-orders', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang }),
+      });
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [user, lang]);
 
   useEffect(() => {
     if (checking || !allowed) return;

@@ -11,11 +11,7 @@ import { affiliateCommissionPatch, affiliateHandlingAgentName, partnerReferralAf
 import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
 import { ORDER_RESEARCH_ACK_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
-import {
-  CustomerSessionError,
-  applyCustomerOrderOwnership,
-  resolveCustomerOrderOwner,
-} from '@/lib/customerOrderOwnership.mjs';
+import { rememberOrderAddress } from '@/lib/accountAddress.mjs';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
@@ -808,6 +804,13 @@ export async function POST(request) {
     //
     // Best-effort. A limiter that cannot record a saved order must not undo one
     // that is already in the database.
+    if (orderRow.customer_user_id) {
+      try {
+        await rememberOrderAddress(supabase, orderRow.customer_user_id, orderRow);
+      } catch (addressErr) {
+        console.error('[orders/create] Could not save the account address:', addressErr.message);
+      }
+    }
     for (const contactLimit of contactLimits) {
       try {
         await consumeDurableRateLimit(supabase, contactLimit);

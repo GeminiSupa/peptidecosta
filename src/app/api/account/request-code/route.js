@@ -13,6 +13,7 @@ import {
   signInCodeFromLink,
   verifyTypeFromLink,
 } from '@/lib/accountSignInCode.mjs';
+import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 
 // Step one of customer login: email a six-digit code.
 //
@@ -239,13 +240,14 @@ export async function POST(request) {
       secure: smtp.secure,
       auth: { user: smtp.user, pass: smtp.pass },
     });
-    const letter = buildSignInCodeEmail(code);
+    const letter = buildSignInCodeEmail(code, isEn ? 'en' : 'es');
     await transporter.sendMail({
       from,
       to: email,
       subject: letter.subject,
       text: letter.text,
       html: letter.html,
+      attachments: [getOrderEmailLogoAttachment()],
     });
   } catch (error) {
     console.error('[account/request-code] mail failed:', error?.message || error);

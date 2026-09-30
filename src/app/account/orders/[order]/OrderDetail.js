@@ -19,6 +19,7 @@ import {
   paymentLabel,
   billableItemCount,
 } from '@/lib/customerOrderView.mjs';
+import ProductFace from '../../ProductFace';
 import { isGiftLine } from '@/lib/bacWater.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 
@@ -135,7 +136,7 @@ export default function OrderDetail({ orderNumber }) {
 
                 return (
                   <li key={`${label}-${index}`}>
-                    <span className="shop-thumb">{label.charAt(0).toUpperCase() || '•'}</span>
+                    <ProductFace name={label} />
                     <span className="shop-buy-copy">
                       <strong>{label}</strong>
                       <span className="account-muted">

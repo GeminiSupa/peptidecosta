@@ -133,14 +133,23 @@
 }
 
 .shop-thumb {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   border-radius: 12px;
   background: var(--bg-secondary);
   color: var(--text-primary);
   display: grid;
   place-items: center;
   font-weight: 800;
+  flex: none;
+}
+
+.shop-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #fff;
   flex: none;
 }
 

@@ -14,6 +14,7 @@ import { orderDeliveryState, orderItems } from '@/lib/customerOrderView.mjs';
 import { isGiftLine } from '@/lib/bacWater.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
+import ProductFace from './ProductFace';
 
 function addressLine(address) {
   if (!address) return '';
@@ -193,7 +194,7 @@ export default function AccountOverviewPage() {
         <div className="shop-order" style={{ paddingTop: 4, paddingBottom: 4 }}>
           {again.map((item) => (
             <div className="shop-buy-row" key={item.product}>
-              <span className="shop-thumb">{String(item.product).trim().charAt(0).toUpperCase()}</span>
+              <ProductFace name={item.product} />
               <span className="shop-buy-copy">
                 <strong>{item.product}</strong>
                 <span className="account-muted">× {item.qty}</span>

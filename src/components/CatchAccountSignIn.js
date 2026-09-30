@@ -36,7 +36,13 @@ export default function CatchAccountSignIn() {
       try {
         await fetch('/api/account/claim-orders', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            lang: window.localStorage.getItem('lang') === 'en' ? 'en' : 'es',
+          }),
         });
       } catch {
         // The next sign-in tries again.

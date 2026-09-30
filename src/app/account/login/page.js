@@ -96,7 +96,11 @@ function LoginForm() {
       try {
         await fetch('/api/account/claim-orders', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${data.access_token}` },
+          headers: {
+          Authorization: `Bearer ${data.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang }),
         });
       } catch {
         // Non-fatal, same as a normal sign-in.
@@ -176,7 +180,11 @@ function LoginForm() {
       try {
         await fetch('/api/account/claim-orders', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${data.session.access_token}` },
+          headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lang }),
         });
       } catch {
         // Non-fatal by design.
