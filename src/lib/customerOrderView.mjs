@@ -101,6 +101,67 @@ export function deliveryLabel(order, lang = 'es') {
   return DELIVERY_LABELS[state][lang === 'en' ? 'en' : 'es'];
 }
 
+const TIMELINE_STEPS = [
+  { id: 'placed', en: 'Order placed', es: 'Pedido realizado' },
+  { id: 'paid', en: 'Payment confirmed', es: 'Pago confirmado' },
+  { id: 'preparing', en: 'Preparing', es: 'En preparación' },
+  { id: 'shipped', en: 'Shipped', es: 'Enviado' },
+  { id: 'delivered', en: 'Delivered', es: 'Entregado' },
+];
+
+const STOPPED_LABELS = {
+  failed: { en: 'Payment failed', es: 'Pago rechazado' },
+  cancelled: { en: 'Cancelled', es: 'Cancelado' },
+  refunded: { en: 'Refunded', es: 'Reembolsado' },
+};
+
+function timelineLabel(step, lang) {
+  return step[lang === 'en' ? 'en' : 'es'];
+}
+
+/**
+ * The steps a customer can actually be told.
+ *
+ * There is no separate "out for delivery" signal on an order, so that step is
+ * not shown. A tracking number is what makes it Shipped. Order Complete is
+ * what makes it Delivered.
+ */
+export function orderTimeline(order, lang = 'es') {
+  const payment = orderPaymentState(order);
+  const delivery = orderDeliveryState(order);
+  const placed = { id: 'placed', label: timelineLabel(TIMELINE_STEPS[0], lang), state: 'done' };
+
+  let stopped = null;
+  if (payment === 'failed') stopped = 'failed';
+  else if (payment === 'refunded' || delivery === 'cancelled') {
+    stopped = payment === 'refunded' ? 'refunded' : 'cancelled';
+  }
+
+  if (stopped) {
+    return {
+      stopped: true,
+      steps: [
+        placed,
+        { id: stopped, label: timelineLabel(STOPPED_LABELS[stopped], lang), state: 'stopped' },
+      ],
+    };
+  }
+
+  const currentIndex = delivery === 'delivered' ? 4
+    : delivery === 'shipped' ? 3
+      : delivery === 'preparing' ? 2
+        : 1;
+
+  return {
+    stopped: false,
+    steps: TIMELINE_STEPS.map((step, index) => ({
+      id: step.id,
+      label: timelineLabel(step, lang),
+      state: index < currentIndex || delivery === 'delivered' ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+    })),
+  };
+}
+
 export function badgeTone(state) {
   return BADGE_TONES[state] || '';
 }
@@ -144,6 +205,26 @@ export function formatOrderDate(value, lang = 'es') {
     month: 'short',
     day: 'numeric',
   });
+}
+
+/**
+ * A delivery date only when the order actually has one.
+ *
+ * Most orders do not. The account still shows the row, and this stays blank
+ * rather than inventing an arrival day.
+ */
+export function orderDeliveryDate(order, lang = 'es') {
+  const fields = ['estimated_delivery', 'delivery_date', 'delivery_eta'];
+  for (const field of fields) {
+    const raw = order?.[field];
+    if (raw == null) continue;
+    const text = String(raw).trim();
+    if (!text) continue;
+    const date = new Date(text);
+    if (!Number.isNaN(date.getTime())) return formatOrderDate(text, lang);
+    return text;
+  }
+  return '';
 }
 
 /** Items are JSONB and older rows predate the current shape — read defensively. */

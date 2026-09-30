@@ -4,20 +4,15 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import {
-  badgeTone,
-  deliveryLabel,
   formatOrderDate,
   formatOrderTotal,
-  orderDeliveryState,
   orderItems,
-  orderPaymentState,
-  paymentLabel,
   billableItemCount,
 } from '@/lib/customerOrderView.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 import { isGiftLine } from '@/lib/bacWater.mjs';
-import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 import ProductFace from './ProductFace';
+import OrderTimeline from './OrderTimeline';
 
 /** One past order, shown like a product card with a buy-again button. */
 export default function OrderCard({ order, lang = 'es' }) {
@@ -42,10 +37,8 @@ export default function OrderCard({ order, lang = 'es' }) {
             {formatOrderTotal(order)}
           </div>
         </div>
-        <span className={`account-badge ${badgeTone(orderDeliveryState(order) === 'shipped' ? orderDeliveryState(order) : orderPaymentState(order))}`}>
-          {orderDeliveryState(order) === 'shipped' ? deliveryLabel(order, lang) : paymentLabel(order, lang)}
-        </span>
       </Link>
+      <OrderTimeline order={order} lang={lang} compact />
 
       {buyAgain.length > 0 ? (
         <ul className="shop-lines">
@@ -59,14 +52,6 @@ export default function OrderCard({ order, lang = 'es' }) {
             </li>
           ))}
         </ul>
-      ) : null}
-
-      {hasTrackingNumber(order.tracking_number) ? (
-        <div className="account-order-meta" style={{ marginTop: 8 }}>
-          <a className="account-track-link" href={CORREOS_TRACKING_URL} target="_blank" rel="noopener noreferrer">
-            {isEn ? 'Track package' : 'Rastrear paquete'}
-          </a>
-        </div>
       ) : null}
 
       {itemCount > 0 ? (

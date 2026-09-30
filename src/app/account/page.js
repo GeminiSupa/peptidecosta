@@ -15,6 +15,7 @@ import { isGiftLine } from '@/lib/bacWater.mjs';
 import { stashReorder } from '@/lib/reorderHandoff';
 import { CORREOS_TRACKING_URL, hasTrackingNumber } from '@/lib/correosTracking.mjs';
 import ProductFace from './ProductFace';
+import { ACCOUNT_LINKS } from './AccountSections';
 
 function addressLine(address) {
   if (!address) return '';
@@ -246,6 +247,13 @@ export default function AccountOverviewPage() {
           </Link>
         </>
       ) : null}
+
+      <h2 className="shop-section-title">{isEn ? 'Your account' : 'Su cuenta'}</h2>
+      <div className="account-menu">
+        {ACCOUNT_LINKS.map((item) => (
+          <Link key={item.href} href={item.href}>{isEn ? item.en : item.es}</Link>
+        ))}
+      </div>
 
       {error ? (
         <p className="account-muted">

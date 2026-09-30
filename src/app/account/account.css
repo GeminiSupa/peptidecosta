@@ -194,6 +194,190 @@
 
 .shop-order .account-btn-primary { margin-top: 12px; }
 
+.order-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.order-timeline li {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 10px;
+  align-items: start;
+  position: relative;
+  padding-bottom: 14px;
+}
+
+.order-timeline li:last-child { padding-bottom: 0; }
+
+.order-timeline li::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.order-timeline li:last-child::before { display: none; }
+
+.order-timeline-mark {
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  position: relative;
+  z-index: 1;
+}
+
+.order-timeline li.is-done .order-timeline-mark,
+.order-timeline li.is-current .order-timeline-mark {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.order-timeline li.is-current .order-timeline-mark {
+  box-shadow: 0 0 0 4px rgba(0, 39, 102, 0.12);
+}
+
+.order-timeline li.is-stopped .order-timeline-mark {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.order-timeline li.is-upcoming { color: var(--text-muted); }
+
+.order-timeline-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.order-timeline li.is-upcoming .order-timeline-label { font-weight: 600; }
+
+.order-timeline-track {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+}
+
+.order-timeline-wrap.is-compact .order-timeline {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.order-timeline-wrap.is-compact .order-timeline li {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  text-align: center;
+}
+
+.order-timeline-wrap.is-compact .order-timeline li::before { display: none; }
+
+.order-timeline-wrap.is-compact .order-timeline-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.order-timeline-wrap.is-compact .order-timeline-track { text-align: center; }
+
+.order-delivery-date {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.order-delivery-date b {
+  color: var(--text-main);
+  font-weight: 700;
+  min-width: 4.5rem;
+  min-height: 1em;
+  text-align: right;
+}
+
+.order-receipt {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.order-receipt h2 { margin: 0 0 8px; font-size: 1rem; }
+.order-receipt p { margin: 0 0 4px; }
+.order-receipt ul { list-style: none; margin: 10px 0; padding: 0; }
+.order-receipt li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.order-receipt-total { font-weight: 800; font-size: 1.05rem; margin-top: 8px; }
+
+.account-menu { display: grid; gap: 8px; margin-bottom: 16px; }
+.account-menu a {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  text-decoration: none;
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.account-empty-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.account-empty-row:last-child { border-bottom: 0; }
+.account-empty-row span { color: var(--text-muted); }
+.account-empty-row b { min-width: 3rem; min-height: 1em; text-align: right; }
+
+.account-plain-list { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 8px; }
+.account-plain-list li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+.account-plain-list li span { flex: 1; min-width: 0; }
+
+.account-help-actions { display: grid; gap: 8px; margin-bottom: 8px; }
+.shop-order select,
+.shop-order textarea {
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  color: var(--text-main);
+  font: inherit;
+}
+
+@media print {
+  .account-header,
+  .account-tabbar,
+  .no-print,
+  .account-btn-primary,
+  .account-btn-secondary { display: none !important; }
+  .account-page { max-width: none; }
+}
+
 .account-nav { display: none; }
 
 .account-card {
