@@ -1,0 +1,252 @@
+.ticker,
+.hero,
+.trust,
+.stats {
+  display: none;
+}
+
+@keyframes croTicker {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+@media (min-width: 1100px) {
+  .ticker {
+    display: block;
+    overflow: hidden;
+    background: #f4efe6;
+    color: #1c1c1c;
+  }
+
+  .track {
+    display: flex;
+    width: max-content;
+    animation: croTicker 22s linear infinite;
+  }
+
+  .ticker:hover .track,
+  .ticker:focus-within .track {
+    animation-play-state: paused;
+  }
+
+  .ticker p {
+    margin: 0;
+    padding: 9px 32px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+    gap: 20px;
+    align-items: center;
+    width: min(1216px, calc(100% - 48px));
+    margin: 16px auto 0;
+    padding: 26px 32px 22px;
+    border-radius: 28px;
+    background: #e7f3fb;
+    color: #111;
+  }
+
+  .copy h2 {
+    margin: 8px 0 14px;
+    font-size: 2.4rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
+  }
+
+  .scores {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    font-weight: 800;
+    font-size: 0.95rem;
+  }
+
+  .scores span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .copy ul {
+    margin: 0 0 18px;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 8px;
+  }
+
+  .copy li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .claim {
+    border: 0;
+    border-radius: 999px;
+    background: #e87722;
+    color: #fff;
+    font: inherit;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 12px 22px;
+    cursor: pointer;
+  }
+
+  .claim:hover {
+    background: #d16512;
+  }
+
+  .clock {
+    display: flex;
+    gap: 8px;
+  }
+
+  .clock span {
+    display: grid;
+    place-items: center;
+    min-width: 52px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: #fff;
+    line-height: 1;
+  }
+
+  .clock b {
+    font-size: 1.15rem;
+  }
+
+  .clock small {
+    margin-top: 3px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #667;
+  }
+
+  .visual {
+    position: relative;
+    height: 250px;
+    overflow: hidden;
+  }
+
+  .visual > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: right center;
+  }
+
+  .press {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: #fff;
+    color: #222;
+    text-decoration: none;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+  }
+
+  .press small {
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #8b9098;
+  }
+
+  .press img {
+    height: 28px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .press em {
+    font-style: normal;
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .trust {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 28px;
+    width: min(1216px, calc(100% - 48px));
+    margin: 14px auto 6px;
+    padding: 0;
+    list-style: none;
+    color: #1c1c1c;
+    font-weight: 700;
+    font-size: 0.92rem;
+  }
+
+  .trust li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .trust svg {
+    color: #16a34a;
+  }
+
+  .stats {
+    display: block;
+    grid-column: 1 / -1;
+    margin: 28px 0 8px;
+    padding: 28px 12px 8px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    text-align: center;
+  }
+
+  .stats p {
+    margin: 0 0 16px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #667;
+  }
+
+  .stats div {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .stats strong {
+    display: block;
+    font-size: 2rem;
+    letter-spacing: -0.03em;
+  }
+
+  .stats span {
+    display: block;
+    margin-top: 4px;
+    color: #667;
+    font-size: 0.92rem;
+  }
+}
+

@@ -178,58 +178,39 @@
 [data-theme="dark"] .countdownUnits b { color: #fca5a5; }
 [data-theme="dark"] .countdownUnits em { color: #fecaca; }
 
-@media (max-width: 700px) {
+@media (max-width: 1099px) {
   .spotlight { grid-template-columns: 1fr; padding: 21px; }
   .action { width: 100%; }
-  /* The timer used to share the title's row, and on a phone it sat on top of
-     "Deal of the Week". It now takes the row under the offers. */
+  /* The moving banner already says the offers. On a phone this stays one row
+     so the products are on screen, and it still reads as something you tap. */
   .strip {
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 8px 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
     align-items: center;
+    min-height: 52px;
+    margin: 8px 12px;
+    padding: 8px 10px;
   }
-  .stripThumb {
-    width: 72px;
-    height: 72px;
-    grid-column: 1;
-    grid-row: 1;
-  }
-  .stripBrand { grid-column: 2; grid-row: 1; min-width: 0; }
-  .stripCopy { grid-column: 1 / -1; grid-row: 2; order: initial; gap: 4px; }
+  .stripThumb,
+  .stripCopy,
+  .stripBrand small { display: none; }
+  .stripBrand { grid-column: 1; grid-row: 1; min-width: 0; }
+  .stripBrand strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stripActions {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    justify-items: start;
-    align-self: stretch;
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-items: end;
+    gap: 8px;
   }
-  .countdown { min-width: 0; width: fit-content; max-width: 100%; }
+  .stripMore { font-size: 0.78rem; }
+  .countdown { min-width: 0; width: auto; gap: 2px; padding: 4px 6px; }
 }
 
 @media (max-width: 430px) {
-  .strip { grid-template-columns: 64px minmax(0, 1fr); gap: 6px 8px; margin: 6px auto; padding: 8px; }
-  .stripThumb { width: 64px; height: 64px; }
-  .stripBrand { gap: 0; }
   .stripIcon { display: none; }
-  .stripBrand strong { font-size: 0.68rem; white-space: normal; line-height: 1.15; }
-  .stripBrand small { font-size: 0.6rem; }
-  .offerLine { gap: 5px; }
-  .offerLine strong { font-size: 0.72rem; line-height: 1.25; }
-  .offerLine > svg { width: 13px; height: 13px; }
-  /* The tap hint used to be hidden here for room, so the card read as a
-     poster with nothing to tap. It shares the bottom row with the timer
-     instead, as a bordered pill so it reads as the thing you press. */
-  .stripActions { grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: stretch; gap: 8px; }
-  .stripMore {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 34px;
-    border-radius: 9px;
-    border: 1px solid rgba(21, 128, 61, 0.35);
-    background: rgba(21, 128, 61, 0.08);
-    font-size: 0.76rem;
-  }
-  .countdown { min-width: 0; gap: 2px; padding: 4px 6px; border-radius: 8px; }
+  .stripMore { display: none; }
   .countdown small { font-size: 0.5rem; letter-spacing: 0; }
   .countdown small svg { width: 10px; height: 10px; }
   .countdownUnits b { font-size: 0.68rem; }

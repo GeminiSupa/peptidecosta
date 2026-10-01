@@ -11,7 +11,11 @@ export default function PromoTicker({ active = true, text = '', href = '', class
   if (!active || !cleanText) return null;
 
   const textLength = cleanText.length || 100;
-  const duration = Math.max(36, Math.round(textLength * (80 / 140)));
+  // Two copies when the sentence is already wider than a phone. Six copies
+  // when it is short, so the bar never shows an empty gap. Speed stays
+  // about the same either way, fast enough to see it move.
+  const copies = textLength > 80 ? 2 : 6;
+  const duration = Math.max(12, Math.round((textLength * copies) / 14));
   const ItemTag = tickerHref ? 'a' : 'div';
   const linkProps = tickerHref
     ? {
@@ -27,7 +31,7 @@ export default function PromoTicker({ active = true, text = '', href = '', class
           className="promo-banner-track"
           style={{ animationDuration: `${duration}s`, animationPlayState: 'running' }}
         >
-          {[...Array(6)].map((_, i) => (
+          {[...Array(copies)].map((_, i) => (
             <ItemTag key={i} className="promo-banner-text" style={{ padding: '0 20px' }} {...linkProps}>
               <Sparkles size={14} className="promo-icon" />
               <span>{cleanText}</span>

@@ -93,6 +93,7 @@ import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
 import { readDealPageOrderTag } from '@/hooks/useDealPageExperiment';
 import { CatalogPromoBanner } from '@/components/StorefrontChrome';
+import { CatalogCroTicker, CatalogCroHero, CatalogCroTrust, CatalogCroStats } from '@/components/CatalogCroDesktop';
 import ExitIntentOffer from '@/components/catalog/ExitIntentOffer';
 import { mergeLandingPageSettings } from '@/lib/landingContent';
 import {
@@ -3862,6 +3863,7 @@ export default function CatalogPage() {
       className={`catalog-page-shell min-h-screen${searchFocused ? ' catalog-search-open' : ''}`}
       suppressHydrationWarning
     >
+      <CatalogCroTicker lang={lang} />
       <CatalogPromoBanner lang={lang} settings={landingSettings} forceActive mode="ticker" />
       <div className="catalog-sticky-stack">
       <header className="header-top-section catalog-topbar">
@@ -3873,13 +3875,23 @@ export default function CatalogPage() {
           >
             <ChevronLeft size={22} aria-hidden="true" />
           </Link>
+          <div className="catalog-brand-cluster">
           <Link href="/" className="logo logo--emblem catalog-topbar-logo">
             <img
               src="/logo.webp"
               alt="Peptides Costa Rica"
               className="logo-emblem"
             />
+            <img
+              src="/figma/catalog-logo.png"
+              alt=""
+              className="catalog-wordmark"
+            />
           </Link>
+          <Link href="/about" className="catalog-about-link">
+            {lang === 'en' ? 'About' : 'Nosotros'}
+          </Link>
+          </div>
           <div className="header-controls">
             <select
               className="header-select"
@@ -4217,6 +4229,38 @@ export default function CatalogPage() {
       </div>
       </div>
 
+        <CatalogCroHero
+          lang={lang}
+          rating={liveTrustpilotRating}
+          settings={landingSettings}
+          onClaim={() => {
+            setDealOnly(false);
+            setActiveCategory('all');
+            setSortOrder('pop');
+            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        />
+        <CatalogCroTrust lang={lang} />
+        <nav className="catalog-cro-cats" aria-label={lang === 'en' ? 'Product categories' : 'Categorías de productos'}>
+          <button
+            type="button"
+            className={activeCategory === 'all' && !(dealOnly && weeklyDeal) ? 'is-on' : ''}
+            onClick={() => { setDealOnly(false); setActiveCategory('all'); setSortOrder('pop'); }}
+          >
+            {lang === 'en' ? 'Best Sellers' : 'Más vendidos'}
+          </button>
+          {categoriesList.filter((cat) => cat !== 'all').map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={activeCategory === cat && !(dealOnly && weeklyDeal) ? 'is-on' : ''}
+              onClick={() => { setDealOnly(false); setActiveCategory(cat); }}
+            >
+              {String(getCategoryChipLabel(cat)).replace(/\s+(Compounds|Peptides)$/i, '')}
+            </button>
+          ))}
+        </nav>
+
         <div className="container catalog-deal-line">
           <BulkWholesaleSpotlight lang={lang} compact />
         </div>
@@ -4465,8 +4509,8 @@ export default function CatalogPage() {
               };
 
               return (
+                <React.Fragment key={card.key}>
                 <div 
-                  key={card.key}
                   className={cardClass}
                   onClick={() => handleProductClick(p)}
                 >
@@ -4535,8 +4579,8 @@ export default function CatalogPage() {
                   <div className="product-info">
                     {(() => {
                       const units = Number(p.inventoryCount);
-                      const scarcity = inStock && Number.isFinite(units) && units > 0
-                        ? (lang === 'en' ? `Only ${units} left in stock` : `Solo quedan ${units} en inventario`)
+                      const scarcity = inStock && Number.isFinite(units) && units > 0 && units < 20
+                        ? (lang === 'en' ? `Only ${units} left` : `Quedan ${units}`)
                         : '';
                       return <div className="card-scarcity">{scarcity}</div>;
                     })()}
@@ -4544,8 +4588,7 @@ export default function CatalogPage() {
                     {(() => {
                       const blurb = productComposition(p.product, lang)
                         || withRetatrutideLead(p.product, lang === 'en' ? p.descriptionEn : p.descriptionEs, lang);
-                      if (!blurb) return null;
-                      return <div className="product-card-blurb">{blurb}</div>;
+                      return <div className="product-card-blurb">{blurb || ''}</div>;
                     })()}
                     <div className="product-pricing">
                       {isBac ? (
@@ -4589,12 +4632,13 @@ export default function CatalogPage() {
                         ? <span className="price-sub" style={{ color: '#16a34a', flexBasis: '100%' }}>{lang === 'en' ? '1 free with every peptide' : '1 gratis con cada péptido'}</span>
                         : pSub && <span className="price-sub">{promoPct > 0 ? promoPriceLabel(currency === 'USD' ? 'CRC' : 'USD') : pSub}</span>}
                     </div>
+                    <div className="card-size-slot">
                     {showSizes && (
                       <div
                         className="dosage-block"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Seleccionar tamaño'}</div>
+                        <div className="dosage-label">{lang === 'en' ? 'Select vial strength' : 'Seleccionar la dosis'}</div>
                         <div className="dosage-chips">
                           {sizeMenu.visible.map((item) => {
                             const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
@@ -4632,6 +4676,7 @@ export default function CatalogPage() {
                         </div>
                       </div>
                     )}
+                    </div>
                     <div className="product-actions">
                       {inStock ? (
                         // The card always shows the Add button; quantity is
@@ -4661,9 +4706,16 @@ export default function CatalogPage() {
                   </div>
                   </div>
                 </div>
+                {idx === 3 && (
+                  <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
+                )}
+                </React.Fragment>
               );
             })}
           </div>
+          {groupCatalogCards(filteredProducts).length < 4 && (
+            <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
+          )}
           </>
         )}
         </div>
@@ -5833,7 +5885,7 @@ export default function CatalogPage() {
                           <Share2 size={16} />
                         </button>
                       </div>
-                      {inStock && hasUnits && (
+                      {inStock && hasUnits && units < 20 && (
                         <p className="product-page-left">{en ? `Only ${units} left in stock` : `Solo quedan ${units} en inventario`}</p>
                       )}
                       <h2 id="product-detail-title">{catalogFacingCompound(catalogCompoundAndSize(selectedProduct).compound, lang)}</h2>
@@ -6143,9 +6195,6 @@ export default function CatalogPage() {
               window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
             }}>
               {lang === 'en' ? 'Contact WhatsApp' : 'Contactar WhatsApp'}
-            </a>
-            <a href="/admin" style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '500' }}>
-              {lang === 'en' ? 'Admin Portal' : 'Portal de Admin'}
             </a>
           </div>
         </div>
