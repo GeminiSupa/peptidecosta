@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
 
-import { CATALOG_CATEGORY_NAMES, catalogCompoundAndSize, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
+import { CATALOG_CATEGORY_NAMES, cardOpeningItem, catalogCompoundAndSize, composeStoredProductName, groupCatalogCards, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import {
   calculateProductProfit,
   calculateSalesVelocity,
@@ -21,13 +21,6 @@ function compoundKey(product) {
     product: composeStoredProductName(product?.product, product?.vialSize),
     vialSize: product?.vialSize,
   }).compound.trim().toLowerCase();
-}
-
-/** The size shown on a row, whether it sits in its own field or in the name. */
-function sizeLabel(product) {
-  const explicit = String(product?.vialSize || '').trim();
-  if (explicit) return explicit;
-  return catalogCompoundAndSize({ product: product?.product }).size || '';
 }
 
 function nameWithoutSize(product) {
@@ -117,20 +110,32 @@ export default function ProductsManager({
     return [...CATALOG_CATEGORY_NAMES, ...others];
   }, [products]);
   /**
-   * The size each compound currently opens on, keyed by the compound name.
+   * What the catalog card for each compound opens on, keyed by compound.
    *
-   * Every row of a compound shows this, not just the ticked one, so ticking
-   * 20mg on the GLP-1 20mg row is visible from the 5mg row too — otherwise the
-   * only way to know a compound's default was to scroll its rows and look for
-   * the tick.
+   * Every row of a compound shows the same answer, not just the ticked one, so
+   * ticking 20mg on the GLP-1 20mg row is visible from the 5mg row too. And
+   * where nothing is ticked, the row still says which size customers land on —
+   * which is not always the smallest, because a card skips a size that is out
+   * of stock.
+   *
+   * Run through the catalog's own cardOpeningItem over the same stock rule, so
+   * this reports what the catalog will do rather than a second guess at it.
+   * Sorted in stock first beforehand, as the catalog sorts before it groups.
    */
-  const defaultSizeByCompound = useMemo(() => {
+  const openingSizeByCompound = useMemo(() => {
+    const sellable = (prod) => !/out of stock|coming soon|agotado/i.test(String(prod?.status || ''));
+    const ordered = [...products]
+      .map((prod, index) => ({ prod, index }))
+      .sort((a, b) => (sellable(b.prod) ? 1 : 0) - (sellable(a.prod) ? 1 : 0) || a.index - b.index)
+      .map(({ prod }) => ({ ...prod, product: composeStoredProductName(prod.product, prod.vialSize) }));
+
     const map = {};
-    for (const prod of products) {
-      if (prod?.isDefaultSize !== true) continue;
-      const compound = compoundKey(prod);
-      if (!compound || map[compound]) continue;
-      map[compound] = sizeLabel(prod) || composeStoredProductName(prod.product, prod.vialSize);
+    for (const card of groupCatalogCards(ordered)) {
+      const key = card.key;
+      const ticked = card.items.find((item) => item.product.isDefaultSize === true);
+      const opening = ticked || cardOpeningItem(card, sellable);
+      if (!opening) continue;
+      map[key] = { size: opening.size || card.compound, chosen: Boolean(ticked), sizes: card.items.length };
     }
     return map;
   }, [products]);
@@ -521,23 +526,30 @@ export default function ProductsManager({
                   <td data-label="Default size" style={{ textAlign: 'center' }}>
                     {(() => {
                       const isDefault = p.isDefaultSize === true;
-                      const compoundDefault = defaultSizeByCompound[compoundKey(p)];
-                      const note = isDefault
+                      const opening = openingSizeByCompound[compoundKey(p)];
+                      const single = !opening || opening.sizes < 2;
+                      const note = single
+                        ? 'Only size'
+                        : isDefault
                         ? 'Opens on this size'
-                        : compoundDefault
-                        ? `Opens on ${compoundDefault}`
-                        : 'No default set';
+                        : opening.chosen
+                        ? `Opens on ${opening.size}`
+                        : `Opens on ${opening.size} — not chosen`;
+                      const colour = single ? '#475569' : isDefault ? '#4ade80' : opening.chosen ? '#94a3b8' : '#f59e0b';
                       return (
                         <label
-                          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                          title="Tick this to make the catalog card for this peptide open on this size. Only one size can be the default, so ticking this one unticks the others."
+                          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: single ? 'default' : 'pointer' }}
+                          title={single
+                            ? 'This peptide has only one size, so there is nothing to choose.'
+                            : 'Tick this to make the catalog card for this peptide open on this size. Only one size can be the default, so ticking this one unticks the others. Amber means nobody has chosen, and the card is opening on whatever size comes first and is in stock.'}
                         >
                           <input
                             type="checkbox"
                             checked={isDefault}
+                            disabled={single}
                             onChange={(e) => handleDefaultSizeChange?.(p.id, e.target.checked)}
                           />
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: isDefault ? '#4ade80' : compoundDefault ? '#94a3b8' : '#64748b', lineHeight: 1.2 }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colour, lineHeight: 1.2 }}>
                             {note}
                           </span>
                         </label>
@@ -1155,12 +1167,14 @@ export default function ProductsManager({
                 </select>
                 <small>
                   {(() => {
-                    const current = defaultSizeByCompound[compoundKey(mobileEditProduct)];
+                    const opening = openingSizeByCompound[compoundKey(mobileEditProduct)];
                     const now = mobileEditProduct.isDefaultSize === true
-                      ? 'This size is the default.'
-                      : current
-                      ? `Right now this peptide opens on ${current}.`
-                      : 'Right now this peptide has no default set.';
+                      ? 'This size is the chosen default.'
+                      : !opening
+                      ? ''
+                      : opening.chosen
+                      ? `Right now this peptide opens on ${opening.size}.`
+                      : `Nobody has chosen for this peptide, so it opens on ${opening.size} — whatever comes first and is in stock.`;
                     return `${now} Turning this on here changes this one size only — untick the old default on its own row, or use the table, which does it for you.`;
                   })()}
                 </small>

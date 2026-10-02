@@ -28,6 +28,7 @@ import {
   withRetatrutideLead,
   buildAzList,
   groupCatalogCards,
+  cardOpeningItem,
   visibleSizeChips,
 } from '@/lib/catalogCategories.mjs';
 import {
@@ -4493,11 +4494,7 @@ export default function CatalogPage() {
               let leadNotes = 2;
               return groupCatalogCards(filteredProducts).map((card, idx) => {
               const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
-              const lead = card.items.find((item) => item.product.product === card.lead);
-              const leadSellable = lead && (isBacWater(lead.product.product) || isInStock(lead.product.status));
-              const fallback = (leadSellable ? lead : null)
-                || card.items.find((item) => isBacWater(item.product.product) || isInStock(item.product.status))
-                || card.items[0];
+              const fallback = cardOpeningItem(card, (prod) => isBacWater(prod.product) || isInStock(prod.status));
               const p = (chosen || fallback).product;
               const showSizes = card.items.some((item) => item.size);
               const sizeMenu = visibleSizeChips(card.items, card.lead);

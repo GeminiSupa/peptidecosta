@@ -329,6 +329,26 @@ export function groupCatalogCards(products = []) {
   return order;
 }
 
+/**
+ * The size a grouped card opens on before the shopper touches anything.
+ *
+ * The card leads on the first row of its compound in the order it was given,
+ * unless that size cannot be bought — an out-of-stock 5mg must not be what a
+ * card presents — in which case it falls to the smallest size that can.
+ *
+ * Shared so the Products grid can report the same answer the catalog will
+ * reach; two copies of this rule would drift the first time either moved.
+ *
+ * @param card       one entry from groupCatalogCards
+ * @param isSellable (product) => boolean, the caller's stock rule
+ */
+export function cardOpeningItem(card, isSellable = () => true) {
+  const items = Array.isArray(card?.items) ? card.items : [];
+  const lead = items.find((item) => item?.product?.product === card?.lead);
+  if (lead && isSellable(lead.product)) return lead;
+  return items.find((item) => isSellable(item.product)) || items[0] || null;
+}
+
 /** Three sizes or fewer stay as chips. Four or more become two chips plus More. */
 const SIZE_CHIP_CAP = 3;
 const SIZE_CHIPS_BEFORE_MORE = 2;

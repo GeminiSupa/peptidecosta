@@ -18,6 +18,7 @@ import {
   catalogCompoundAndSize,
   composeStoredProductName,
   groupCatalogCards,
+  cardOpeningItem,
   visibleSizeChips,
   azLetter,
   buildAzList,
@@ -208,6 +209,39 @@ test('a default size already among the chips does not reshuffle them', () => {
   const shown = visibleSizeChips(card.items, card.lead);
   assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '10mg']);
   assert.deepEqual(shown.overflow.map((item) => item.size), ['15mg', '20mg']);
+});
+
+test('a card opens on its lead size, and skips one that cannot be bought', () => {
+  const inStock = (prod) => prod.status !== 'Out of Stock';
+
+  // Nothing ticked, everything in stock: the first row given wins.
+  const plain = groupCatalogCards([
+    { product: 'HGH 30 IU', status: 'In Stock' },
+    { product: 'HGH 12 IU', status: 'In Stock' },
+  ])[0];
+  assert.equal(cardOpeningItem(plain, inStock).size, '30 IU');
+
+  // The lead is out of stock, so the smallest size that is not takes over.
+  const gap = groupCatalogCards([
+    { product: 'SS-31 10mg', status: 'Out of Stock' },
+    { product: 'SS-31 25mg', status: 'In Stock' },
+  ])[0];
+  assert.equal(cardOpeningItem(gap, inStock).size, '25mg');
+
+  // A ticked default leads even when it is not the first row given.
+  const ticked = groupCatalogCards([
+    { product: 'GLP-1 5mg', status: 'In Stock' },
+    { product: 'GLP-1 20mg', status: 'In Stock', isDefaultSize: true },
+  ])[0];
+  assert.equal(cardOpeningItem(ticked, inStock).size, '20mg');
+
+  // Every size out of stock: the card still has to show something.
+  const none = groupCatalogCards([
+    { product: 'GLOW 70mg', status: 'Out of Stock' },
+    { product: 'GLOW 50mg', status: 'Out of Stock' },
+  ])[0];
+  assert.equal(cardOpeningItem(none, inStock).size, '50mg');
+  assert.equal(cardOpeningItem({ items: [] }, inStock), null);
 });
 
 test('a size saved in its own field becomes the chip, and a size left in the name still does', () => {
