@@ -112,7 +112,8 @@ test('the pay-by-link page never returns raw gateway or exception text', () => {
 
   assert.ok(!source.includes('error: err.message'), 'raw exception text is still returned');
   assert.ok(
-    !source.includes("error: 'Shield Hub Pay credentials are not configured'"),
+    !source.includes("error: 'Shield Hub Pay credentials are not configured'")
+    && !source.includes("error: 'Chargex credentials are not configured'"),
     'internal configuration wording is still returned',
   );
   assert.match(source, /stopPayment\('unconfirmed', customerLang, 502/);

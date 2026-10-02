@@ -97,12 +97,12 @@ test('the pause is checked before the gateway is configured or reached', () => {
   // Order matters: a paused shop must answer "we are sorry, we are working on
   // it", not "card payment is not available" or, worse, a real charge.
   for (const [name, source, configured] of [
-    ['process-card', processCard, 'isShieldHubPayConfigured'],
-    ['pay-by-link', payByLink, 'isShieldHubPayConfigured'],
+    ['process-card', processCard, 'isChargxConfigured'],
+    ['pay-by-link', payByLink, 'isChargxConfigured'],
   ]) {
     const pauseAt = source.indexOf('areCardPaymentsPaused()');
     const configuredAt = source.indexOf(`if (!${configured}())`);
-    const chargeAt = source.indexOf('processShieldHubPayTransaction(');
+    const chargeAt = source.indexOf('processChargxCardPayment(');
     assert.ok(pauseAt > 0, `${name} does not check the pause at all`);
     assert.ok(pauseAt < configuredAt, `${name} checks the pause after the gateway config check`);
     assert.ok(pauseAt < chargeAt, `${name} checks the pause after charging the card`);

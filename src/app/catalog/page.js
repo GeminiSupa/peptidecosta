@@ -124,7 +124,7 @@ const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
 const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 // 'live' hides the sandbox/test labels. Keep unset (sandbox) until the LIVE
-// Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
+// Chargex key is in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
@@ -5741,8 +5741,8 @@ export default function CatalogPage() {
                     </div>
                     <p className="card-payment-security-note">
                       {lang === 'en'
-                        ? 'Card details are sent securely to Shield Hub Pay and are not stored by Costa Peptides.'
-                        : 'Los datos de la tarjeta se envían de forma segura a Shield Hub Pay y no se almacenan en Costa Peptides.'}
+                        ? 'Card details are sent securely to Chargex and are not stored by Costa Peptides.'
+                        : 'Los datos de la tarjeta se envían de forma segura a Chargex y no se almacenan en Costa Peptides.'}
                     </p>
                   </div>
                   <p className="card-payment-fee-note">
@@ -5765,8 +5765,8 @@ export default function CatalogPage() {
                         </li>
                         <li>
                           {lang === 'en'
-                            ? <>It will appear on your statement as <strong>&ldquo;SOF IA&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
-                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;SOF IA&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
+                            ? <>It will appear on your statement as <strong>&ldquo;Chargex&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
+                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;Chargex&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
                         </li>
                       </ul>
                     </div>
@@ -5800,11 +5800,11 @@ export default function CatalogPage() {
                   <p className="card-payment-caption">
                     {CARD_CHECKOUT_LIVE
                       ? (lang === 'en'
-                        ? 'Secure Visa / Mastercard checkout powered by Shield Hub Pay'
-                        : 'Pago seguro con Visa / Mastercard mediante Shield Hub Pay')
+                        ? 'Secure Visa / Mastercard checkout powered by Chargex'
+                        : 'Pago seguro con Visa / Mastercard mediante Chargex')
                       : (lang === 'en'
-                        ? 'Secure card checkout powered by Shield Hub Pay sandbox'
-                        : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
+                        ? 'Secure card checkout powered by Chargex sandbox'
+                        : 'Pago seguro con tarjeta mediante Chargex sandbox')}
                   </p>
                   {currency === 'CRC' && (
                     <p className="card-payment-caption">

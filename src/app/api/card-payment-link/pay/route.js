@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCardPaymentOrderToken, getPublicBaseUrl } from '@/lib/cardPaymentLink';
-import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { normalizeShieldHubPayName } from '@/lib/shieldHubPay';
+import { isChargxConfigured, processChargxCardPayment } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
@@ -74,7 +75,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { orderNumber, token, card, customerEmail, customerIp, lang = 'es' } = body;
+    const { orderNumber, token, card, customerEmail, lang = 'es' } = body;
     customerLang = lang === 'en' ? 'en' : 'es';
 
     // The kill switch, ahead of every other check. A payment link already sent
@@ -86,8 +87,8 @@ export async function POST(request) {
     }
 
     // Checked after the body is read so the reply is in their language.
-    if (!isShieldHubPayConfigured()) {
-      return stopPayment('unavailable', customerLang, 500, 'Shield Hub Pay credentials are not configured');
+    if (!isChargxConfigured()) {
+      return stopPayment('unavailable', customerLang, 500, 'Chargex credentials are not configured');
     }
 
     if (!orderNumber || !token) {
@@ -151,18 +152,13 @@ export async function POST(request) {
     const name = splitName(order.customer_name);
     let transaction;
     try {
-      transaction = await processShieldHubPayTransaction({
+      transaction = await processChargxCardPayment({
         amount: amountUsd.toFixed(2),
-        currency: 'USD',
-        transaction_reference: order.order_number,
-        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(order.order_number)}&payment=card`,
-        notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
+        orderId: order.order_number,
         customer: {
-          first: name.first,
-          last: name.last,
+          name: normalizedCard.holder || `${name.first} ${name.last}`.trim(),
           email,
           phone: order.customer_phone,
-          ip: customerIp || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
         },
         billing: parseBillingAddress(order.shipping_address),
         card: normalizedCard,
@@ -178,6 +174,7 @@ export async function POST(request) {
     const patch = withPaymentStatusActivity(
       order,
       buildPaymentPatch(orderStatus, transaction, email),
+      { by: 'Chargex' },
     );
     const { error: updateError } = await supabase
       .from('orders')
@@ -214,7 +211,7 @@ export async function POST(request) {
       await supabase.from('admin_notifications').insert({
         type: 'payment_received',
         title: `Card payment approved: ${order.order_number}`,
-        body: `Shield Hub Pay approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
+        body: `Chargex approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
         link_tab: 'orders',
         link_ref: order.order_number,
       });

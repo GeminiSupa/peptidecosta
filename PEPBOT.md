@@ -174,7 +174,7 @@ Can be imported by any future bot route to compute totals consistently.
 ## Order Prefixes (admin dashboard reference)
 
   WPCR-  WhatsApp checkout (human, website)
-  CARD-  Shield Hub Pay card checkout (human, website)
+  CARD-  Chargex card checkout (human, website)
 
 Bot orders also carry sales_agent = "pepbot" in the orders table.
 

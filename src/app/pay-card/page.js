@@ -256,8 +256,8 @@ function CardPaymentContent() {
               <p className="card-pay-note">
                 <Lock size={14} />
                 {isEn
-                  ? 'Card details are processed by Shield Hub Pay and are not stored by Costa Peptides.'
-                  : 'Los datos de tarjeta son procesados por Shield Hub Pay y no se almacenan en Costa Peptides.'}
+                  ? 'Card details are processed by Chargex and are not stored by Costa Peptides.'
+                  : 'Los datos de tarjeta son procesados por Chargex y no se almacenan en Costa Peptides.'}
               </p>
               <div className="card-pay-statement-notice">
                 <p className="card-pay-statement-notice__heading">
@@ -271,8 +271,8 @@ function CardPaymentContent() {
                   </li>
                   <li>
                     {isEn
-                      ? <>Statement name: <strong>&ldquo;SOF IA&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
-                      : <>Nombre en el estado de cuenta: <strong>&ldquo;SOF IA&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
+                      ? <>Statement name: <strong>&ldquo;Chargex&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
+                      : <>Nombre en el estado de cuenta: <strong>&ldquo;Chargex&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
                   </li>
                 </ul>
               </div>

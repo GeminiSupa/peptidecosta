@@ -8116,7 +8116,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             alert(
               `${data.fullyRefunded ? 'Refunded' : 'Partly refunded'} ${refundOrder.order_number}.\n\n`
               + emailMessage
-              + '\n\nNow send the money back in Shield Hub Pay.'
+              + '\n\nNow send the money back in the Chargex dashboard.'
             );
           }}
         />

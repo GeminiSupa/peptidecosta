@@ -64,10 +64,10 @@ function ThankYouContent() {
       accountButton: "Set up my account",
       cardStatementTitle: "🏦 About your card statement",
       cardStatementBody: "So there are no surprises — here is exactly what to expect:",
-      cardStatementMexicoLabel: "Charged from Mexico:",
-      cardStatementMexicoDetail: "Our payment processor routes the charge through a Mexican bank with a USD conversion. This is completely normal — your order is with us in Costa Rica.",
+      cardStatementMexicoLabel: "Charged in US dollars:",
+      cardStatementMexicoDetail: "The card is charged in US dollars by Chargex. This is completely normal — your order is with us in Costa Rica.",
       cardStatementNameLabel: "Statement descriptor:",
-      cardStatementNameDetail: "The charge will appear as \"SOF IA\" on your card statement. That is our payment processor — it is us. Please do not dispute this charge.",
+      cardStatementNameDetail: "The charge will appear as \"Chargex\" on your card statement. That is our payment processor — it is us. Please do not dispute this charge.",
     },
     es: {
       title: "Orden Recibida",
@@ -90,10 +90,10 @@ function ThankYouContent() {
       accountButton: "Crear mi cuenta",
       cardStatementTitle: "🏦 Sobre tu estado de cuenta",
       cardStatementBody: "Para que no haya sorpresas — esto es exactamente lo que esperarás:",
-      cardStatementMexicoLabel: "Cargo desde México:",
-      cardStatementMexicoDetail: "Nuestro procesador de pagos enruta el cargo a través de un banco mexicano con conversión a USD. Esto es completamente normal — tu pedido es con nosotros en Costa Rica.",
+      cardStatementMexicoLabel: "Cargo en dólares:",
+      cardStatementMexicoDetail: "La tarjeta se cobra en dólares estadounidenses a través de Chargex. Esto es completamente normal — tu pedido es con nosotros en Costa Rica.",
       cardStatementNameLabel: "Nombre en el estado de cuenta:",
-      cardStatementNameDetail: "El cargo aparecerá como \"SOF IA\" en tu estado de cuenta. Ese es nuestro procesador de pagos — somos nosotros. Por favor no disputes este cargo.",
+      cardStatementNameDetail: "El cargo aparecerá como \"Chargex\" en tu estado de cuenta. Ese es nuestro procesador de pagos — somos nosotros. Por favor no disputes este cargo.",
     }
   };
 
@@ -403,7 +403,7 @@ function ThankYouContent() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '1px' }}>🇲🇽</span>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: '1px' }}>💵</span>
                 <div>
                   <span style={{ fontWeight: '700', color: '#e2e8f0', fontSize: '0.82rem' }}>{t.cardStatementMexicoLabel}</span>{' '}
                   <span style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.5 }}>{t.cardStatementMexicoDetail}</span>
@@ -414,9 +414,9 @@ function ThankYouContent() {
                 <div>
                   <span style={{ fontWeight: '700', color: '#e2e8f0', fontSize: '0.82rem' }}>{t.cardStatementNameLabel}</span>{' '}
                   <span style={{ color: '#94a3b8', fontSize: '0.82rem', lineHeight: 1.5 }}>
-                    {t.cardStatementNameDetail.split('"SOF IA"').map((part, i, arr) =>
+                    {t.cardStatementNameDetail.split('"Chargex"').map((part, i, arr) =>
                       i < arr.length - 1
-                        ? <React.Fragment key={i}>{part}<strong style={{ color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '1px 6px', borderRadius: '4px' }}>&ldquo;SOF IA&rdquo;</strong></React.Fragment>
+                        ? <React.Fragment key={i}>{part}<strong style={{ color: '#fbbf24', background: 'rgba(251,191,36,0.12)', padding: '1px 6px', borderRadius: '4px' }}>&ldquo;Chargex&rdquo;</strong></React.Fragment>
                         : <React.Fragment key={i}>{part}</React.Fragment>
                     )}
                   </span>

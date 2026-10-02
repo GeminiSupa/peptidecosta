@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { normalizeShieldHubPayName } from '@/lib/shieldHubPay';
+import { isChargxConfigured, processChargxCardPayment } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
@@ -10,8 +11,8 @@ import { internalJsonHeaders } from '@/lib/internalRequestAuth.mjs';
 
 export const runtime = 'nodejs';
 
-// Admin-only sandbox payment testing. Charges go to the Shield Hub Pay SANDBOX
-// account (mode: 'test') — no real money ever moves. Orders created here are
+// Admin-only sandbox payment testing. Charges go to the Chargex test store
+// (mode: 'test') — no real money ever moves. Orders created here are
 // unmistakably marked (TEST- prefix, payment_method 'card-test') so they can't
 // be confused with, or counted alongside, real customer orders. The public
 // checkout routes have no path to this mode: it exists only behind superadmin
@@ -101,9 +102,9 @@ export async function POST(request) {
   if (auth.error) return auth.error;
 
   try {
-    if (!isShieldHubPayConfigured('test')) {
+    if (!isChargxConfigured('test')) {
       return NextResponse.json(
-        { error: 'Sandbox credentials are not configured (SHIELD_HUB_PAY_TEST_CLIENT_ID / SHIELD_HUB_PAY_TEST_API_SECRET).' },
+        { error: 'Sandbox credentials are not configured (CHARGX_TEST_PUBLISHABLE_API_KEY).' },
         { status: 500 },
       );
     }
@@ -190,21 +191,15 @@ export async function POST(request) {
       return NextResponse.json({ ok: false, blocked: true, reason: 'in_flight', error: 'A payment for this order is already being processed' }, { status: 409 });
     }
 
-    const baseUrl = APP_URL.replace(/\/$/, '');
     let transaction;
     try {
-      transaction = await processShieldHubPayTransaction({
+      transaction = await processChargxCardPayment({
         amount: Number(order.total_usd || 1).toFixed(2),
-        currency: 'USD',
-        transaction_reference: orderNumber,
-        redirectback_url: `${baseUrl}/thank-you?order=${encodeURIComponent(orderNumber)}`,
-        notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
+        orderId: orderNumber,
         customer: {
-          first: 'Test',
-          last: 'Admin',
+          name: normalizedCard.holder || 'Test Admin',
           email: auth.user?.email || 'test@admin.local',
           phone: '00000000',
-          ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
         },
         billing: {
           address: 'Test Address',
