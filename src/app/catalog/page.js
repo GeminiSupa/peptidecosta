@@ -3729,10 +3729,10 @@ export default function CatalogPage() {
 
         {hasVolumeDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
-            <span className="cart-total-label" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d' }}>
+            <span className="cart-total-label" style={{ color: '#15803d' }}>
               {lang === 'en' ? `VOLUME DISCOUNT (${percentLabel(volumePct)}%)` : `DESC. VOLUMEN (${percentLabel(volumePct)}%)`}
             </span>
-            <span className="cart-total-val" style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontSize: compact ? '1rem' : undefined }}>
+            <span className="cart-total-val" style={{ color: '#15803d', fontSize: compact ? '1rem' : undefined }}>
               -{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}
             </span>
           </div>
@@ -3740,19 +3740,19 @@ export default function CatalogPage() {
 
         {hasPromoDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
-            <span className="cart-total-label" style={{ color: '#38bdf8' }}>
+            <span className="cart-total-label" style={{ color: '#0369a1' }}>
               {lang === 'en'
                 ? `PROMO DISCOUNT (${percentLabel(appliedPromo?.discount_pct)}%)`
                 : `DESCUENTO PROMO (${percentLabel(appliedPromo?.discount_pct)}%)`}
             </span>
-            <span className="cart-total-val" style={{ color: '#38bdf8', fontSize: compact ? '1rem' : undefined }}>
+            <span className="cart-total-val" style={{ color: '#0369a1', fontSize: compact ? '1rem' : undefined }}>
               -{formatPriceVal(getPromoDiscountAmount(), currency)}
             </span>
           </div>
         )}
         {hasWeeklyDealDiscount && (
           <div className="cart-total-row" style={{ marginBottom: compact ? '6px' : '8px' }}>
-            <span className="cart-total-label" style={{ color: '#f97316' }}>
+            <span className="cart-total-label" style={{ color: '#c2410c' }}>
               {isFlashSale
                 ? (lang === 'en'
                   ? `FLASH SALE (${percentLabel(weeklyPct)}% OFF)`
@@ -3761,7 +3761,7 @@ export default function CatalogPage() {
                   ? `WEEKLY DEAL (${percentLabel(weeklyPct)}% OFF)`
                   : `OFERTA SEMANAL (${percentLabel(weeklyPct)}% DESC.)`)}
             </span>
-            <span className="cart-total-val" style={{ color: '#f97316' }}>-{formatPriceVal(getPromoDiscountAmount(), currency)}</span>
+            <span className="cart-total-val" style={{ color: '#c2410c' }}>-{formatPriceVal(getPromoDiscountAmount(), currency)}</span>
           </div>
         )}
 
@@ -3811,7 +3811,7 @@ export default function CatalogPage() {
           </span>
           <span
             className="cart-total-val"
-            style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '800' }}
+            style={{ color: '#15803d', fontWeight: '800' }}
           >
             {formatPriceVal(getFinalTotal(), currency)}
           </span>
@@ -4577,6 +4577,7 @@ export default function CatalogPage() {
                     })()}
                   </div>
                   <div className="product-info">
+                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
                       const units = Number(p.inventoryCount);
                       const scarcity = inStock && Number.isFinite(units) && units > 0 && units < 20
@@ -4584,7 +4585,6 @@ export default function CatalogPage() {
                         : '';
                       return <div className="card-scarcity">{scarcity}</div>;
                     })()}
-                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
                       const blurb = productComposition(p.product, lang)
                         || withRetatrutideLead(p.product, lang === 'en' ? p.descriptionEn : p.descriptionEs, lang);
@@ -4706,20 +4706,15 @@ export default function CatalogPage() {
                   </div>
                   </div>
                 </div>
-                {idx === 3 && (
-                  <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
-                )}
                 </React.Fragment>
               );
             })}
           </div>
-          {groupCatalogCards(filteredProducts).length < 4 && (
-            <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
-          )}
           </>
         )}
         </div>
       )}
+      <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
       </main>
 
       {/* One bottom action at a time: WhatsApp for an empty cart, checkout once
@@ -5012,19 +5007,19 @@ export default function CatalogPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '1.1rem' }}>🏷️</span>
                   <div>
-                    <div style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '700', fontSize: '0.8rem' }}>
+                    <div style={{ color: '#15803d', fontWeight: '700', fontSize: '0.8rem' }}>
                       {lang === 'en'
                         ? `Volume Discount: ${getEffectiveVolumePct()}% OFF`
                         : `Desc. por Volumen: ${getEffectiveVolumePct()}% DESC.`}
                     </div>
-                    <div style={{ color: theme === 'dark' ? '#86efac' : '#166534', fontSize: '0.7rem', marginTop: '2px' }}>
+                    <div style={{ color: '#166534', fontSize: '0.7rem', marginTop: '2px' }}>
                       {lang === 'en'
                         ? `${getCartVialCount()} vials in cart`
                         : `${getCartVialCount()} viales en carrito`}
                     </div>
                   </div>
                 </div>
-                <span style={{ color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: '700', fontSize: '0.85rem' }}>-{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}</span>
+                <span style={{ color: '#15803d', fontWeight: '700', fontSize: '0.85rem' }}>-{formatPriceVal(getCartTotal() - getDiscountedTotal(), currency)}</span>
               </div>
             )}
 
@@ -5051,13 +5046,13 @@ export default function CatalogPage() {
             {/* BAC water breakdown — the free gift always shows so the customer
                 sees it even when they add no paid water; billed extras follow. */}
             {(getBacSummary().freeUnits > 0 || getBacSummary().bacUnits > 0) && (
-              <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', fontSize: '0.75rem', color: theme === 'dark' ? '#7dd3fc' : '#0369a1', fontWeight: '600' }}>
+              <div style={{ background: 'rgba(56, 189, 248, 0.1)', border: '1px solid rgba(56, 189, 248, 0.25)', borderRadius: '10px', padding: '8px 12px', marginBottom: '8px', fontSize: '0.75rem', color: '#0369a1', fontWeight: '600' }}>
                 {getBacSummary().freeUnits > 0 && (
                   <div style={bacBreakdownRowStyle}>
                     <span style={bacBreakdownLabelStyle}>🎁 {lang === 'en'
                       ? `Standard peptide benefit — free BAC water: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`
                       : `Beneficio estándar del péptido — agua BAC gratis: ${getBacSummary().freeLines.map((l) => `${l.qty} × ${l.sizeMl}ml`).join(' + ')}`}</span>
-                    <span style={{ ...bacBreakdownAmountStyle, color: theme === 'dark' ? '#4ade80' : '#15803d', fontWeight: 800 }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
+                    <span style={{ ...bacBreakdownAmountStyle, color: '#15803d', fontWeight: 800 }}>{lang === 'en' ? 'FREE' : 'GRATIS'}</span>
                   </div>
                 )}
                 {getBacSummary().paidLines.map((line, index) => (
@@ -5098,8 +5093,8 @@ export default function CatalogPage() {
               const loud = Boolean(tierNudge);
               return (
                 <div style={loud
-                  ? { marginBottom: '10px', padding: '12px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(249,115,22,.28), rgba(234,88,12,.14))', border: '1px solid rgba(249,115,22,.65)', color: theme === 'dark' ? '#ffedd5' : '#9a3412', fontSize: '0.95rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.35 }
-                  : { marginBottom: '10px', padding: '9px 12px', borderRadius: '10px', background: 'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#ef4444' : '#f97316', fontSize: '.78rem', fontWeight: 700 }}>
+                  ? { marginBottom: '10px', padding: '12px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, rgba(249,115,22,.28), rgba(234,88,12,.14))', border: '1px solid rgba(249,115,22,.65)', color: '#9a3412', fontSize: '0.95rem', fontWeight: 800, textAlign: 'center', lineHeight: 1.35 }
+                  : { marginBottom: '10px', padding: '9px 12px', borderRadius: '10px', background: 'rgba(249,115,22,.1)', color: getWeeklyDealLimitError() ? '#b91c1c' : '#c2410c', fontSize: '.78rem', fontWeight: 700 }}>
                   {loud
                     ? `🔥 ${tierNudge}`
                     : (offerChoice
@@ -5554,18 +5549,14 @@ export default function CatalogPage() {
                     icon: <CreditCard size={18} />,
                     iconColor: '#0ea5e9', // Blue
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
-                    detail: CARD_PAYMENTS_PAUSED
-                      ? (lang === 'en' ? 'Temporarily unavailable' : 'No disponible temporalmente')
-                      : (CARD_CHECKOUT_ENABLED
-                        ? (CARD_CHECKOUT_LIVE
-                          ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
-                          : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox'))
-                        : (lang === 'en' ? 'Coming soon' : 'Próximamente')),
-                    badge: CARD_PAYMENTS_PAUSED
+                    detail: !CARD_CHECKOUT_AVAILABLE
+                      ? (lang === 'en' ? 'Under maintenance' : 'En mantenimiento')
+                      : (CARD_CHECKOUT_LIVE
+                        ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
+                        : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')),
+                    badge: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Maintenance' : 'Mantenimiento')
-                      : (CARD_CHECKOUT_ENABLED
-                        ? (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba'))
-                        : (lang === 'en' ? 'Soon' : 'Pronto')),
+                      : (CARD_CHECKOUT_LIVE ? null : (lang === 'en' ? 'Test' : 'Prueba')),
                     disabled: !CARD_CHECKOUT_AVAILABLE,
                   },
                 ].map(method => (
@@ -5885,10 +5876,10 @@ export default function CatalogPage() {
                           <Share2 size={16} />
                         </button>
                       </div>
+                      <h2 id="product-detail-title">{catalogFacingCompound(catalogCompoundAndSize(selectedProduct).compound, lang)}</h2>
                       {inStock && hasUnits && units < 20 && (
                         <p className="product-page-left">{en ? `Only ${units} left in stock` : `Solo quedan ${units} en inventario`}</p>
                       )}
-                      <h2 id="product-detail-title">{catalogFacingCompound(catalogCompoundAndSize(selectedProduct).compound, lang)}</h2>
                       <div className="product-page-rating">{renderRatingSummary(selectedProduct.product)}</div>
                       <p className="product-page-price">
                         <strong>{priceLabel}</strong>

@@ -86,13 +86,11 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
   return (
     <section className={styles.hero} aria-label={en ? 'Deal of the Week' : 'Oferta de la Semana'}>
       <div className={styles.copy}>
-        <div className={styles.scores} aria-label={en ? 'Review scores' : 'Puntajes'}>
-          {score && (
+        {score && (
+          <div className={styles.scores} aria-label={en ? 'Review score' : 'Puntaje'}>
             <span><Star size={14} fill="#111" aria-hidden="true" /> {score}</span>
-          )}
-          <span>f 5.0</span>
-          <span>G 5.0</span>
-        </div>
+          </div>
+        )}
         <h2>{campaign.active
           ? (en ? 'Deal of the Week' : 'Oferta de la Semana')
           : (en ? 'Save more as you add vials' : 'Ahorra más al agregar viales')}</h2>
@@ -103,6 +101,9 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
               <span>{line}</span>
             </li>
           ))}
+          <li className={styles.note}>
+            {en ? 'The best saving is applied. These do not combine.' : 'Se aplica el mayor ahorro. No se combinan.'}
+          </li>
         </ul>
         <div className={styles.actions}>
           <button type="button" className={styles.claim} onClick={onClaim}>
@@ -110,10 +111,14 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
           </button>
           {showClock && (
             <div className={styles.clock} role="timer">
-              <span><b>{String(countdown.days).padStart(2, '0')}</b><small>{en ? 'Days' : 'Días'}</small></span>
+              {countdown.days > 0 && (
+                <span><b>{String(countdown.days).padStart(2, '0')}</b><small>{en ? 'Days' : 'Días'}</small></span>
+              )}
               <span><b>{String(countdown.hours).padStart(2, '0')}</b><small>{en ? 'Hrs' : 'Hrs'}</small></span>
               <span><b>{String(countdown.minutes).padStart(2, '0')}</b><small>{en ? 'Min' : 'Min'}</small></span>
-              <span><b>{String(countdown.seconds).padStart(2, '0')}</b><small>{en ? 'Sec' : 'Seg'}</small></span>
+              {countdown.days < 1 && (
+                <span><b>{String(countdown.seconds).padStart(2, '0')}</b><small>{en ? 'Sec' : 'Seg'}</small></span>
+              )}
             </div>
           )}
         </div>
