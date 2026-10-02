@@ -12,6 +12,11 @@ import { checkoutOrderStatus } from '@/lib/checkoutOrderStatus.mjs';
 import { ORDER_RESEARCH_ACK_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { rememberOrderAddress } from '@/lib/accountAddress.mjs';
+import {
+  CustomerSessionError,
+  applyCustomerOrderOwnership,
+  resolveCustomerOrderOwner,
+} from '@/lib/customerOrderOwnership.mjs';
 import { agentMatchKeys } from '@/lib/agentOrders';
 import { CUSTOMER_HISTORY_SOURCE, buildAgentNameResolver, lookupHistoricalAgent } from '@/lib/agentAttribution.mjs';
 import { getNotificationRecipients } from '@/lib/notificationRecipients.mjs';
