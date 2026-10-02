@@ -79,8 +79,10 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
     ? settings.pressItems
     : DEFAULT_LANDING_PAGE_SETTINGS.pressItems
   ).filter((item) => item?.outlet);
-  const press = settings?.pressActive === false ? null : pressItems[0];
-  const quote = press?.[`quote${en ? 'En' : 'Es'}`] || '';
+  const press = settings?.pressActive === false
+    ? null
+    : (pressItems.find((item) => /tico times/i.test(item.outlet || '')) || pressItems[0]);
+  const quote = en ? '"Serving Quality peptide products"' : '"Productos de péptidos de calidad"';
   const score = rating ? String(rating) : '';
 
   return (
@@ -122,13 +124,23 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
             </div>
           )}
         </div>
+        <p className={styles.proof}>
+          <span className={styles.faces} aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          {en
+            ? '244 researchers started using our products last week alone.'
+            : '244 investigadores empezaron a usar nuestros productos solo la semana pasada.'}
+        </p>
       </div>
       <div className={styles.visual}>
         <img src="/figma/catalog-hero-vials.png" alt="" />
         {press && (
           <a className={styles.press} href={press.url} target="_blank" rel="noopener noreferrer">
             <small>{en ? 'As seen in' : 'Visto en'}</small>
-            <img src="/figma/catalog-press.png" alt={press.outlet} />
+            <img src={press.logoUrl || '/tico-times-logo.png'} alt={press.outlet} />
             {quote && <em>{quote}</em>}
           </a>
         )}

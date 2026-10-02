@@ -319,8 +319,20 @@ function mixTierNudgeText(next, lang) {
  * cart actually gets — those messages must not be replaced by a step the
  * checkout will not apply.
  */
+/** How many more vials, and what percent, until the next Mix & Match step.
+ *  Null when checkout would not apply that step. */
+export function dealOfferNextTierGap(choice) {
+  if (!choice || (choice.kind !== MIX_OFFER_TYPE && choice.kind !== 'none')) return null;
+  const next = nextUnreachedMix(choice);
+  if (!next) return null;
+  const toGo = next.minUnits - next.units;
+  const pct = Math.round(next.pct * 100);
+  if (toGo <= 0 || pct <= 0) return null;
+  return { toGo, pct };
+}
+
 export function dealOfferNextTierNudge(choice, lang = 'en') {
-  if (!choice || (choice.kind !== MIX_OFFER_TYPE && choice.kind !== 'none')) return '';
+  if (!dealOfferNextTierGap(choice)) return '';
   const next = nextUnreachedMix(choice);
   return next ? mixTierNudgeText(next, lang) : '';
 }

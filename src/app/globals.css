@@ -1499,12 +1499,39 @@ body {
     opacity: 0.55;
 }
 
+.product-page-qty-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
 .product-page-qty {
     width: fit-content;
     border: 1px solid #e2e8f0;
     border-radius: 999px;
     padding: 4px;
     background: var(--bg-card);
+}
+
+.product-page-unlock {
+    border: 0;
+    border-radius: 999px;
+    padding: 10px 16px;
+    background: #fde7d0;
+    color: #c2410c;
+    font: inherit;
+    font-size: 0.92rem;
+    font-weight: 800;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.product-page-sold {
+    margin: 10px 0 0;
+    color: #64748b;
+    font-size: 0.88rem;
+    font-weight: 600;
 }
 
 .product-page-qty button {
@@ -8272,14 +8299,10 @@ body:has(.product-grid.grid-view) {
     gap: 22px;
   }
 
-  .catalog-page-shell .catalog-wordmark {
-    display: block;
-    height: 43px;
-    width: auto;
-  }
-
   .catalog-page-shell .catalog-topbar-logo .logo-emblem {
-    display: none;
+    display: block;
+    height: 56px;
+    border-radius: 12px;
   }
 
   .catalog-about-link {
@@ -8439,6 +8462,7 @@ body:has(.product-grid.grid-view) {
     flex-direction: column;
     align-items: stretch;
     height: 100%;
+    padding: 16px;
     background: #fff;
     color: #171717;
     border-color: rgba(0, 0, 0, 0.08);
@@ -8483,14 +8507,16 @@ body:has(.product-grid.grid-view) {
   }
 
   .catalog-page-shell .product-grid .card-scarcity {
-    height: 1.2em;
+    height: auto;
     min-height: 1.2em;
     font-size: 0.78rem;
     text-align: left;
+    white-space: normal;
   }
 
   .catalog-page-shell .product-grid .product-pricing {
-    min-height: 70px;
+    min-height: 0;
+    margin-top: 0;
     justify-content: flex-start;
     align-content: flex-start;
   }
@@ -8500,13 +8526,17 @@ body:has(.product-grid.grid-view) {
   }
 
   .catalog-page-shell .product-grid .card-size-slot {
-    height: 68px;
-    min-height: 68px;
-    overflow: hidden;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
 
   .catalog-page-shell .product-grid .dosage-block {
-    margin: 0;
+    margin: 0 0 4px;
+  }
+
+  .catalog-page-shell .product-grid .product-actions {
+    margin-top: 10px;
   }
 
   .catalog-page-shell .product-grid .dosage-label {
@@ -8514,10 +8544,10 @@ body:has(.product-grid.grid-view) {
     color: #5c6570;
   }
 
-  .catalog-page-shell .product-grid .dosage-chips {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    overflow: hidden;
+  .catalog-page-shell .product-grid .dosage-chip,
+  .catalog-page-shell .product-grid .dosage-select {
+    font-size: 0.78rem;
+    padding: 6px 4px;
   }
 
   [data-theme="dark"] .catalog-page-shell .dosage-label {
@@ -8525,8 +8555,8 @@ body:has(.product-grid.grid-view) {
   }
 
   [data-theme="dark"] .catalog-page-shell .dosage-chip {
-    background: #f4f4f4;
-    border-color: #e4e4e4;
+    background: transparent;
+    border-color: transparent;
     color: #222;
   }
 
@@ -8623,13 +8653,12 @@ body:has(.product-grid.grid-view) {
     min-width: 0;
   }
 
-  .catalog-page-shell .catalog-wordmark {
+  .catalog-page-shell .catalog-topbar-logo .logo-emblem {
     display: block;
-    height: 34px;
-    width: auto;
+    height: 44px;
+    border-radius: 10px;
   }
 
-  .catalog-page-shell .catalog-topbar-logo .logo-emblem,
   .catalog-about-link,
   .catalog-page-shell .catalog-back,
   .catalog-page-shell .catalog-icon-btn,
@@ -8744,6 +8773,7 @@ body:has(.product-grid.grid-view) {
     flex-direction: column;
     align-items: stretch;
     height: auto;
+    padding: 16px;
     background: #fff;
     color: #171717;
     border-color: rgba(0, 0, 0, 0.08);
@@ -8869,6 +8899,10 @@ body:has(.product-grid.grid-view) {
     height: 180px;
     flex-basis: 180px;
   }
+
+  .catalog-page-shell .product-grid .card-scarcity {
+    min-height: 1.2em;
+  }
 }
 
 @media (min-width: 900px) and (max-width: 1099px) {
@@ -8914,10 +8948,28 @@ body:has(.catalog-page-shell) {
   color: #5c6570;
 }
 
-.catalog-page-shell .dosage-chip {
-  background: #f4f4f4;
-  border-color: #e4e4e4;
+.catalog-page-shell .product-grid .dosage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+  padding: 3px;
+  border-radius: 999px;
+  background: #ececec;
+}
+
+.catalog-page-shell .product-grid .dosage-chip,
+.catalog-page-shell .product-grid .dosage-select {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: min-content;
+  border: none;
+  background-color: transparent;
   color: #222;
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: none;
 }
 
 .catalog-page-shell .dosage-chip.is-selected {

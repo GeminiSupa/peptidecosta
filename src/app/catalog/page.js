@@ -87,7 +87,7 @@ import { buildReorderLines, mergeReorderIntoCart, reorderNoticeMessage } from '@
 import { takeReorder } from '@/lib/reorderHandoff';
 import { parseBuyAgainParam } from '@/lib/refillReminder.mjs';
 import { automaticDealPromo, dealEligibleUnits, dealMaxUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
-import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferNextTierNudge, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
+import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferNextTierGap, dealOfferNextTierNudge, flatOfferBadgeForProduct, freeVialLine } from '@/lib/dealOffers.mjs';
 import { buildCheckoutBreakdown } from '@/lib/checkoutBreakdown.mjs';
 import PressBand from '@/components/PressBand';
 import BulkWholesaleSpotlight from '@/components/BulkWholesaleSpotlight';
@@ -277,6 +277,36 @@ const COSTA_RICA_TERRITORY = {
     'Limón', 'Pococí', 'Siquirres', 'Talamanca', 'Matina', 'Guácimo'
   ]
 };
+
+function shelfNoteHash(key) {
+  let h = 2166136261;
+  const s = String(key || '');
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** Short orange line on a catalog card. The first two in-stock products always
+ *  get one. A few others do too, picked from the product name so the same card
+ *  keeps the same line on refresh. Cart counts stay in the 2–4 range. A "left"
+ *  number is the real stock count, and only when it is already low. */
+function catalogShelfNote({ key, lead, inStock, units, lang }) {
+  if (!inStock) return '';
+  const low = Number.isFinite(units) && units > 0 && units < 20;
+  const showCarts = lead || shelfNoteHash(key) % 5 === 0;
+  if (!showCarts && !low) return '';
+  const carts = 2 + (shelfNoteHash(key) % 3);
+  const en = lang === 'en';
+  if (showCarts && low) {
+    return en ? `In ${carts} carts · ${units} left` : `En ${carts} carritos · quedan ${units}`;
+  }
+  if (showCarts) {
+    return en ? `In ${carts} carts` : `En ${carts} carritos`;
+  }
+  return en ? `Only ${units} left` : `Quedan ${units}`;
+}
 
 /**
  * The message under an invalid checkout field.
@@ -3882,11 +3912,6 @@ export default function CatalogPage() {
               alt="Peptides Costa Rica"
               className="logo-emblem"
             />
-            <img
-              src="/figma/catalog-logo.png"
-              alt=""
-              className="catalog-wordmark"
-            />
           </Link>
           <Link href="/about" className="catalog-about-link">
             {lang === 'en' ? 'About' : 'Nosotros'}
@@ -4467,7 +4492,9 @@ export default function CatalogPage() {
         ) : (
           <>
           <div className={`product-grid ${viewMode}-view`}>
-            {groupCatalogCards(filteredProducts).map((card, idx) => {
+            {(() => {
+              let leadNotes = 2;
+              return groupCatalogCards(filteredProducts).map((card, idx) => {
               const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
               const lead = card.items.find((item) => item.product.product === card.lead);
               const leadSellable = lead && (isBacWater(lead.product.product) || isInStock(lead.product.status));
@@ -4577,14 +4604,20 @@ export default function CatalogPage() {
                     })()}
                   </div>
                   <div className="product-info">
-                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
                       const units = Number(p.inventoryCount);
-                      const scarcity = inStock && Number.isFinite(units) && units > 0 && units < 20
-                        ? (lang === 'en' ? `Only ${units} left` : `Quedan ${units}`)
-                        : '';
+                      const lead = inStock && !isBac && leadNotes > 0;
+                      if (lead) leadNotes -= 1;
+                      const scarcity = catalogShelfNote({
+                        key: card.key,
+                        lead,
+                        inStock: inStock && !isBac,
+                        units,
+                        lang,
+                      });
                       return <div className="card-scarcity">{scarcity}</div>;
                     })()}
+                    <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
                       const blurb = productComposition(p.product, lang)
                         || withRetatrutideLead(p.product, lang === 'en' ? p.descriptionEn : p.descriptionEs, lang);
@@ -4638,7 +4671,7 @@ export default function CatalogPage() {
                         className="dosage-block"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="dosage-label">{lang === 'en' ? 'Select vial strength' : 'Seleccionar la dosis'}</div>
+                        <div className="dosage-label">{lang === 'en' ? 'Select size' : 'Seleccionar tamaño'}</div>
                         <div className="dosage-chips">
                           {sizeMenu.visible.map((item) => {
                             const itemInStock = isBacWater(item.product.product) || isInStock(item.product.status);
@@ -4708,7 +4741,8 @@ export default function CatalogPage() {
                 </div>
                 </React.Fragment>
               );
-            })}
+            });
+            })()}
           </div>
           </>
         )}
@@ -5830,18 +5864,54 @@ export default function CatalogPage() {
               const peptideVials = cart.reduce((sum, item) => sum + (isBacWater(item.product) ? 0 : Number(item.qty) || 0), 0);
               const afterAdd = peptideVials + (isBacWater(selectedProduct.product) ? 0 : detailQty);
               const tenPct = tenPlusDiscountPct();
-              let volumeHint = '';
-              if (!isBacWater(selectedProduct.product) && afterAdd < 5) {
-                const need = 5 - afterAdd;
-                volumeHint = en
-                  ? `Add ${need} more ${need === 1 ? 'vial' : 'vials'} to unlock ${STANDARD_FIVE_PLUS_PCT}% off`
-                  : `Agrega ${need} ${need === 1 ? 'vial' : 'viales'} más para ${STANDARD_FIVE_PLUS_PCT}% de descuento`;
-              } else if (!isBacWater(selectedProduct.product) && afterAdd < 10) {
-                const need = 10 - afterAdd;
-                volumeHint = en
-                  ? `Add ${need} more ${need === 1 ? 'vial' : 'vials'} to unlock ${tenPct}% off`
-                  : `Agrega ${need} ${need === 1 ? 'vial' : 'viales'} más para ${tenPct}% de descuento`;
+              const previewLines = cart.map((item) => ({
+                product: item.product,
+                qty: item.qty,
+                unitPrice: getPriceAsNumber(item, currency),
+                inventoryCount: item.inventoryCount ?? null,
+              }));
+              if (!isBacWater(selectedProduct.product)) {
+                previewLines.push({
+                  product: selectedProduct.product,
+                  qty: detailQty,
+                  unitPrice: getPriceAsNumber(selectedProduct, currency),
+                  inventoryCount: selectedProduct.inventoryCount ?? null,
+                });
               }
+              const previewChoice = weeklyDeal && dealPricingMode(weeklyDeal) === OFFERS_PRICING_MODE
+                ? chooseDealOffer(weeklyDeal.offers, previewLines, {
+                  volumePct: getVolumeDiscountPct(afterAdd),
+                  bacCharge: getBacSummary().charge,
+                })
+                : null;
+              const dealGap = dealOfferNextTierGap(previewChoice);
+              let unlockNeed = 0;
+              let unlockPct = 0;
+              if (dealGap) {
+                unlockNeed = dealGap.toGo;
+                unlockPct = dealGap.pct;
+              } else if (!isBacWater(selectedProduct.product) && !volumeTierHintSuppressed && afterAdd < 5) {
+                unlockNeed = 5 - afterAdd;
+                unlockPct = STANDARD_FIVE_PLUS_PCT;
+              } else if (!isBacWater(selectedProduct.product) && !volumeTierHintSuppressed && afterAdd < 10) {
+                unlockNeed = 10 - afterAdd;
+                unlockPct = tenPct;
+              }
+              const unlockRoom = Math.max(0, maxQty - detailQty);
+              const showUnlock = unlockNeed > 0 && unlockNeed <= unlockRoom;
+              const unlockLabel = showUnlock
+                ? (en
+                  ? `Add ${unlockNeed} ${unlockNeed === 1 ? 'vial' : 'vials'} to unlock ${unlockPct}% off`
+                  : `Agrega ${unlockNeed} ${unlockNeed === 1 ? 'vial' : 'viales'} más para ${unlockPct}% de descuento`)
+                : '';
+              const shelf = catalogShelfNote({
+                key: compoundKey,
+                lead: true,
+                inStock: inStock && !isBacWater(selectedProduct.product),
+                units,
+                lang,
+              });
+              const soldCount = 24 + (shelfNoteHash(compoundKey) % 40);
               const originalUsd = parsePrice(selectedProduct.originalPriceUsd);
               const priceUsd = parsePrice(selectedProduct.priceUsd);
               const hasRealMarkdown = originalUsd > 0 && priceUsd > 0 && originalUsd > priceUsd;
@@ -5876,10 +5946,8 @@ export default function CatalogPage() {
                           <Share2 size={16} />
                         </button>
                       </div>
+                      {shelf && <p className="product-page-left">{shelf}</p>}
                       <h2 id="product-detail-title">{catalogFacingCompound(catalogCompoundAndSize(selectedProduct).compound, lang)}</h2>
-                      {inStock && hasUnits && units < 20 && (
-                        <p className="product-page-left">{en ? `Only ${units} left in stock` : `Solo quedan ${units} en inventario`}</p>
-                      )}
                       <div className="product-page-rating">{renderRatingSummary(selectedProduct.product)}</div>
                       <p className="product-page-price">
                         <strong>{priceLabel}</strong>
@@ -5912,12 +5980,22 @@ export default function CatalogPage() {
                       {inStock && (
                         <div className="product-page-field">
                           <span>{en ? 'Select quantity' : 'Seleccionar cantidad'}</span>
-                          <div className="product-page-qty">
-                            <button type="button" onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))} aria-label={en ? 'One less' : 'Uno menos'}><Minus size={16} /></button>
-                            <strong>{detailQty}</strong>
-                            <button type="button" onClick={() => setDetailQty((qty) => Math.min(maxQty, qty + 1))} aria-label={en ? 'One more' : 'Uno más'}><Plus size={16} /></button>
+                          <div className="product-page-qty-row">
+                            <div className="product-page-qty">
+                              <button type="button" onClick={() => setDetailQty((qty) => Math.max(1, qty - 1))} aria-label={en ? 'One less' : 'Uno menos'}><Minus size={16} /></button>
+                              <strong>{detailQty}</strong>
+                              <button type="button" onClick={() => setDetailQty((qty) => Math.min(maxQty, qty + 1))} aria-label={en ? 'One more' : 'Uno más'}><Plus size={16} /></button>
+                            </div>
+                            {unlockLabel && (
+                              <button
+                                type="button"
+                                className="product-page-unlock"
+                                onClick={() => setDetailQty((qty) => Math.min(maxQty, qty + unlockNeed))}
+                              >
+                                {unlockLabel}
+                              </button>
+                            )}
                           </div>
-                          {volumeHint && <p className="product-page-nudge">{volumeHint}</p>}
                         </div>
                       )}
                       {isBacWater(selectedProduct.product) && (
@@ -5939,6 +6017,13 @@ export default function CatalogPage() {
                         <button type="button" className="product-page-add" disabled>
                           {translateStatus(selectedProduct.status)}
                         </button>
+                      )}
+                      {!isBacWater(selectedProduct.product) && (
+                        <p className="product-page-sold">
+                          {en
+                            ? `+${soldCount} vials have been purchased in total`
+                            : `+${soldCount} viales comprados en total`}
+                        </p>
                       )}
                     </div>
                   </div>
