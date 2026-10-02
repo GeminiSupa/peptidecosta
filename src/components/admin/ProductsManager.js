@@ -535,13 +535,12 @@ export default function ProductsManager({
                         : opening.chosen
                         ? `Opens on ${opening.size}`
                         : `Opens on ${opening.size} — not chosen`;
-                      const colour = single ? '#475569' : isDefault ? '#4ade80' : opening.chosen ? '#94a3b8' : '#f59e0b';
                       return (
                         <label
                           style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: single ? 'default' : 'pointer' }}
                           title={single
                             ? 'This peptide has only one size, so there is nothing to choose.'
-                            : 'Tick this to make the catalog card for this peptide open on this size. Only one size can be the default, so ticking this one unticks the others. Amber means nobody has chosen, and the card is opening on whatever size comes first and is in stock.'}
+                            : 'Tick this to make the catalog card for this peptide open on this size. Only one size can be the default, so ticking this one unticks the others. "Not chosen" means nobody has picked, and the card is opening on whatever size comes first and is in stock.'}
                         >
                           <input
                             type="checkbox"
@@ -549,7 +548,7 @@ export default function ProductsManager({
                             disabled={single}
                             onChange={(e) => handleDefaultSizeChange?.(p.id, e.target.checked)}
                           />
-                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: colour, lineHeight: 1.2 }}>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', lineHeight: 1.2 }}>
                             {note}
                           </span>
                         </label>
