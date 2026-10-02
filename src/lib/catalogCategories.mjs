@@ -296,6 +296,11 @@ export function splitStoredProductForAdmin(storedName, vialSize) {
   return { product: name, vialSize: size };
 }
 
+/** The "Default size" tick an admin puts on one size of a compound. */
+export function isDefaultSizePick(product) {
+  return product?.isDefaultSize === true || product?.is_default_size === true;
+}
+
 export function groupCatalogCards(products = []) {
   const groups = new Map();
   const order = [];
@@ -315,6 +320,11 @@ export function groupCatalogCards(products = []) {
   for (const group of order) {
     group.items.sort((a, b) => a.sizeValue - b.sizeValue
       || String(a.product.product).localeCompare(String(b.product.product)));
+    // A size ticked "Default size" in the admin opens the card instead of
+    // whichever row happened to be read first. The smallest ticked size wins
+    // if more than one carries the tick, so the card is never ambiguous.
+    const picked = group.items.find((item) => isDefaultSizePick(item.product));
+    if (picked) group.lead = picked.product.product;
   }
   return order;
 }
@@ -326,14 +336,29 @@ const SIZE_CHIPS_BEFORE_MORE = 2;
 /**
  * One, two, or three sizes stay as chips. Four or more show the two smallest
  * as chips, and the third slot is the More menu with every size after those.
+ *
+ * `keepVisible` is the stored name of the size the card opens on. A compound
+ * whose default size is a large one — GLP-1 opening on 20mg — would otherwise
+ * show 5mg and 10mg as the chips while the price belonged to a size buried in
+ * the More menu. That size takes the second chip slot instead, and the chips
+ * stay smallest-first so the row still reads in order.
  */
-export function visibleSizeChips(items) {
+export function visibleSizeChips(items, keepVisible = '') {
   const list = Array.isArray(items) ? items : [];
   if (list.length <= SIZE_CHIP_CAP) {
     return { visible: list, overflow: [], hiddenCount: 0 };
   }
-  const visible = list.slice(0, SIZE_CHIPS_BEFORE_MORE);
-  const overflow = list.slice(SIZE_CHIPS_BEFORE_MORE);
+  const wanted = String(keepVisible || '');
+  const front = list.slice(0, SIZE_CHIPS_BEFORE_MORE);
+  const pinned = wanted && !front.some((item) => item?.product?.product === wanted)
+    ? list.find((item) => item?.product?.product === wanted)
+    : null;
+  if (!pinned) {
+    return { visible: front, overflow: list.slice(SIZE_CHIPS_BEFORE_MORE), hiddenCount: list.length - SIZE_CHIPS_BEFORE_MORE };
+  }
+  const visible = [...front.slice(0, SIZE_CHIPS_BEFORE_MORE - 1), pinned];
+  const kept = new Set(visible);
+  const overflow = list.filter((item) => !kept.has(item));
   return { visible, overflow, hiddenCount: overflow.length };
 }
 

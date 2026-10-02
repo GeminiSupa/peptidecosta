@@ -143,6 +143,73 @@ test('catalog cards group a compound and keep at most three size slots', () => {
   assert.deepEqual(four.overflow.map((item) => item.size), ['15mg', '20mg']);
 });
 
+test('a size ticked Default size in the admin opens the card and keeps a chip', () => {
+  // GLP-1's real shape: six sizes, and the one people buy is not the smallest.
+  const rows = [
+    { product: 'GLP-1 5mg' },
+    { product: 'GLP-1 10mg' },
+    { product: 'GLP-1 15mg' },
+    { product: 'GLP-1 20mg', isDefaultSize: true },
+    { product: 'GLP-1 50mg' },
+    { product: 'GLP-1 60mg' },
+  ];
+  const [card] = groupCatalogCards(rows);
+  assert.equal(card.lead, 'GLP-1 20mg');
+
+  // The default would have sat in the More menu. It takes the second chip.
+  const shown = visibleSizeChips(card.items, card.lead);
+  assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '20mg']);
+  assert.deepEqual(shown.overflow.map((item) => item.size), ['10mg', '15mg', '50mg', '60mg']);
+  assert.equal(shown.hiddenCount, 4);
+
+  // The snake_case spelling straight off the database row counts too.
+  const [fromDb] = groupCatalogCards([
+    { product: 'NAD+ 500mg' },
+    { product: 'NAD+ 1000mg', is_default_size: true },
+  ]);
+  assert.equal(fromDb.lead, 'NAD+ 1000mg');
+});
+
+test('no Default size tick leaves the card exactly as it was', () => {
+  const rows = [
+    { product: 'GLP-1 5mg' },
+    { product: 'GLP-1 10mg' },
+    { product: 'GLP-1 15mg' },
+    { product: 'GLP-1 20mg' },
+  ];
+  const [card] = groupCatalogCards(rows);
+  assert.equal(card.lead, 'GLP-1 5mg');
+  const shown = visibleSizeChips(card.items, card.lead);
+  assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '10mg']);
+  assert.deepEqual(shown.overflow.map((item) => item.size), ['15mg', '20mg']);
+
+  // Called the old way, with no second argument, nothing moves either.
+  const bare = visibleSizeChips(card.items);
+  assert.deepEqual(bare.visible.map((item) => item.size), ['5mg', '10mg']);
+  assert.deepEqual(bare.overflow.map((item) => item.size), ['15mg', '20mg']);
+});
+
+test('the smaller ticked size wins when two sizes claim the default', () => {
+  const [card] = groupCatalogCards([
+    { product: 'GLP-1 60mg', isDefaultSize: true },
+    { product: 'GLP-1 5mg' },
+    { product: 'GLP-1 20mg', isDefaultSize: true },
+  ]);
+  assert.equal(card.lead, 'GLP-1 20mg');
+});
+
+test('a default size already among the chips does not reshuffle them', () => {
+  const [card] = groupCatalogCards([
+    { product: 'GLP-1 5mg' },
+    { product: 'GLP-1 10mg', isDefaultSize: true },
+    { product: 'GLP-1 15mg' },
+    { product: 'GLP-1 20mg' },
+  ]);
+  const shown = visibleSizeChips(card.items, card.lead);
+  assert.deepEqual(shown.visible.map((item) => item.size), ['5mg', '10mg']);
+  assert.deepEqual(shown.overflow.map((item) => item.size), ['15mg', '20mg']);
+});
+
 test('a size saved in its own field becomes the chip, and a size left in the name still does', () => {
   assert.equal(composeStoredProductName('AHK-CU', '50mg'), 'AHK-CU 50mg');
   assert.equal(composeStoredProductName('AHK-CU 50mg', '50mg'), 'AHK-CU 50mg');

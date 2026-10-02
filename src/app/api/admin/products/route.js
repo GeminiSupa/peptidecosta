@@ -29,7 +29,7 @@ function isMissingDealsTable(error) {
 
 const normalizeName = (value) => String(value || '').trim().toLowerCase();
 
-const PRODUCT_OPTIONAL_COLUMNS = ['vial_size'];
+const PRODUCT_OPTIONAL_COLUMNS = ['vial_size', 'is_default_size'];
 
 async function writeProductRows(supabase, method, rows, id) {
   return writeDroppingMissingColumns(rows[0] || {}, PRODUCT_OPTIONAL_COLUMNS, async (sample) => {

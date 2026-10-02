@@ -60,6 +60,7 @@ export function productToDbRow(product, priority) {
     sale_end_time: crWallToIso(product.saleEndTime),
     status: product.status,
     vial_size: String(product.vialSize || '').trim() || null,
+    is_default_size: product.isDefaultSize === true,
     inventory_count: product.inventoryCount === '' ? null : product.inventoryCount,
     low_stock_threshold: product.lowStockThreshold === '' ? 5 : product.lowStockThreshold,
     coa: product.coa,
@@ -103,6 +104,7 @@ const FINGERPRINT_FIELDS = Object.freeze([
   'sale_end_time',
   'status',
   'vial_size',
+  'is_default_size',
   'inventory_count',
   'low_stock_threshold',
   'coa',
@@ -138,6 +140,10 @@ function normalizeField(field, value, row) {
       const timestamp = Date.parse(value);
       return Number.isFinite(timestamp) ? Math.floor(timestamp / 60000) : String(value);
     }
+    // A database that has not run add-default-size.sql yet returns undefined,
+    // and the grid sends false. Both mean "not the default size".
+    case 'is_default_size':
+      return value === true;
     case 'free_bac_water':
       return typeof value === 'boolean' ? value : defaultFreeBacConfig(row?.product).freeBacWater;
     case 'free_bac_size_ml':

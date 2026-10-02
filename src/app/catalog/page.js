@@ -1798,6 +1798,7 @@ export default function CatalogPage() {
               descriptionEn: item.description_en || '',
               descriptionEs: item.description_es || '',
               vialSize: item.vial_size || '',
+              isDefaultSize: item.is_default_size === true,
               emoji: item.emoji || getEmojiForCategory(item.category)
             };
           });
@@ -4499,7 +4500,7 @@ export default function CatalogPage() {
                 || card.items[0];
               const p = (chosen || fallback).product;
               const showSizes = card.items.some((item) => item.size);
-              const sizeMenu = visibleSizeChips(card.items);
+              const sizeMenu = visibleSizeChips(card.items, card.lead);
               const overflowSelected = sizeMenu.overflow.some((item) => item.product.product === p.product);
               const isBac = isBacWater(p.product);
               const isTenMlBac = isBac && getBacWaterSizeMl(p.product) === 10;

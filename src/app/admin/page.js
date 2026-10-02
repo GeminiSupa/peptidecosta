@@ -66,7 +66,7 @@ import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
 import AdminHelpBot from '@/components/admin/AdminHelpBot';
 import { productBaseline as buildProductBaseline } from '@/lib/productSaveGuard.mjs';
-import { composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
+import { catalogCompoundAndSize, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
 import WhatsAppInbox from '@/components/admin/WhatsAppInbox';
 import WhatsAppAnalyticsPanel from '@/components/admin/WhatsAppAnalyticsPanel';
@@ -2606,6 +2606,7 @@ Core Rules:
             id: item.id,
             product: shown.product,
             vialSize: shown.vialSize,
+            isDefaultSize: item.is_default_size === true,
             category: item.category || '',
             priceUsd: item.price_usd || '',
             priceCrc: item.price_crc || '',
@@ -3188,6 +3189,39 @@ Core Rules:
     });
   };
 
+  /**
+   * Tick "Default size" on one size and clear it from the compound's others.
+   *
+   * The catalog card shows one compound with its sizes as chips, so two sizes
+   * both claiming to be the default would be a coin toss. Clearing the siblings
+   * here means the grid shows the same answer the catalog will.
+   */
+  const handleDefaultSizeChange = (productId, nextValue) => {
+    const target = products.find((p) => p.id === productId);
+    if (!target) return;
+    const compoundOf = (row) => catalogCompoundAndSize({
+      product: composeStoredProductName(row.product, row.vialSize),
+      vialSize: row.vialSize,
+    }).compound.trim().toLowerCase();
+    const compound = compoundOf(target);
+    // Only another size of the same compound, and only one already ticked.
+    const cleared = nextValue
+      ? products.filter((p) => p.id !== productId && p.isDefaultSize === true && compoundOf(p) === compound)
+      : [];
+    const touched = [productId, ...cleared.map((p) => p.id)];
+    setProducts((prev) => prev.map((p) => {
+      if (p.id === productId) return { ...p, isDefaultSize: nextValue };
+      if (cleared.some((other) => other.id === p.id)) return { ...p, isDefaultSize: false };
+      return p;
+    }));
+    productsDirtyRef.current = true;
+    setChangedProductIds((prev) => {
+      const next = new Set(prev);
+      for (const id of touched) next.add(id);
+      return next;
+    });
+  };
+
   // Toggle a product's visibility on the public catalog.
   // Hidden products stay in the database (so they can be restocked / un-hidden later);
   // the list of hidden product names lives in site_settings 'hidden_products'.
@@ -3234,6 +3268,7 @@ Core Rules:
       id: `temp-${Date.now()}`,
       product: 'New Peptide Name',
       vialSize: '',
+      isDefaultSize: false,
       category: 'Metabolic & GLP-1 Compounds',
       priceUsd: '$100',
       priceCrc: '₡45,448',
@@ -5681,6 +5716,7 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             loadingProducts={loadingProducts}
             highlightedProductId={highlightedProductId}
             handleCellChange={handleCellChange}
+            handleDefaultSizeChange={handleDefaultSizeChange}
             exchangeRate={exchangeRate}
             exchangeRateUpdatedAt={exchangeRateUpdatedAt}
             bucketImages={bucketImages}

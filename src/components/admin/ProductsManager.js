@@ -29,6 +29,7 @@ export default function ProductsManager({
   loadingProducts,
   highlightedProductId,
   handleCellChange,
+  handleDefaultSizeChange,
   exchangeRate,
   exchangeRateUpdatedAt,
   bucketImages,
@@ -109,6 +110,7 @@ export default function ProductsManager({
     String(p.coa || '') !== String(mobileEditProduct.coa || '') ||
     String(p.coaExpiryDate || p.coa_expiry_date || '') !== String(mobileEditProduct.coaExpiryDate || mobileEditProduct.coa_expiry_date || '') ||
     String(p.coaLotNumber || p.coa_lot_number || '') !== String(mobileEditProduct.coaLotNumber || mobileEditProduct.coa_lot_number || '') ||
+    (p.isDefaultSize === true) !== (mobileEditProduct.isDefaultSize === true) ||
     Boolean(p.freeBacWater) !== Boolean(mobileEditProduct.freeBacWater) ||
     String(p.freeBacSizeMl ?? 3) !== String(mobileEditProduct.freeBacSizeMl ?? 3) ||
     String(p.freeBacVialsPerItem ?? 1) !== String(mobileEditProduct.freeBacVialsPerItem ?? 1)
@@ -391,6 +393,7 @@ export default function ProductsManager({
                 <th style={{ width: '40px' }}>#</th>
                 <th style={{ minWidth: '220px' }}>Product Peptide Name</th>
                 <th style={{ width: '110px' }}>Vial size</th>
+                <th style={{ width: '120px', textAlign: 'center' }}>Default size</th>
                 <th style={{ minWidth: '180px' }}>Category</th>
                 <th style={{ width: '100px' }}>Price (USD)</th>
                 <th style={{ width: '100px' }}>CRC Auto</th>
@@ -469,6 +472,24 @@ export default function ProductsManager({
                     >
                       {p.vialSize || ''}
                     </div>
+                  </td>
+
+                  {/* Default size — the size the catalog card opens on for this
+                      compound. Ticking one clears the tick from its siblings. */}
+                  <td data-label="Default size" style={{ textAlign: 'center' }}>
+                    <label
+                      style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                      title="Tick this to make the catalog card open on this size. Only one size per compound can be the default."
+                    >
+                      <input
+                        type="checkbox"
+                        checked={p.isDefaultSize === true}
+                        onChange={(e) => handleDefaultSizeChange?.(p.id, e.target.checked)}
+                      />
+                      <span style={{ fontSize: '0.68rem', fontWeight: 700, color: p.isDefaultSize === true ? '#4ade80' : '#64748b' }}>
+                        {p.isDefaultSize === true ? 'Opens on this' : 'Smallest first'}
+                      </span>
+                    </label>
                   </td>
 
                   {/* Category */}
@@ -1069,6 +1090,17 @@ export default function ProductsManager({
                   onChange={(e) => updateMobileDraft('vialSize', e.target.value)}
                 />
                 <small>This becomes the size chip. Example: 50mg. Leave empty if the size is already in the name.</small>
+              </label>
+              <label>
+                <span>Default size</span>
+                <select
+                  value={mobileEditProduct.isDefaultSize === true ? 'on' : 'off'}
+                  onChange={(e) => updateMobileDraft('isDefaultSize', e.target.value === 'on')}
+                >
+                  <option value="off">Off — the smallest size opens first</option>
+                  <option value="on">On — the card opens on this size</option>
+                </select>
+                <small>Pick the size most people buy, and the catalog card opens on it instead of the smallest. This screen only changes this one size: if you turn it on for two sizes of the same compound, the smaller of the two is the one the card uses.</small>
               </label>
               <label>
                 <span>Category</span>
