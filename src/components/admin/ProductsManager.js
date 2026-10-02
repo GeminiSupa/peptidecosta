@@ -1,12 +1,34 @@
 import React, { useMemo, useState } from 'react';
 import { Search, X, Upload, Plus, Save, Download, AlertCircle, Check, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Trash2, FileText, Eye, EyeOff, TrendingUp, AlertTriangle, Truck, Tag, DollarSign } from 'lucide-react';
 
-import { CATALOG_CATEGORY_NAMES, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
+import { CATALOG_CATEGORY_NAMES, catalogCompoundAndSize, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import {
   calculateProductProfit,
   calculateSalesVelocity,
   calculateStockoutForecast,
 } from '@/lib/inventoryForecasting.mjs';
+
+/**
+ * The compound a row belongs to, spelled the way the catalog groups cards.
+ *
+ * Not simply the name column: a product whose size was never moved into the
+ * Vial size field still carries it in the name ("AHK-CU 50mg"), and the catalog
+ * reads the size out of the name in that case. Keyed the same way here so the
+ * grid and the catalog agree on which rows are siblings.
+ */
+function compoundKey(product) {
+  return catalogCompoundAndSize({
+    product: composeStoredProductName(product?.product, product?.vialSize),
+    vialSize: product?.vialSize,
+  }).compound.trim().toLowerCase();
+}
+
+/** The size shown on a row, whether it sits in its own field or in the name. */
+function sizeLabel(product) {
+  const explicit = String(product?.vialSize || '').trim();
+  if (explicit) return explicit;
+  return catalogCompoundAndSize({ product: product?.product }).size || '';
+}
 
 function nameWithoutSize(product) {
   if (!String(product?.vialSize || '').trim()) return product?.product || '';
@@ -94,6 +116,25 @@ export default function ProductsManager({
       .sort();
     return [...CATALOG_CATEGORY_NAMES, ...others];
   }, [products]);
+  /**
+   * The size each compound currently opens on, keyed by the compound name.
+   *
+   * Every row of a compound shows this, not just the ticked one, so ticking
+   * 20mg on the GLP-1 20mg row is visible from the 5mg row too — otherwise the
+   * only way to know a compound's default was to scroll its rows and look for
+   * the tick.
+   */
+  const defaultSizeByCompound = useMemo(() => {
+    const map = {};
+    for (const prod of products) {
+      if (prod?.isDefaultSize !== true) continue;
+      const compound = compoundKey(prod);
+      if (!compound || map[compound]) continue;
+      map[compound] = sizeLabel(prod) || composeStoredProductName(prod.product, prod.vialSize);
+    }
+    return map;
+  }, [products]);
+
   const mobileDirty = Boolean(mobileEditProduct && products.find((p) => p.id === mobileEditProduct.id && (
     nameWithoutSize(p) !== (mobileEditProduct.product || '') ||
     p.category !== mobileEditProduct.category ||
@@ -475,21 +516,33 @@ export default function ProductsManager({
                   </td>
 
                   {/* Default size — the size the catalog card opens on for this
-                      compound. Ticking one clears the tick from its siblings. */}
+                      compound. Ticking one clears the tick from its siblings, and
+                      every row of the compound reports the same answer. */}
                   <td data-label="Default size" style={{ textAlign: 'center' }}>
-                    <label
-                      style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
-                      title="Tick this to make the catalog card open on this size. Only one size per compound can be the default."
-                    >
-                      <input
-                        type="checkbox"
-                        checked={p.isDefaultSize === true}
-                        onChange={(e) => handleDefaultSizeChange?.(p.id, e.target.checked)}
-                      />
-                      <span style={{ fontSize: '0.68rem', fontWeight: 700, color: p.isDefaultSize === true ? '#4ade80' : '#64748b' }}>
-                        {p.isDefaultSize === true ? 'Opens on this' : 'Smallest first'}
-                      </span>
-                    </label>
+                    {(() => {
+                      const isDefault = p.isDefaultSize === true;
+                      const compoundDefault = defaultSizeByCompound[compoundKey(p)];
+                      const note = isDefault
+                        ? 'Opens on this size'
+                        : compoundDefault
+                        ? `Opens on ${compoundDefault}`
+                        : 'No default set';
+                      return (
+                        <label
+                          style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                          title="Tick this to make the catalog card for this peptide open on this size. Only one size can be the default, so ticking this one unticks the others."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isDefault}
+                            onChange={(e) => handleDefaultSizeChange?.(p.id, e.target.checked)}
+                          />
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: isDefault ? '#4ade80' : compoundDefault ? '#94a3b8' : '#64748b', lineHeight: 1.2 }}>
+                            {note}
+                          </span>
+                        </label>
+                      );
+                    })()}
                   </td>
 
                   {/* Category */}
@@ -1097,10 +1150,20 @@ export default function ProductsManager({
                   value={mobileEditProduct.isDefaultSize === true ? 'on' : 'off'}
                   onChange={(e) => updateMobileDraft('isDefaultSize', e.target.value === 'on')}
                 >
-                  <option value="off">Off — the smallest size opens first</option>
+                  <option value="off">Off</option>
                   <option value="on">On — the card opens on this size</option>
                 </select>
-                <small>Pick the size most people buy, and the catalog card opens on it instead of the smallest. This screen only changes this one size: if you turn it on for two sizes of the same compound, the smaller of the two is the one the card uses.</small>
+                <small>
+                  {(() => {
+                    const current = defaultSizeByCompound[compoundKey(mobileEditProduct)];
+                    const now = mobileEditProduct.isDefaultSize === true
+                      ? 'This size is the default.'
+                      : current
+                      ? `Right now this peptide opens on ${current}.`
+                      : 'Right now this peptide has no default set.';
+                    return `${now} Turning this on here changes this one size only — untick the old default on its own row, or use the table, which does it for you.`;
+                  })()}
+                </small>
               </label>
               <label>
                 <span>Category</span>
