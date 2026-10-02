@@ -4259,12 +4259,6 @@ export default function CatalogPage() {
           rating={liveTrustpilotRating}
           settings={landingSettings}
           links={links}
-          onClaim={() => {
-            setDealOnly(false);
-            setActiveCategory('all');
-            setSortOrder('pop');
-            resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
         />
         <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
         <CatalogCroTrust lang={lang} />

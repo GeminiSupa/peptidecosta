@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { BadgePercent, Check } from 'lucide-react';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
@@ -91,7 +92,7 @@ export function CatalogCroTicker({ lang = 'es' }) {
   );
 }
 
-export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {}, onClaim }) {
+export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {} }) {
   const campaign = useBulkWholesaleCampaign();
   const [now, setNow] = useState(() => Date.now());
 
@@ -150,9 +151,9 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {},
           </a>
         </div>
         <div className={styles.actions}>
-          <button type="button" className={styles.claim} onClick={onClaim}>
+          <Link className={styles.claim} href={`/deal-of-the-week?lang=${en ? 'en' : 'es'}`}>
             {en ? 'Claim offer' : 'Tomar la oferta'}
-          </button>
+          </Link>
           {showClock && (
             <div className={styles.clock} role="timer">
               {countdown.days > 0 && (
