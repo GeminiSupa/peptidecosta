@@ -1,12 +1,42 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { BadgePercent, Check, Star } from 'lucide-react';
+import { BadgePercent, Check } from 'lucide-react';
 import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
 import { STANDARD_FIVE_PLUS_PCT, tenPlusDiscountPct } from '@/lib/bulkDeal.mjs';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
+import { FACEBOOK_REVIEW_URL, GOOGLE_REVIEW_URL, TRUSTPILOT_RATING, getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import styles from './CatalogCroDesktop.module.css';
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.6 12.3c0-.8-.1-1.5-.2-2.2H12v4.2h6c-.3 1.4-1 2.5-2.2 3.3v2.7h3.5c2.1-1.9 3.3-4.7 3.3-8z" />
+      <path fill="#34A853" d="M12 23c3 0 5.5-1 7.3-2.7l-3.5-2.7c-1 .7-2.3 1.1-3.8 1.1-2.9 0-5.4-2-6.3-4.6H2.1v2.8C3.9 20.5 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.7 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.4.4-2.1V7.1H2.1C1.4 8.6 1 10.2 1 12s.4 3.4 1.1 4.9l3.6-2.8z" />
+      <path fill="#EA4335" d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.1-3.1C17.5 2.1 15 1 12 1 7.7 1 3.9 3.5 2.1 7.1l3.6 2.8C6.6 7.3 9.1 5.4 12 5.4z" />
+    </svg>
+  );
+}
+
+function TrustpilotMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" rx="4" fill="#00b67a" />
+      <path fill="#fff" d="M12 4.6l2.1 6.2h6.5l-5.3 3.8 2 6.2L12 17l-5.3 3.8 2-6.2-5.3-3.8h6.5z" />
+    </svg>
+  );
+}
+
+function FacebookMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#1877F2" />
+      <path fill="#fff" d="M13.4 19.5v-6.1h2.1l.3-2.4h-2.4V9.4c0-.7.2-1.2 1.2-1.2h1.3V6.1c-.2 0-1-.1-1.9-.1-1.9 0-3.1 1.1-3.1 3.2V11H8.8v2.4h2.1v6.1h2.5z" />
+    </svg>
+  );
+}
 
 function standingLines(lang) {
   const en = lang === 'en';
@@ -61,7 +91,7 @@ export function CatalogCroTicker({ lang = 'es' }) {
   );
 }
 
-export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) {
+export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {}, onClaim }) {
   const campaign = useBulkWholesaleCampaign();
   const [now, setNow] = useState(() => Date.now());
 
@@ -83,16 +113,14 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
     ? null
     : (pressItems.find((item) => /tico times/i.test(item.outlet || '')) || pressItems[0]);
   const quote = en ? '"Serving Quality peptide products"' : '"Productos de péptidos de calidad"';
-  const score = rating ? String(rating) : '';
+  const score = rating ? String(rating) : TRUSTPILOT_RATING;
+  const googleHref = links.googleReviewUrl || links.googleMapsUrl || GOOGLE_REVIEW_URL;
+  const trustpilotHref = getTrustpilotReviewUrl(lang, links);
+  const facebookHref = getFacebookReviewUrl(links) || FACEBOOK_REVIEW_URL;
 
   return (
     <section className={styles.hero} aria-label={en ? 'Deal of the Week' : 'Oferta de la Semana'}>
       <div className={styles.copy}>
-        {score && (
-          <div className={styles.scores} aria-label={en ? 'Review score' : 'Puntaje'}>
-            <span><Star size={14} fill="#111" aria-hidden="true" /> {score}</span>
-          </div>
-        )}
         <h2>{campaign.active
           ? (en ? 'Deal of the Week' : 'Oferta de la Semana')
           : (en ? 'Save more as you add vials' : 'Ahorra más al agregar viales')}</h2>
@@ -107,6 +135,20 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, onClaim }) 
             {en ? 'The best saving is applied. These do not combine.' : 'Se aplica el mayor ahorro. No se combinan.'}
           </li>
         </ul>
+        <div className={styles.scores} aria-label={en ? 'Review scores' : 'Puntajes'}>
+          <a href={googleHref} target="_blank" rel="noopener noreferrer">
+            <GoogleMark />
+            <span>5.0</span>
+          </a>
+          <a href={trustpilotHref} target="_blank" rel="noopener noreferrer">
+            <TrustpilotMark />
+            <span>{score}</span>
+          </a>
+          <a href={facebookHref} target="_blank" rel="noopener noreferrer">
+            <FacebookMark />
+            <span>5.0</span>
+          </a>
+        </div>
         <div className={styles.actions}>
           <button type="button" className={styles.claim} onClick={onClaim}>
             {en ? 'Claim offer' : 'Tomar la oferta'}
@@ -166,24 +208,16 @@ export function CatalogCroTrust({ lang = 'es' }) {
 export function CatalogCroStats({ lang = 'es', productCount = 0, rating = '' }) {
   const en = lang === 'en';
   const products = Number(productCount) > 0 ? `${productCount}+` : '';
-  const cells = [
-    products && { value: products, label: en ? 'Peptide products' : 'Productos' },
-    rating && { value: String(rating), label: en ? 'Average rating' : 'Calificación', star: true },
-    { value: '≥98%', label: en ? 'Purity on the certificate' : 'Pureza en el certificado' },
-    { value: '$200', label: en ? 'Free shipping from' : 'Envío gratis desde' },
+  const bits = [
+    products && (en ? `${products} products` : `${products} productos`),
+    rating && `${rating}★`,
+    en ? '≥98% purity' : '≥98% pureza',
+    en ? 'Free shipping from $200' : 'Envío gratis desde $200',
   ].filter(Boolean);
 
   return (
-    <section className={styles.stats} aria-label={en ? 'Store facts' : 'Datos de la tienda'}>
-      <p>{en ? 'Trusted by researchers' : 'La confianza de los investigadores'}</p>
-      <div>
-        {cells.map((cell) => (
-          <article key={cell.label}>
-            <strong>{cell.value}{cell.star ? ' ★' : ''}</strong>
-            <span>{cell.label}</span>
-          </article>
-        ))}
-      </div>
-    </section>
+    <p className="catalog-inline-facts">
+      {bits.join(' · ')}
+    </p>
   );
 }

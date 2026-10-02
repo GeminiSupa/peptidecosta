@@ -73,7 +73,7 @@ import {
 } from '@/lib/checkoutIdentity.mjs';
 import { HONEYPOT_FIELD, junkOrderMessage } from '@/lib/checkoutJunkGuard.mjs';
 import { 
-  ShoppingBag, X, Search, SlidersHorizontal,
+  ShoppingCart, X, Search, SlidersHorizontal,
   List, Grid, Sparkles, Phone, FileText, 
   Plus, Minus, Trash2, Check, CheckCircle, AlertCircle,
   ChevronLeft, ChevronRight,
@@ -3961,7 +3961,7 @@ export default function CatalogPage() {
                 ? `Open cart, ${cartItemCount} ${cartItemCount === 1 ? 'item' : 'items'}`
                 : `Abrir carrito, ${cartItemCount} ${cartItemCount === 1 ? 'artículo' : 'artículos'}`}
             >
-              <ShoppingBag size={20} strokeWidth={2.4} aria-hidden="true" />
+              <ShoppingCart size={20} strokeWidth={2.4} aria-hidden="true" />
               {cartItemCount > 0 && <span className="catalog-header-cart-badge">{cartItemCount}</span>}
             </button>
           </div>
@@ -4258,6 +4258,7 @@ export default function CatalogPage() {
           lang={lang}
           rating={liveTrustpilotRating}
           settings={landingSettings}
+          links={links}
           onClaim={() => {
             setDealOnly(false);
             setActiveCategory('all');
@@ -4265,6 +4266,7 @@ export default function CatalogPage() {
             resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
         />
+        <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
         <CatalogCroTrust lang={lang} />
         <nav className="catalog-cro-cats" aria-label={lang === 'en' ? 'Product categories' : 'Categorías de productos'}>
           <button
@@ -4748,7 +4750,6 @@ export default function CatalogPage() {
         )}
         </div>
       )}
-      <CatalogCroStats lang={lang} productCount={products.length} rating={liveTrustpilotRating} />
       </main>
 
       {/* One bottom action at a time: WhatsApp for an empty cart, checkout once
@@ -4871,7 +4872,7 @@ export default function CatalogPage() {
               onClick={() => setIsCartOpen(true)}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <ShoppingBag size={20} />
+                <ShoppingCart size={20} />
                 <span>
                   {cartItemCount} {lang === 'en' ? (cartItemCount === 1 ? 'item' : 'items') : (cartItemCount === 1 ? 'artículo' : 'artículos')}
                 </span>
@@ -4942,7 +4943,7 @@ export default function CatalogPage() {
             </div>
           ) : cart.length === 0 ? (
             <div className="cart-empty-msg">
-              <ShoppingBag size={32} style={{ margin: '0 auto 16px auto', opacity: 0.3, display: 'block' }} />
+              <ShoppingCart size={32} style={{ margin: '0 auto 16px auto', opacity: 0.3, display: 'block' }} />
               {lang === 'en' ? 'Your cart is empty.' : 'Su carrito está vacío.'}
             </div>
           ) : (
@@ -6271,6 +6272,9 @@ export default function CatalogPage() {
               window.open(buildWhatsAppLink(links.whatsappNumber, lang === 'en' ? 'Hi! I have a question about my order.' : '¡Hola! Tengo algunas preguntas.'), '_blank');
             }}>
               {lang === 'en' ? 'Contact WhatsApp' : 'Contactar WhatsApp'}
+            </a>
+            <a href="/admin">
+              {lang === 'en' ? 'Admin login' : 'Acceso admin'}
             </a>
           </div>
         </div>

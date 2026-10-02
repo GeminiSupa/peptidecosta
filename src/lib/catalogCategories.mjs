@@ -319,20 +319,21 @@ export function groupCatalogCards(products = []) {
   return order;
 }
 
-/** How many sizes stay as chips. The rest go in the size dropdown. */
-const SIZE_CHIP_LIMIT = 4;
+/** Three sizes or fewer stay as chips. Four or more become two chips plus More. */
+const SIZE_CHIP_CAP = 3;
+const SIZE_CHIPS_BEFORE_MORE = 2;
 
 /**
- * The first four sizes stay as chips. Anything past that is listed in the
- * dropdown, so a compound with many strengths does not fill the card.
+ * One, two, or three sizes stay as chips. Four or more show the two smallest
+ * as chips, and the third slot is the More menu with every size after those.
  */
 export function visibleSizeChips(items) {
   const list = Array.isArray(items) ? items : [];
-  if (list.length <= SIZE_CHIP_LIMIT) {
+  if (list.length <= SIZE_CHIP_CAP) {
     return { visible: list, overflow: [], hiddenCount: 0 };
   }
-  const visible = list.slice(0, SIZE_CHIP_LIMIT);
-  const overflow = list.slice(SIZE_CHIP_LIMIT);
+  const visible = list.slice(0, SIZE_CHIPS_BEFORE_MORE);
+  const overflow = list.slice(SIZE_CHIPS_BEFORE_MORE);
   return { visible, overflow, hiddenCount: overflow.length };
 }
 
