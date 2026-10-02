@@ -104,7 +104,6 @@ const FINGERPRINT_FIELDS = Object.freeze([
   'sale_end_time',
   'status',
   'vial_size',
-  'is_default_size',
   'inventory_count',
   'low_stock_threshold',
   'coa',
@@ -119,6 +118,10 @@ const FINGERPRINT_FIELDS = Object.freeze([
   'supplier_lead_time_days',
   'batch_number',
   'batch_expiry_date',
+  // Appended, never inserted. The fingerprint is positional, so a field added
+  // in the middle shifts every value after it and a page loaded before the
+  // deploy reads as a row someone else edited. Add new fields here, at the end.
+  'is_default_size',
 ]);
 
 const blank = (value) => value === null || value === undefined || value === '';
@@ -176,6 +179,41 @@ export function productFingerprint(row) {
   return JSON.stringify(FINGERPRINT_FIELDS.map((field) => normalizeField(field, row?.[field], row)));
 }
 
+/**
+ * Does a fingerprint a tab took earlier still describe this row?
+ *
+ * Plain string equality was wrong across a deploy that adds a field. The
+ * fingerprint is a positional list, so a tab open since before the deploy holds
+ * a shorter one, it matches nothing, and the admin is told a teammate changed
+ * every product they try to save — naming someone who did nothing, over a
+ * change that is really just their page being a few minutes old. That happened
+ * when is_default_size was added.
+ *
+ * Compared value by value over the fields the tab actually recorded, an older
+ * baseline still answers the only question being asked: has anything it knew
+ * about changed since? A field it never recorded cannot have been edited in a
+ * tab that could not show it. This works because new fields are appended to
+ * FINGERPRINT_FIELDS rather than inserted.
+ */
+export function fingerprintMatches(fingerprint, baseline) {
+  if (typeof baseline !== 'string' || !baseline) return false;
+  if (fingerprint === baseline) return true;
+  let now;
+  let then;
+  try {
+    now = JSON.parse(fingerprint);
+    then = JSON.parse(baseline);
+  } catch {
+    return false;
+  }
+  if (!Array.isArray(now) || !Array.isArray(then) || then.length === 0) return false;
+  const shared = Math.min(now.length, then.length);
+  for (let i = 0; i < shared; i += 1) {
+    if (JSON.stringify(now[i]) !== JSON.stringify(then[i])) return false;
+  }
+  return true;
+}
+
 /** Fingerprints for a set of database rows, keyed by id — what a tab keeps. */
 export function productBaseline(rows = []) {
   return Object.fromEntries((rows || []).filter((row) => row?.id).map((row) => [String(row.id), productFingerprint(row)]));
@@ -214,7 +252,7 @@ export function planBulkSave({ submittedRows = [], currentRows = [], loadedIds, 
     if (submittedIds.has(id)) continue;
     const existing = current.get(id);
     if (!existing) continue; // already gone
-    if (productFingerprint(existing) !== baseline[id]) conflicts.push(existing.product || id);
+    if (!fingerprintMatches(productFingerprint(existing), baseline[id])) conflicts.push(existing.product || id);
     else toDelete.push(id);
   }
 
@@ -234,8 +272,8 @@ export function planBulkSave({ submittedRows = [], currentRows = [], loadedIds, 
       continue;
     }
 
-    const changedHere = productFingerprint(row) !== loaded;
-    const changedElsewhere = !existing || productFingerprint(existing) !== loaded;
+    const changedHere = !fingerprintMatches(productFingerprint(row), loaded);
+    const changedElsewhere = !existing || !fingerprintMatches(productFingerprint(existing), loaded);
 
     if (!changedElsewhere) toUpdate.push(row);
     else if (!changedHere) skipped.push(existing?.product || row.product || id); // theirs is newer; a deleted row stays deleted
@@ -260,6 +298,6 @@ export function planBulkSave({ submittedRows = [], currentRows = [], loadedIds, 
 export function checkSingleSave({ currentRow, baselineFingerprint } = {}) {
   if (!currentRow) return { ok: false, reason: 'deleted' };
   if (!baselineFingerprint) return { ok: false, reason: 'no_baseline' };
-  if (productFingerprint(currentRow) !== baselineFingerprint) return { ok: false, reason: 'changed' };
+  if (!fingerprintMatches(productFingerprint(currentRow), baselineFingerprint)) return { ok: false, reason: 'changed' };
   return { ok: true };
 }

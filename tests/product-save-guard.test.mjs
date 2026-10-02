@@ -166,3 +166,56 @@ test('a single save goes through only if the product is as the tab loaded it', (
   assert.equal(checkSingleSave({ currentRow: null, baselineFingerprint: loaded }).reason, 'deleted');
   assert.equal(checkSingleSave({ currentRow: row }).reason, 'no_baseline');
 });
+
+test('a tab open across a deploy that adds a field still saves', () => {
+  // What happened when is_default_size was added: an admin whose Products page
+  // had been open since before the deploy ticked one box, pressed Save, and was
+  // told "Someone else changed these products" — naming a teammate who had done
+  // nothing. The fingerprint is positional, so their older, shorter one matched
+  // nothing at all, and every row they touched read as a conflict.
+  const row = dbRow({ id: 'glp20', product: 'GLP-1 20mg', is_default_size: false });
+
+  // The baseline their page took, from a build that did not know the field.
+  const olderBaseline = JSON.stringify(JSON.parse(productFingerprint(row)).slice(0, -1));
+  assert.notEqual(olderBaseline, productFingerprint(row), 'the two really are different strings');
+
+  assert.deepEqual(
+    checkSingleSave({ currentRow: row, baselineFingerprint: olderBaseline }),
+    { ok: true },
+    'saving one product from an older tab must not be refused',
+  );
+
+  const submitted = productToDbRow({ ...toGridRow(row), isDefaultSize: true }, 0);
+  const plan = planBulkSave({
+    submittedRows: [submitted],
+    currentRows: [row],
+    loadedIds: ['glp20'],
+    baseline: { glp20: olderBaseline },
+  });
+  assert.deepEqual(plan.conflicts, [], 'nobody else changed it, so there is no conflict');
+  assert.equal(plan.toUpdate.length, 1, 'the tick is written');
+  assert.equal(plan.toUpdate[0].is_default_size, true);
+});
+
+test('an older tab is still refused when someone really did change the row', () => {
+  // The tolerance must not become a way to overwrite a teammate: the fields the
+  // older tab did record are still compared in full.
+  const loaded = dbRow({ id: 'glp20', product: 'GLP-1 20mg', is_default_size: false });
+  const olderBaseline = JSON.stringify(JSON.parse(productFingerprint(loaded)).slice(0, -1));
+
+  const changedByThem = dbRow({ id: 'glp20', product: 'GLP-1 20mg', price_usd: '$175', is_default_size: false });
+  assert.deepEqual(
+    checkSingleSave({ currentRow: changedByThem, baselineFingerprint: olderBaseline }),
+    { ok: false, reason: 'changed' },
+  );
+
+  const submitted = productToDbRow({ ...toGridRow(loaded), priceUsd: '$160' }, 0);
+  const plan = planBulkSave({
+    submittedRows: [submitted],
+    currentRows: [changedByThem],
+    loadedIds: ['glp20'],
+    baseline: { glp20: olderBaseline },
+  });
+  assert.deepEqual(plan.conflicts, ['GLP-1 20mg']);
+  assert.equal(plan.toUpdate.length, 0);
+});
