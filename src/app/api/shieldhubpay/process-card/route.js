@@ -12,7 +12,7 @@ import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { sendCustomerOrderConfirmation } from '@/lib/orderWhatsAppAlerts';
 import { parseBillingAddress } from '@/lib/billingAddress.mjs';
 import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
-import { notifyLowInventory, prepareInventoryReservation } from '@/lib/orderInventoryServer';
+import { reservePaidOrderInventory } from '@/lib/orderInventoryServer';
 import { verifyCardCheckoutToken } from '@/lib/cardPaymentLink';
 import {
   consumeDurableRateLimit,
@@ -99,45 +99,6 @@ function statusToOrderStatus(status) {
   return gatewayStatusToOrderStatus(status, {
     onUnknown: (raw) => console.warn(`[Chargex] Unrecognised gateway status "${raw}"; order left pending for review.`),
   });
-}
-
-async function reserveInventoryAfterApprovedPayment(supabase, order) {
-  // New public orders explicitly start with an empty reservation. Legacy rows
-  // without the column were already deducted by the old create route and must
-  // never be deducted a second time.
-  if (!Array.isArray(order?.inventory_deducted) || order.inventory_deducted.length > 0) return;
-
-  let reservation = null;
-  try {
-    reservation = await prepareInventoryReservation(supabase, [], order.items || []);
-    const { error } = await supabase
-      .from('orders')
-      .update({ inventory_deducted: reservation.reservations })
-      .eq('id', order.id);
-    if (error) {
-      await reservation.rollback().catch(() => {});
-      reservation = null;
-      throw error;
-    }
-    try {
-      await notifyLowInventory(supabase, reservation.changes);
-    } catch (notifyError) {
-      console.error('[Chargex] Low inventory notification failed:', notifyError.message);
-    }
-  } catch (error) {
-    console.error(`[Chargex] Paid-order inventory reservation failed for ${order?.order_number}:`, error.message);
-    try {
-      await supabase.from('admin_notifications').insert({
-        type: 'inventory_reservation_failed',
-        title: `Inventory review required: ${order?.order_number}`,
-        body: `Payment was approved but stock could not be reserved: ${error.message}`.slice(0, 500),
-        link_tab: 'orders',
-        link_ref: order?.order_number,
-      });
-    } catch {
-      // Payment result still has to be returned even if the dashboard alert fails.
-    }
-  }
 }
 
 /**
@@ -334,7 +295,7 @@ export async function POST(req) {
     const declineReason = outcome === 'paid' ? null : declineReasonFrom(transaction);
 
     if (outcome === 'paid') {
-      await reserveInventoryAfterApprovedPayment(supabase, claim.order);
+      await reservePaidOrderInventory(supabase, claim.order, { logPrefix: '[Chargex]' });
     }
 
     // Tell the customer how it ended, from here.
@@ -386,9 +347,20 @@ export async function POST(req) {
     }
 
     if (orderStatus === ORDER_STATUS.CARD_3DS && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
-      // The customer is only being sent to Chargex. Do not mail "payment
-      // processing" yet. The receipt goes out from the webhook once Chargex
+      // The customer is only being sent to Chargex. Do not mail THEM "payment
+      // processing" yet; their receipt goes out from the webhook once Chargex
       // says the payment is finished.
+      //
+      // The team is told now, though. /api/orders/create holds a card order's
+      // alert back for the payment result, and that result used to arrive in
+      // this same request. It does not any more: a customer who opens the
+      // Chargex page and walks away produces no outcome at all, so holding the
+      // alert any longer means the only card orders the team ever hears about
+      // by email are the ones that completed. Awaited rather than queued in
+      // after(), because after() work has gone missing on this deployment and
+      // a mail nobody can prove was sent is the problem being fixed.
+      await sendHeldTeamAlert(orderNumber, 'handed off to Chargex');
+
       return NextResponse.json({
         ok: true,
         status: transaction.status,
@@ -424,7 +396,7 @@ export async function POST(req) {
     // result mail is coming. /api/orders/create held its team alert for this
     // order expecting one — send it now, or a real order that failed on the
     // way to the gateway reaches the team by the dashboard bell alone.
-    await sendDeferredTeamAlertOnFailure(failedOrderNumber);
+    await sendHeldTeamAlert(failedOrderNumber, 'charge threw before any answer');
 
     // Never `error.message` here. It is raw exception text, and worse, it was
     // shown to the customer beside an invitation to try again — while we have
@@ -434,8 +406,13 @@ export async function POST(req) {
   }
 }
 
-/** Never throws: this runs inside a catch that already has a response to send. */
-async function sendDeferredTeamAlertOnFailure(orderNumber) {
+/**
+ * Send the team alert /api/orders/create held back for this card order.
+ *
+ * Never throws: both callers have a response to return either way — one is
+ * about to redirect the customer to Chargex, the other is inside a catch.
+ */
+async function sendHeldTeamAlert(orderNumber, reason) {
   if (!orderNumber) return;
   try {
     const supabase = getSupabaseAdmin();
@@ -448,6 +425,6 @@ async function sendDeferredTeamAlertOnFailure(orderNumber) {
       await sendAdminOrderEmail(APP_URL.replace(/\/$/, ''), orderRow, orderNumber);
     }
   } catch (mailErr) {
-    console.error('[Chargex] Deferred team alert failed:', mailErr.message);
+    console.error(`[Chargex] Held team alert (${reason}) failed for ${orderNumber}:`, mailErr.message);
   }
 }

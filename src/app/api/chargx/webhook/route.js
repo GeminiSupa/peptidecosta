@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyChargxWebhookSignature } from '@/lib/chargxPay.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
+import { reservePaidOrderInventory } from '@/lib/orderInventoryServer';
 import { declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
 import { sendPaymentResultEmails, shouldSendPaymentResultEmail } from '@/lib/paymentResultEmail.mjs';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
@@ -118,18 +119,42 @@ export async function POST(req) {
       }
     }
 
+    // Read the whole row once: the receipt needs it, and so does the stock
+    // deduction below. The first select above deliberately names its columns.
+    const needsFullOrder = statusText === 'Paid'
+      || (statusChanged && shouldSendPaymentResultEmail(statusText));
+    const orderRow = needsFullOrder
+      ? (await supabase.from('orders').select('*').eq('id', existing.id).maybeSingle()).data
+      : null;
+
     if (statusChanged && shouldSendPaymentResultEmail(statusText)) {
-      const { data: orderRow } = await supabase.from('orders').select('*').eq('id', existing.id).maybeSingle();
       if (orderRow) {
         await sendPaymentResultEmails(getPublicSiteUrl(req.url), orderRow, existing.order_number, {
           declineReason: declineReasonFrom({ message: payload?.error?.[0]?.errorText || payload?.message }),
-          firstTeamAlert: String(orderRow.payment_method || '').toLowerCase() === 'card',
+          // The team's first sight of a card order is now the alert sent when
+          // the customer is handed to Chargex, so this mail is the outcome.
+          firstTeamAlert: false,
           logPrefix: '[Chargex webhook]',
         });
+      } else {
+        console.error('[Chargex webhook] Could not re-read', existing.order_number, '; result email not sent');
       }
     }
 
     if (statusText === 'Paid') {
+      // Take the vials out of stock.
+      //
+      // Nothing here used to: the old gateway charged the card inside
+      // /api/shieldhubpay/process-card and deducted in that same request, and
+      // the ChargX hand-off moved the moment an order becomes paid to this
+      // webhook — which left every card sale deducting nothing at all. Safe to
+      // reach twice: a row that already carries a reservation is skipped.
+      if (orderRow) {
+        await reservePaidOrderInventory(supabase, orderRow, { logPrefix: '[Chargex webhook]' });
+      } else {
+        console.error('[Chargex webhook] Could not re-read', existing.order_number, '; stock NOT reserved');
+      }
+
       const { error: cartCleanupError } = await markActiveAbandonedCartsConvertedForOrder(supabase, {
         ...existing,
         status: statusText,

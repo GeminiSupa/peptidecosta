@@ -108,3 +108,61 @@ export async function notifyLowInventory(supabase, changes = []) {
     });
   }
 }
+
+/**
+ * Take a paid order's vials out of stock, once.
+ *
+ * This body used to live inside /api/shieldhubpay/process-card, which was the
+ * only place that could learn a card order had been paid: it charged the card
+ * itself and deducted in the same request. With the ChargX hand-off the answer
+ * arrives at /api/chargx/webhook instead, long after the customer has left the
+ * site — so the deduction has to happen there too, and one copy serves both.
+ *
+ * Never throws. A payment that cleared must not be reported as failed because
+ * a stock row could not be written; a failure raises a dashboard alert and the
+ * caller carries on.
+ */
+export async function reservePaidOrderInventory(supabase, order, { logPrefix = '[Paid inventory]' } = {}) {
+  // New public orders explicitly start with an empty reservation. Legacy rows
+  // without the column were already deducted by the old create route and must
+  // never be deducted a second time. A row that already carries a reservation
+  // has been through here, or through the admin panel, and is left alone —
+  // which is also what makes a repeated webhook delivery harmless.
+  if (!Array.isArray(order?.inventory_deducted) || order.inventory_deducted.length > 0) {
+    return { reserved: false, skipped: 'already-reserved' };
+  }
+
+  let reservation = null;
+  try {
+    reservation = await prepareInventoryReservation(supabase, [], order.items || []);
+    const { error } = await supabase
+      .from('orders')
+      .update({ inventory_deducted: reservation.reservations })
+      .eq('id', order.id);
+    if (error) {
+      await reservation.rollback().catch(() => {});
+      reservation = null;
+      throw error;
+    }
+    try {
+      await notifyLowInventory(supabase, reservation.changes);
+    } catch (notifyError) {
+      console.error(`${logPrefix} Low inventory notification failed:`, notifyError.message);
+    }
+    return { reserved: true, changes: reservation.changes, reservations: reservation.reservations };
+  } catch (error) {
+    console.error(`${logPrefix} Paid-order inventory reservation failed for ${order?.order_number}:`, error.message);
+    try {
+      await supabase.from('admin_notifications').insert({
+        type: 'inventory_reservation_failed',
+        title: `Inventory review required: ${order?.order_number}`,
+        body: `Payment was approved but stock could not be reserved: ${error.message}`.slice(0, 500),
+        link_tab: 'orders',
+        link_ref: order?.order_number,
+      });
+    } catch {
+      // The payment result still has to be returned even if the alert fails.
+    }
+    return { reserved: false, error: error.message };
+  }
+}
