@@ -110,6 +110,11 @@ test('the team new-order alert is unchanged and still admin-only', () => {
   assert.equal(payload.declineReason, null);
 });
 
+test('opening Chargex does not mail the customer that payment is processing', () => {
+  const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  assert.equal(route.includes('sendCardHandoffReceipt'), false);
+});
+
 test('a 3DS hand-off still tells the customer their order exists', async () => {
   const { fetchImpl, calls } = makeFetch({ customerReceipt: { sent: true } });
 

@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { isChargxConfigured, createChargxCardCheckout, withChargxCheckoutDetails } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
-import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
+import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
@@ -386,22 +386,9 @@ export async function POST(req) {
     }
 
     if (orderStatus === ORDER_STATUS.CARD_3DS && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
-      // Queued rather than awaited: the customer is about to be sent to their
-      // bank and must not sit through an SMTP round trip first. If it is lost,
-      // the webhook still delivers the real answer once the bank replies.
-      after(async () => {
-        try {
-          const { data: orderRow } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('order_number', orderNumber)
-            .maybeSingle();
-          if (orderRow) await sendCardHandoffReceipt(baseUrl, orderRow, orderNumber);
-        } catch (mailErr) {
-          console.error('[Chargex] 3DS hand-off receipt failed:', mailErr);
-        }
-      });
-
+      // The customer is only being sent to Chargex. Do not mail "payment
+      // processing" yet. The receipt goes out from the webhook once Chargex
+      // says the payment is finished.
       return NextResponse.json({
         ok: true,
         status: transaction.status,
