@@ -143,6 +143,30 @@ function dedupeByKey(entries, keyFor) {
   return unique;
 }
 
+/**
+ * Is this login one of the team, for the purpose of being told about orders?
+ *
+ * `admin_profiles` used to hold nothing but staff, so "everybody in this table"
+ * meant "the team" and adding them all to the order alert was right. Affiliate
+ * logins now live in the same table (Sep 2026), and an affiliate is an outside
+ * partner — so that same line started handing them the customer's name, phone,
+ * ID number, address and total for every order in the shop, with nobody having
+ * ticked anything. A real affiliate received those for days.
+ *
+ * So the automatic list is staff only. Anybody else — an affiliate, a sub-user,
+ * any tier invented later — has to be put on the list on purpose in Notification
+ * Settings, which is a row in `notification_recipients` and is untouched by this.
+ *
+ * A blank tier or status counts as active staff, deliberately: the Team screen
+ * writes no tier at all and leaves it to the column default, so reading blank as
+ * "not staff" would cut the order alert off from the whole team.
+ */
+export function isTeamAlertProfile(profile) {
+  const tier = String(profile?.tier ?? 'staff').trim().toLowerCase();
+  const status = String(profile?.status ?? 'active').trim().toLowerCase();
+  return (tier === '' || tier === 'staff') && (status === '' || status === 'active');
+}
+
 /** Merge central order-email destinations with per-member email preferences. */
 export function mergeOrderEmailDestinations({
   base = [],
@@ -151,12 +175,16 @@ export function mergeOrderEmailDestinations({
   profiles = [],
 } = {}) {
   const startingList = managedAvailable ? managed : base;
+  // Opt-outs are read from every profile, not just the team's: this list may
+  // only ever shrink, so somebody who switched order mail off keeps it off even
+  // if they are not staff.
   const optedOut = new Set(
     profiles
       .filter((profile) => profile?.email && !wantsOrderEmail(profile))
       .map((profile) => emailKey(profile.email))
   );
   const profileEmails = profiles
+    .filter(isTeamAlertProfile)
     .filter((profile) => profile?.email && wantsOrderEmail(profile))
     .map((profile) => String(profile.email).trim());
 
@@ -182,6 +210,7 @@ export function mergeOrderWhatsAppDestinations({
       }))
     : [];
   const profileEntries = profiles
+    .filter(isTeamAlertProfile)
     .filter(wantsOrderWhatsApp)
     .flatMap((profile) => agentWhatsAppNumbers(profile).map((phone) => ({
       name: profile.name,

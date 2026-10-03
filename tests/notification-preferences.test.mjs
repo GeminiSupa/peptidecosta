@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   agentWhatsAppNumber,
   agentWhatsAppNumbers,
+  isTeamAlertProfile,
   mergeOrderEmailDestinations,
   mergeOrderWhatsAppDestinations,
   missingColumnFrom,
@@ -227,4 +228,84 @@ test('member WhatsApp preferences merge with the central notification list', () 
       { name: 'Agent', phone: '50688881234' },
     ]
   );
+});
+
+// An affiliate login is a row in admin_profiles like any other. It must never be
+// swept into the order alert, which carries the customer's name, phone, ID
+// number, address and total — a real affiliate received those for days.
+test('an affiliate login is left off the order email', () => {
+  assert.deepEqual(
+    mergeOrderEmailDestinations({
+      managedAvailable: true,
+      managed: ['ops@example.com'],
+      profiles: [
+        { email: 'agent@example.com', tier: 'staff', status: 'active' },
+        { email: 'partner@example.com', tier: 'affiliate', status: 'active' },
+      ],
+    }),
+    ['ops@example.com', 'agent@example.com']
+  );
+});
+
+test('an affiliate login is left off the order WhatsApp alert too', () => {
+  assert.deepEqual(
+    mergeOrderWhatsAppDestinations({
+      managedAvailable: true,
+      managed: [],
+      profiles: [
+        { name: 'Agent', tier: 'staff', order_whatsapp_notifications: true, whatsapp_number: '50688881234' },
+        { name: 'Partner', tier: 'affiliate', order_whatsapp_notifications: true, whatsapp_number: '50677776666' },
+      ],
+    }),
+    [{ name: 'Agent', phone: '50688881234' }]
+  );
+});
+
+// The Team screen writes no tier at all, so blank has to keep meaning staff.
+test('a profile with no tier still gets the order email', () => {
+  assert.deepEqual(
+    mergeOrderEmailDestinations({
+      managedAvailable: true,
+      managed: [],
+      profiles: [{ email: 'agent@example.com' }],
+    }),
+    ['agent@example.com']
+  );
+});
+
+test('a login that is not active is left off', () => {
+  assert.deepEqual(
+    mergeOrderEmailDestinations({
+      managedAvailable: true,
+      managed: [],
+      profiles: [
+        { email: 'here@example.com', tier: 'staff', status: 'active' },
+        { email: 'gone@example.com', tier: 'staff', status: 'disabled' },
+      ],
+    }),
+    ['here@example.com']
+  );
+});
+
+// Shrinking only: an affiliate who switched order mail off must stay off even
+// though they are no longer added automatically.
+test('an opt-out still removes a managed destination for a non-staff login', () => {
+  assert.deepEqual(
+    mergeOrderEmailDestinations({
+      managedAvailable: true,
+      managed: ['partner@example.com', 'ops@example.com'],
+      profiles: [
+        { email: 'partner@example.com', tier: 'affiliate', order_email_notifications: false },
+      ],
+    }),
+    ['ops@example.com']
+  );
+});
+
+test('isTeamAlertProfile: staff yes, affiliate and sub-user no', () => {
+  assert.equal(isTeamAlertProfile({ tier: 'staff', status: 'active' }), true);
+  assert.equal(isTeamAlertProfile({}), true);
+  assert.equal(isTeamAlertProfile({ tier: 'affiliate' }), false);
+  assert.equal(isTeamAlertProfile({ tier: 'sub_user' }), false);
+  assert.equal(isTeamAlertProfile({ tier: 'STAFF', status: 'Active' }), true);
 });

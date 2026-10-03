@@ -171,7 +171,8 @@ async function resolveTeamOrderWhatsAppRecipients(supabase) {
     type: 'new_order',
   });
   const { data, error } = await selectWithOptionalPreferences(
-    ['name', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
+    // tier and status feed the staff-only rule in mergeOrderWhatsAppDestinations.
+    ['name', 'tier', 'status', 'notifications_enabled', 'order_whatsapp_notifications', 'whatsapp_number'],
     (columns) => supabase.from('admin_profiles').select(columns),
   );
   if (error) {

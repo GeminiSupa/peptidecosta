@@ -46,7 +46,10 @@ export async function getOrderNotificationRecipients() {
     // Ask for the preference columns, but never let a missing one cost the team
     // their order emails — or resurrect an opt-out whose column does exist.
     const { data, error, droppedColumns } = await selectWithOptionalPreferences(
-      ['email', 'notifications_enabled', 'order_email_notifications'],
+      // tier and status come along so the staff-only rule in
+      // mergeOrderEmailDestinations can actually see them. Read them as
+      // undefined and every affiliate login reads as staff again.
+      ['email', 'tier', 'status', 'notifications_enabled', 'order_email_notifications'],
       (columns) => supabase.from('admin_profiles').select(columns)
     );
 
