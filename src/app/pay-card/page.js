@@ -244,8 +244,8 @@ function CardPaymentContent() {
                   </li>
                   <li>
                     {isEn
-                      ? <>Statement name: <strong>&ldquo;Chargex&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
-                      : <>Nombre en el estado de cuenta: <strong>&ldquo;Chargex&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
+                      ? <>Statement name: <strong>&ldquo;Agile disruptive tech&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
+                      : <>Nombre en el estado de cuenta: <strong>&ldquo;Agile disruptive tech&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
                   </li>
                 </ul>
               </div>

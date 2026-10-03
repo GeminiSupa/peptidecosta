@@ -5640,8 +5640,8 @@ export default function CatalogPage() {
                         </li>
                         <li>
                           {lang === 'en'
-                            ? <>It will appear on your statement as <strong>&ldquo;Chargex&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
-                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;Chargex&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
+                            ? <>It will appear on your statement as <strong>&ldquo;Agile disruptive tech&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
+                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;Agile disruptive tech&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
                         </li>
                       </ul>
                     </div>
