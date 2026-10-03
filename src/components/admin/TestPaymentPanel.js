@@ -124,10 +124,10 @@ export default function TestPaymentPanel() {
       <div style={{ ...panelStyle, borderColor: 'rgba(52,211,153,0.35)' }}>
         <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.6, opacity: 0.85 }}>
           <FlaskConical size={14} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
-          Every payment here hits the Shield Hub Pay <strong>sandbox</strong> — no real money moves, and
+          Every payment here hits the Chargex <strong>test store</strong> — no real money moves, and
           customers are unaffected. Test orders are marked <code>TEST-</code> and can be deleted below.
-          Sandbox cards: <code>4242 4242 4242 4242</code> approves; use your gateway&apos;s decline cards
-          (e.g. endings <code>4341</code>, <code>4846</code>) to test failures.
+          Test card: <code>4111 1111 1111 1111</code>, any future expiry, any 3-digit code.
+          Amounts <code>$70.02</code> and <code>$70.03</code> are the fake declines.
           {' '}Each single payment also emails <strong>you</strong> the receipt the customer would get
           for that outcome — approved or declined. Your team is not copied.</p>
         <p style={{ margin: '10px 0 0', fontSize: '0.85rem', lineHeight: 1.6, opacity: 0.85 }}>

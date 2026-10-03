@@ -1086,7 +1086,7 @@ Keep your tone highly professional, precise, data-driven, and empowering. Format
 
   const normalizePaymentMethod = (method) => {
     const value = String(method || 'whatsapp').trim().toLowerCase();
-    if (value === 'tilopay' || value === 'tilo pay' || value === 'shieldhubpay' || value === 'shield hub pay') return 'card';
+    if (value === 'tilopay' || value === 'tilo pay' || value === 'shieldhubpay' || value === 'shield hub pay' || value === 'chargex' || value === 'chargx') return 'card';
     return value || 'whatsapp';
   };
 

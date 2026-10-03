@@ -12,6 +12,7 @@ test('no internal wording can reach a customer from the card route', () => {
   // "The card payment did not go through".
   for (const leak of [
     'Shield Hub Pay credentials are not configured',
+    'Chargex credentials are not configured',
     'Card payments are currently configured for USD only',
     'Missing required billing fields',
     'Order not found',
@@ -25,7 +26,7 @@ test('no internal wording can reach a customer from the card route', () => {
   // The raw exception text was the worst of them.
   assert.ok(!route.includes("error: error.message"), 'raw exception text is still returned');
   // The internal reason is still logged, just not sent.
-  assert.match(route, /console\.error\(`\[Shield Hub Pay\] \$\{code\}/);
+  assert.match(route, /console\.error\(`\[Chargex\] \$\{code\}/);
 });
 
 test('every stop is answered in the customer language', () => {

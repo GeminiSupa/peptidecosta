@@ -1,7 +1,7 @@
 /**
  * Refunding an order: what is allowed, and what it costs the agent.
  *
- * Refunds are issued by hand in Shield Hub Pay. Nothing in here moves money —
+ * Refunds are issued by hand in the Chargex dashboard. Nothing in here moves money —
  * it records what was given back so the order, the agent's pay and the
  * accountant's books cannot disagree about it.
  *

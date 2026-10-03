@@ -1093,7 +1093,7 @@ export default function OrderDetailPanel({
               fontWeight: 700,
               lineHeight: 1.45,
             }}>
-              Verify this card payment in Shield Hub Pay before fulfilling the order.
+              Verify this card payment in Chargex before fulfilling the order.
               <CardPaymentsPausedBanner compact />
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px', alignItems: 'center' }}>
                 <button

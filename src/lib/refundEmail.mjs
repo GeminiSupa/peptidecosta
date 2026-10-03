@@ -1,7 +1,7 @@
 /**
  * The three emails a refund sends.
  *
- * Refunds are recorded here and paid by hand in Shield Hub Pay, which means the
+ * Refunds are recorded here and paid by hand in the Chargex dashboard, which means the
  * customer's money does not arrive the moment the button is pressed. So the
  * customer's mail says the refund is *approved and on its way*, never that it
  * has landed — telling somebody their money is back when it is still days out
@@ -156,7 +156,7 @@ export function buildTeamRefundEmail({ order = {}, plan = {}, clawback = null, a
           ${commissionLine}
         </table>
         <p style="margin:20px 0 0;font-size:13px;color:#64748b;">
-          This records the refund only. The money still has to be sent back by hand in Shield Hub Pay.
+          This records the refund only. The money still has to be sent back by hand in the Chargex dashboard.
         </p>
       </div>
     </div>
@@ -175,7 +175,7 @@ export function buildTeamRefundEmail({ order = {}, plan = {}, clawback = null, a
       ? `Commission to recover: ${formatRefundMoney(currency === 'CRC' ? clawback.owedCrc : clawback.owedUsd, currency)} (taken off the next weekly pay)`
       : 'Commission: not yet paid for this order — nothing to recover',
     '',
-    'This records the refund only. The money still has to be sent back by hand in Shield Hub Pay.',
+    'This records the refund only. The money still has to be sent back by hand in the Chargex dashboard.',
   ].join('\n');
 
   return { subject, html, text };
@@ -203,7 +203,7 @@ export function buildAccountantRefundEmail({ order = {}, plan = {} } = {}) {
       ${plan.reason ? `<tr><td style="padding:4px 16px 4px 0;">Motivo</td><td>${escapeHtml(plan.reason)}</td></tr>` : ''}
     </table>
     <p style="font:13px/1.5 system-ui,sans-serif;color:#64748b;margin:16px 0 0">
-      El reembolso se envía manualmente por Shield Hub Pay; este correo es el registro contable.
+      El reembolso se envía manualmente en el panel de Chargex; este correo es el registro contable.
     </p>
   `;
 

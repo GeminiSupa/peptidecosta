@@ -29,13 +29,13 @@ export const paymentLabels = {
   en: {
     whatsapp: 'WhatsApp Manual Coordination',
     sinpe: 'SINPE Móvil',
-    card: 'Credit / Debit Card via Shield Hub Pay',
+    card: 'Credit / Debit Card via Chargex',
     unknown: 'Standard Payment Method',
   },
   es: {
     whatsapp: 'Coordinación Manual por WhatsApp',
     sinpe: 'SINPE Móvil',
-    card: 'Tarjeta de Crédito / Débito vía Shield Hub Pay',
+    card: 'Tarjeta de Crédito / Débito vía Chargex',
     unknown: 'Método de Pago Estándar',
   }
 };

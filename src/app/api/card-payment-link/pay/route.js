@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyCardPaymentOrderToken, getPublicBaseUrl } from '@/lib/cardPaymentLink';
-import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { isChargxConfigured, createChargxCardCheckout, withChargxCheckoutDetails } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
@@ -12,30 +12,6 @@ import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
 import { withPaymentStatusActivity } from '@/lib/paymentStatusActivity.mjs';
 
 export const runtime = 'nodejs';
-
-function normalizeCard(card = {}, fallbackHolder = 'Customer') {
-  const expiry = String(card.expiry || '').replace(/\s+/g, '');
-  const [rawMonth, rawYear] = expiry.includes('/') ? expiry.split('/') : [card.expiryMonth, card.expiryYear];
-  const expiryMonth = String(rawMonth || '').replace(/\D/g, '').padStart(2, '0').slice(0, 2);
-  const yearDigits = String(rawYear || '').replace(/\D/g, '');
-  const expiryYear = yearDigits.length === 4 ? yearDigits.slice(2) : yearDigits;
-
-  return {
-    holder: normalizeShieldHubPayName(card.holder, fallbackHolder),
-    number: String(card.number || '').replace(/\D/g, ''),
-    cvv: String(card.cvv || '').replace(/\D/g, ''),
-    expiry_month: expiryMonth,
-    expiry_year: expiryYear,
-  };
-}
-
-function splitName(name = '') {
-  const parts = normalizeShieldHubPayName(name).split(/\s+/).filter(Boolean);
-  return {
-    first: parts[0] || 'Customer',
-    last: parts.slice(1).join(' ') || parts[0] || 'Customer',
-  };
-}
 
 function statusToOrderStatus(status) {
   return gatewayStatusToOrderStatus(status, {
@@ -74,7 +50,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { orderNumber, token, card, customerEmail, customerIp, lang = 'es' } = body;
+    const { orderNumber, token, customerEmail, lang = 'es' } = body;
     customerLang = lang === 'en' ? 'en' : 'es';
 
     // The kill switch, ahead of every other check. A payment link already sent
@@ -86,8 +62,8 @@ export async function POST(request) {
     }
 
     // Checked after the body is read so the reply is in their language.
-    if (!isShieldHubPayConfigured()) {
-      return stopPayment('unavailable', customerLang, 500, 'Shield Hub Pay credentials are not configured');
+    if (!isChargxConfigured()) {
+      return stopPayment('unavailable', customerLang, 500, 'Chargex credentials are not configured');
     }
 
     if (!orderNumber || !token) {
@@ -127,11 +103,6 @@ export async function POST(request) {
       return stopPayment('email_required', lang, 400, 'Email is required for card payment');
     }
 
-    const normalizedCard = normalizeCard(card, order.customer_name);
-    if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.cvv.length < 3 || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      return stopPayment('card_details', lang, 400, 'Missing or invalid card details');
-    }
-
     // Atomically claim the order so two concurrent requests can't both charge it.
     // The winner proceeds; a loser (another request already charging, or the order
     // already paid) is rejected here instead of hitting the gateway a second time.
@@ -148,25 +119,23 @@ export async function POST(request) {
     }
 
     const baseUrl = getPublicBaseUrl(request.url);
-    const name = splitName(order.customer_name);
     let transaction;
     try {
-      transaction = await processShieldHubPayTransaction({
+      const page = await createChargxCardCheckout({
         amount: amountUsd.toFixed(2),
-        currency: 'USD',
-        transaction_reference: order.order_number,
-        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(order.order_number)}&payment=card`,
-        notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
-        customer: {
-          first: name.first,
-          last: name.last,
+        successUrl: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(order.order_number)}&payment=card`,
+        cancelUrl: `${baseUrl}/pay-card?order=${encodeURIComponent(order.order_number)}&token=${encodeURIComponent(token)}`,
+      });
+      transaction = {
+        ...page,
+        descriptor_text: 'Chargex',
+        redirect_url: withChargxCheckoutDetails(page.redirect_url, {
+          orderNumber: order.order_number,
           email,
           phone: order.customer_phone,
-          ip: customerIp || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1',
-        },
-        billing: parseBillingAddress(order.shipping_address),
-        card: normalizedCard,
-      });
+          billing: parseBillingAddress(order.shipping_address),
+        }),
+      };
     } catch (chargeErr) {
       // The charge never produced a result, so release the claim to let the
       // customer retry rather than leaving the order stuck as "processing".
@@ -178,6 +147,7 @@ export async function POST(request) {
     const patch = withPaymentStatusActivity(
       order,
       buildPaymentPatch(orderStatus, transaction, email),
+      { by: 'Chargex' },
     );
     const { error: updateError } = await supabase
       .from('orders')
@@ -214,7 +184,7 @@ export async function POST(request) {
       await supabase.from('admin_notifications').insert({
         type: 'payment_received',
         title: `Card payment approved: ${order.order_number}`,
-        body: `Shield Hub Pay approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
+        body: `Chargex approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
         link_tab: 'orders',
         link_ref: order.order_number,
       });

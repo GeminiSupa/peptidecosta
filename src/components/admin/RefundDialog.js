@@ -280,7 +280,7 @@ export default function RefundDialog({ order, onClose, onRefunded }) {
         }}>
           This emails the customer, the team, the assigned agent and the accountant,
           and adjusts the agent&apos;s commission. <strong>You still have to send the
-          money back yourself in Shield Hub Pay.</strong>
+          money back yourself in the Chargex dashboard.</strong>
         </div>
 
         {error && (

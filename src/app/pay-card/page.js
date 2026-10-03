@@ -35,13 +35,7 @@ function CardPaymentContent() {
   // stop a fast second click, so a ref blocks re-entry the instant submit fires —
   // a repeated charge attempt is what trips the gateway's "attempts allowed" error.
   const submitLockRef = useRef(false);
-  const [form, setForm] = useState({
-    holder: '',
-    number: '',
-    expiry: '',
-    cvv: '',
-    email: '',
-  });
+  const [form, setForm] = useState({ email: '' });
 
   const lang = useMemo(() => (order?.currency === 'CRC' ? 'es' : 'en'), [order?.currency]);
   const isEn = lang === 'en';
@@ -61,8 +55,7 @@ function CardPaymentContent() {
         setOrder(data.order);
         setForm(prev => ({
           ...prev,
-          holder: prev.holder || data.order.customerName || '',
-          email: data.order.customerEmail || '',
+          email: data.order.customerEmail || prev.email || '',
         }));
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -90,27 +83,13 @@ function CardPaymentContent() {
     };
   }, [orderNumber, token]);
 
-  const updateCardNumber = (value) => {
-    const digits = value.replace(/\D/g, '').slice(0, 19);
-    const formatted = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
-    setForm(prev => ({ ...prev, number: formatted }));
-  };
-
-  const updateExpiry = (value) => {
-    const digits = value.replace(/\D/g, '').slice(0, 4);
-    const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-    setForm(prev => ({ ...prev, expiry }));
-  };
-
   const submitPayment = async (event) => {
     event.preventDefault();
     if (submitLockRef.current) return; // a charge is already in flight — ignore repeat clicks
     setError('');
 
-    const cleanCardNumber = form.number.replace(/\D/g, '');
-    const cleanCvv = form.cvv.replace(/\D/g, '');
-    if (!form.holder.trim() || cleanCardNumber.length < 12 || !form.expiry.trim() || cleanCvv.length < 3 || !form.email.trim()) {
-      setError(isEn ? 'Please enter complete card and email details.' : 'Ingrese los datos completos de tarjeta y correo.');
+    if (!form.email.trim()) {
+      setError(isEn ? 'Email is required for the receipt.' : 'El correo es necesario para el recibo.');
       return;
     }
 
@@ -125,12 +104,6 @@ function CardPaymentContent() {
           token,
           lang,
           customerEmail: form.email.trim(),
-          card: {
-            holder: form.holder,
-            number: form.number,
-            expiry: form.expiry,
-            cvv: form.cvv,
-          },
         }),
       });
       const data = await res.json();
@@ -256,8 +229,8 @@ function CardPaymentContent() {
               <p className="card-pay-note">
                 <Lock size={14} />
                 {isEn
-                  ? 'Card details are processed by Shield Hub Pay and are not stored by Costa Peptides.'
-                  : 'Los datos de tarjeta son procesados por Shield Hub Pay y no se almacenan en Costa Peptides.'}
+                  ? 'Card details are processed by Chargex and are not stored by Costa Peptides.'
+                  : 'Los datos de tarjeta son procesados por Chargex y no se almacenan en Costa Peptides.'}
               </p>
               <div className="card-pay-statement-notice">
                 <p className="card-pay-statement-notice__heading">
@@ -266,13 +239,13 @@ function CardPaymentContent() {
                 <ul className="card-pay-statement-notice__list">
                   <li>
                     {isEn
-                      ? <><strong>Mexican bank</strong> — the charge is routed through Mexico with a USD conversion. This is normal.</>
-                      : <><strong>Banco mexicano</strong> — el cargo se procesa a través de México con conversión a USD. Esto es normal.</>}
+                      ? <>Charged in <strong>US dollars</strong> by Chargex. Your order stays with us in Costa Rica.</>
+                      : <>Se cobra en <strong>dólares</strong> a través de Chargex. Tu pedido sigue con nosotros en Costa Rica.</>}
                   </li>
                   <li>
                     {isEn
-                      ? <>Statement name: <strong>&ldquo;SOF IA&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
-                      : <>Nombre en el estado de cuenta: <strong>&ldquo;SOF IA&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
+                      ? <>Statement name: <strong>&ldquo;Agile disruptive tech&rdquo;</strong> — this is our payment processor. <strong>Do not dispute</strong> this charge.</>
+                      : <>Nombre en el estado de cuenta: <strong>&ldquo;Agile disruptive tech&rdquo;</strong> — este es nuestro procesador de pagos. <strong>No disputes</strong> este cargo.</>}
                   </li>
                 </ul>
               </div>
@@ -281,8 +254,13 @@ function CardPaymentContent() {
             <form className="card-pay-panel card-pay-form" onSubmit={submitPayment}>
               <div className="card-pay-form-title">
                 <CreditCard size={20} />
-                <h2>{isEn ? 'Card details' : 'Datos de tarjeta'}</h2>
+                <h2>{isEn ? 'Pay on Chargex' : 'Pagar en Chargex'}</h2>
               </div>
+              <p className="card-pay-muted">
+                {isEn
+                  ? 'The next page is Chargex. You enter the card there. We never see the card number.'
+                  : 'La siguiente página es Chargex. Ahí escribe la tarjeta. Nosotros nunca vemos el número.'}
+              </p>
               <label>
                 <span>{isEn ? 'Email for receipt' : 'Correo para recibo'}</span>
                 <input
@@ -293,52 +271,6 @@ function CardPaymentContent() {
                   required
                 />
               </label>
-              <label>
-                <span>{isEn ? 'Name on card' : 'Nombre en la tarjeta'}</span>
-                <input
-                  type="text"
-                  autoComplete="cc-name"
-                  value={form.holder}
-                  onChange={(e) => setForm(prev => ({ ...prev, holder: e.target.value }))}
-                  required
-                />
-              </label>
-              <label>
-                <span>{isEn ? 'Card number' : 'Numero de tarjeta'}</span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="cc-number"
-                  value={form.number}
-                  onChange={(e) => updateCardNumber(e.target.value)}
-                  required
-                />
-              </label>
-              <div className="card-pay-row">
-                <label>
-                  <span>{isEn ? 'Expiry' : 'Vence'}</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="cc-exp"
-                    placeholder="MM/YY"
-                    value={form.expiry}
-                    onChange={(e) => updateExpiry(e.target.value)}
-                    required
-                  />
-                </label>
-                <label>
-                  <span>CVV</span>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    autoComplete="cc-csc"
-                    value={form.cvv}
-                    onChange={(e) => setForm(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
-                    required
-                  />
-                </label>
-              </div>
 
               {error && (
                 <div className="card-pay-error">
@@ -350,7 +282,7 @@ function CardPaymentContent() {
               <button type="submit" disabled={paying}>
                 {paying
                   ? (isEn ? 'Processing...' : 'Procesando...')
-                  : `${isEn ? 'Pay' : 'Pagar'} ${formatMoney(order.cardAmountUsd, 'USD')}`}
+                  : (isEn ? `Continue to pay ${formatMoney(order.cardAmountUsd, 'USD')}` : `Continuar a pagar ${formatMoney(order.cardAmountUsd, 'USD')}`)}
               </button>
             </form>
           </div>

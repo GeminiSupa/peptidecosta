@@ -1,9 +1,9 @@
 import { NextResponse, after } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { isShieldHubPayConfigured, normalizeShieldHubPayName, processShieldHubPayTransaction } from '@/lib/shieldHubPay';
+import { isChargxConfigured, createChargxCardCheckout, withChargxCheckoutDetails } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
-import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
+import { sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { cardCheckoutMessage } from '@/lib/cardCheckoutMessages.mjs';
 import { areCardPaymentsPaused } from '@/lib/cardPaymentsPaused.mjs';
@@ -36,30 +36,6 @@ function normalizeAmount(amount, currency) {
     : Number(amount).toFixed(2);
 }
 
-function splitName(name = '') {
-  const parts = normalizeShieldHubPayName(name).split(/\s+/).filter(Boolean);
-  return {
-    first: parts[0] || 'Customer',
-    last: parts.slice(1).join(' ') || parts[0] || 'Customer',
-  };
-}
-
-function normalizeCard(card = {}, fallbackHolder = 'Customer') {
-  const expiry = String(card.expiry || '').replace(/\s+/g, '');
-  const [rawMonth, rawYear] = expiry.includes('/') ? expiry.split('/') : [card.expiryMonth, card.expiryYear];
-  const expiryMonth = String(rawMonth || '').replace(/\D/g, '').padStart(2, '0').slice(0, 2);
-  const yearDigits = String(rawYear || '').replace(/\D/g, '');
-  const expiryYear = yearDigits.length === 4 ? yearDigits.slice(2) : yearDigits;
-
-  return {
-    holder: normalizeShieldHubPayName(card.holder, fallbackHolder),
-    number: String(card.number || '').replace(/\D/g, ''),
-    cvv: String(card.cvv || '').replace(/\D/g, ''),
-    expiry_month: expiryMonth,
-    expiry_year: expiryYear,
-  };
-}
-
 function buildPaymentPatch(status, transaction) {
   return {
     status,
@@ -79,6 +55,7 @@ async function updateOrderStatus(orderNumber, status, transaction, orderContact 
     const patch = withPaymentStatusActivity(
       existingOrder,
       buildPaymentPatch(status, transaction),
+      { by: 'Chargex' },
     );
     const { error } = await supabase
       .from('orders')
@@ -92,7 +69,7 @@ async function updateOrderStatus(orderNumber, status, transaction, orderContact 
         .eq('order_number', orderNumber);
 
       if (fallback.error) throw fallback.error;
-      console.warn('[Shield Hub Pay] Payment metadata columns unavailable; updated status only:', error.message);
+      console.warn('[Chargex] Payment metadata columns unavailable; updated status only:', error.message);
     }
 
     if (status === 'Paid') {
@@ -102,25 +79,25 @@ async function updateOrderStatus(orderNumber, status, transaction, orderContact 
         customer_phone: orderContact.customerPhone,
       });
       if (cartCleanupError) {
-        console.warn('[Shield Hub Pay] Paid cart cleanup failed:', cartCleanupError.message);
+        console.warn('[Chargex] Paid cart cleanup failed:', cartCleanupError.message);
       }
 
       await supabase.from('admin_notifications').insert({
         type: 'payment_received',
         title: `Card payment approved: ${orderNumber}`,
-        body: `Shield Hub Pay approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
+        body: `Chargex approved transaction ${transaction?.id || ''}. Verify the amount before fulfilling.`,
         link_tab: 'orders',
         link_ref: orderNumber,
       });
     }
   } catch (error) {
-    console.error('[Shield Hub Pay] Order status update failed:', error.message);
+    console.error('[Chargex] Order status update failed:', error.message);
   }
 }
 
 function statusToOrderStatus(status) {
   return gatewayStatusToOrderStatus(status, {
-    onUnknown: (raw) => console.warn(`[Shield Hub Pay] Unrecognised gateway status "${raw}"; order left pending for review.`),
+    onUnknown: (raw) => console.warn(`[Chargex] Unrecognised gateway status "${raw}"; order left pending for review.`),
   });
 }
 
@@ -145,10 +122,10 @@ async function reserveInventoryAfterApprovedPayment(supabase, order) {
     try {
       await notifyLowInventory(supabase, reservation.changes);
     } catch (notifyError) {
-      console.error('[Shield Hub Pay] Low inventory notification failed:', notifyError.message);
+      console.error('[Chargex] Low inventory notification failed:', notifyError.message);
     }
   } catch (error) {
-    console.error(`[Shield Hub Pay] Paid-order inventory reservation failed for ${order?.order_number}:`, error.message);
+    console.error(`[Chargex] Paid-order inventory reservation failed for ${order?.order_number}:`, error.message);
     try {
       await supabase.from('admin_notifications').insert({
         type: 'inventory_reservation_failed',
@@ -171,7 +148,7 @@ async function reserveInventoryAfterApprovedPayment(supabase, order) {
  */
 function stopCheckout(key, lang, httpStatus, internalReason, headers) {
   const { message, retryable, code } = cardCheckoutMessage(key, lang);
-  if (internalReason) console.error(`[Shield Hub Pay] ${code}: ${internalReason}`);
+  if (internalReason) console.error(`[Chargex] ${code}: ${internalReason}`);
   return NextResponse.json({ error: message, errorCode: code, retryable }, { status: httpStatus, headers });
 }
 
@@ -200,9 +177,9 @@ export async function POST(req) {
 
     // Checked after the body is read so the customer is answered in their own
     // language rather than a default one.
-    if (!isShieldHubPayConfigured()) {
+    if (!isChargxConfigured()) {
       return stopCheckout('unavailable', customerLang, 500,
-        'Shield Hub Pay credentials are not configured');
+        'Chargex credentials are not configured');
     }
 
     const {
@@ -210,11 +187,10 @@ export async function POST(req) {
       currency = 'USD',
       orderNumber,
       paymentToken,
-      card,
       lang = 'es',
     } = body;
 
-    if (!amount || !orderNumber || !paymentToken || !card) {
+    if (!amount || !orderNumber || !paymentToken) {
       return stopCheckout('missing_details', lang, 400,
         `Missing required billing fields for ${orderNumber || 'unknown order'}`);
     }
@@ -285,16 +261,6 @@ export async function POST(req) {
       return stopCheckout('missing_details', lang, 400, `Stored order ${orderNumber} has incomplete customer details`);
     }
 
-    const normalizedCard = normalizeCard(card, customerName);
-    if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.number.length > 19
-        || normalizedCard.cvv.length < 3 || normalizedCard.cvv.length > 4
-        || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      await releaseOrderClaim(supabase, orderNumber);
-      return stopCheckout('card_details', lang, 400, `Invalid card details for ${orderNumber}`);
-    }
-
-    const name = splitName(customerName);
-
     // Price the charge from the order row, never from the request body.
     //
     // `amount` is POSTed by the browser, and until this existed it was handed
@@ -320,7 +286,7 @@ export async function POST(req) {
     const requestedAmount = Number(amount);
     if (Number.isFinite(requestedAmount) && Math.abs(requestedAmount - storedAmount) > 0.01) {
       console.warn(
-        `[Shield Hub Pay] Amount mismatch for ${orderNumber}: request said ${requestedAmount}, charging stored ${storedAmount}`
+        `[Chargex] Amount mismatch for ${orderNumber}: request said ${requestedAmount}, charging stored ${storedAmount}`
       );
     }
 
@@ -329,22 +295,21 @@ export async function POST(req) {
 
     let transaction;
     try {
-      transaction = await processShieldHubPayTransaction({
+      const page = await createChargxCardCheckout({
         amount: formattedAmount,
-        currency,
-        transaction_reference: orderNumber,
-        redirectback_url: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(orderNumber)}&payment=card`,
-        notification_url: `${baseUrl}/api/shieldhubpay/webhook`,
-        customer: {
-          first: name.first,
-          last: name.last,
+        successUrl: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(orderNumber)}&payment=card`,
+        cancelUrl: `${baseUrl}/catalog?lang=${encodeURIComponent(lang)}&payment=cancel&order=${encodeURIComponent(orderNumber)}`,
+      });
+      transaction = {
+        ...page,
+        descriptor_text: 'Chargex',
+        redirect_url: withChargxCheckoutDetails(page.redirect_url, {
+          orderNumber,
           email: customerEmail,
           phone: customerPhone,
-          ip: requestIp === 'unknown' ? '127.0.0.1' : requestIp,
-        },
-        billing: parseBillingAddress(shippingAddress),
-        card: normalizedCard,
-      });
+          billing: parseBillingAddress(shippingAddress),
+        }),
+      };
     } catch (chargeErr) {
       // No charge result — release the claim so the customer can retry instead of
       // the order being stuck as "processing".
@@ -396,7 +361,7 @@ export async function POST(req) {
           firstTeamAlert: true,
         });
       } else {
-        console.warn(`[Shield Hub Pay] No order row for ${orderNumber}; payment result email not sent`);
+        console.warn(`[Chargex] No order row for ${orderNumber}; payment result email not sent`);
       }
     }
 
@@ -411,32 +376,19 @@ export async function POST(req) {
           if (orderData) {
             await sendCustomerOrderConfirmation(supabase, orderData, orderNumber, orderData.id);
           } else {
-            console.warn(`[Shield Hub Pay] No order row for ${orderNumber}; customer confirmation not sent`);
+            console.warn(`[Chargex] No order row for ${orderNumber}; customer confirmation not sent`);
           }
         } catch (waErr) {
-          console.error('[Shield Hub Pay] Delayed WhatsApp confirmation failed:', waErr);
+          console.error('[Chargex] Delayed WhatsApp confirmation failed:', waErr);
         }
       });
       return NextResponse.json({ ok: true, status: transaction.status, orderStatus, transactionId: transaction.id });
     }
 
     if (orderStatus === ORDER_STATUS.CARD_3DS && transaction.redirect_url && transaction.redirect_url !== 'No URL') {
-      // Queued rather than awaited: the customer is about to be sent to their
-      // bank and must not sit through an SMTP round trip first. If it is lost,
-      // the webhook still delivers the real answer once the bank replies.
-      after(async () => {
-        try {
-          const { data: orderRow } = await supabase
-            .from('orders')
-            .select('*')
-            .eq('order_number', orderNumber)
-            .maybeSingle();
-          if (orderRow) await sendCardHandoffReceipt(baseUrl, orderRow, orderNumber);
-        } catch (mailErr) {
-          console.error('[Shield Hub Pay] 3DS hand-off receipt failed:', mailErr);
-        }
-      });
-
+      // The customer is only being sent to Chargex. Do not mail "payment
+      // processing" yet. The receipt goes out from the webhook once Chargex
+      // says the payment is finished.
       return NextResponse.json({
         ok: true,
         status: transaction.status,
@@ -458,7 +410,7 @@ export async function POST(req) {
       error: declineReason || `Payment ${transaction.status || 'failed'}`,
     }, { status: 402 });
   } catch (error) {
-    console.error('[Shield Hub Pay] Card processing failed:', error);
+    console.error('[Chargex] Card processing failed:', error);
 
     // Thrown by readLimitedJson before the gateway is ever reached, so nothing
     // was charged and a retry is safe. Its own wording ("Invalid JSON body") is
@@ -496,6 +448,6 @@ async function sendDeferredTeamAlertOnFailure(orderNumber) {
       await sendAdminOrderEmail(APP_URL.replace(/\/$/, ''), orderRow, orderNumber);
     }
   } catch (mailErr) {
-    console.error('[Shield Hub Pay] Deferred team alert failed:', mailErr.message);
+    console.error('[Chargex] Deferred team alert failed:', mailErr.message);
   }
 }

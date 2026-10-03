@@ -125,7 +125,7 @@ const CARD_PAYMENTS_PAUSED = areCardPaymentsPausedForClient();
 const CARD_CHECKOUT_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CARD_CHECKOUT === 'true';
 const CARD_CHECKOUT_AVAILABLE = CARD_CHECKOUT_ENABLED && !CARD_PAYMENTS_PAUSED;
 // 'live' hides the sandbox/test labels. Keep unset (sandbox) until the LIVE
-// Shield Hub Pay credentials are in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
+// Chargex key is in place, then set NEXT_PUBLIC_CARD_CHECKOUT_MODE=live.
 const CARD_CHECKOUT_LIVE = process.env.NEXT_PUBLIC_CARD_CHECKOUT_MODE === 'live';
 const GATE_BYPASS_VALUES = new Set(['1', 'true', 'yes', 'skip', 'bypass']);
 const USER_SELECTED_LANG_KEY = 'lang_user_selected';
@@ -476,12 +476,6 @@ export default function CatalogPage() {
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
-  const [cardDetails, setCardDetails] = useState({
-    holder: '',
-    number: '',
-    expiry: '',
-    cvv: '',
-  });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   // Has the customer ticked the research-use acknowledgement that stands in
@@ -3081,31 +3075,6 @@ export default function CatalogPage() {
       errors.shippingAddress = lang === 'en' ? 'Please complete your full shipping address.' : 'Por favor complete su dirección de envío completa.';
     }
 
-    if (paymentMethod === 'card') {
-      const cleanNumber = cardDetails.number.replace(/\D/g, '');
-      const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
-
-      if (!cardDetails.holder.trim()) errors.cardHolder = lang === 'en' ? 'Cardholder name is required.' : 'El nombre del titular es requerido.';
-
-      if (!cleanNumber) {
-        errors.cardNumber = lang === 'en' ? 'Card number is required.' : 'El número de tarjeta es requerido.';
-      } else if (cleanNumber.length < 12) {
-        errors.cardNumber = lang === 'en' ? 'Please enter a complete card number.' : 'Por favor ingrese el número completo de la tarjeta.';
-      }
-
-      if (!cardDetails.expiry.trim()) {
-        errors.cardExpiry = lang === 'en' ? 'Expiration date is required.' : 'La fecha de expiración es requerida.';
-      } else if (!/^\d{2}\/\d{2}$/.test(cardDetails.expiry)) {
-        errors.cardExpiry = lang === 'en' ? 'Use the MM/YY format.' : 'Use el formato MM/AA.';
-      }
-
-      if (!cleanCvv) {
-        errors.cardCvv = lang === 'en' ? 'CVV is required.' : 'El CVV es requerido.';
-      } else if (cleanCvv.length < 3) {
-        errors.cardCvv = lang === 'en' ? 'CVV must be at least 3 digits.' : 'El CVV debe tener al menos 3 dígitos.';
-      }
-    }
-
     setFormErrors(errors);
 
     // Keys are inserted in DOM order above, so the first one is the first
@@ -3148,9 +3117,6 @@ export default function CatalogPage() {
       revealField('bacMinimum');
       return;
     }
-
-    const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
-    const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
 
     cardSubmitLockRef.current = true;
     setCardSubmitting(true);
@@ -3224,12 +3190,6 @@ export default function CatalogPage() {
           customerIdType,
           customerIdNumber,
           customerIp: customerMetadata?.ip_address || null,
-          card: {
-            holder: cardDetails.holder,
-            number: cardDetails.number,
-            expiry: cardDetails.expiry,
-            cvv: cardDetails.cvv,
-          },
         }),
       });
 
@@ -5251,7 +5211,7 @@ export default function CatalogPage() {
             /* noValidate is deliberate: native constraint validation runs before
                 the submit event, so without it the browser's own bubble preempts
                 validateForm() and none of the inline field errors ever render. */
-            <form id="checkout-form-main" noValidate onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: '80px' }}>
+            <form id="checkout-form-main" noValidate onSubmit={handleCheckoutSubmit} className="checkout-form" style={{ paddingBottom: paymentMethod === 'card' && CARD_CHECKOUT_AVAILABLE && !cardRetryBlocked ? '24px' : '96px' }}>
 
               {/* The honeypot. Off-screen rather than display:none, because a
                   script that skips hidden inputs is the one this is for; out of
@@ -5579,7 +5539,7 @@ export default function CatalogPage() {
                     detail: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Under maintenance' : 'En mantenimiento')
                       : (CARD_CHECKOUT_LIVE
-                        ? (lang === 'en' ? 'Visa / Mastercard' : 'Visa / Mastercard')
+                        ? 'Apple & Google Pay'
                         : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')),
                     badge: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Maintenance' : 'Mantenimiento')
@@ -5650,97 +5610,13 @@ export default function CatalogPage() {
               )}
 
               {paymentMethod === 'card' && CARD_CHECKOUT_AVAILABLE ? (
+                <>
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
-                    <div>
-                      <CheckoutLabel htmlFor="field-cardHolder" required>
-                        {lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
-                      </CheckoutLabel>
-                      <input
-                        id="field-cardHolder"
-                        type="text"
-                        className="checkout-input"
-                        autoComplete="cc-name"
-                        placeholder={lang === 'en' ? 'e.g. ANA RODRIGUEZ' : 'ej. ANA RODRIGUEZ'}
-                        value={cardDetails.holder}
-                        onChange={(e) => {
-                          setCardDetails(prev => ({ ...prev, holder: e.target.value }));
-                          if (formErrors.cardHolder) setFormErrors(prev => ({ ...prev, cardHolder: null }));
-                        }}
-                        {...invalidProps('cardHolder', formErrors)}
-                      />
-                      <FieldError name="cardHolder" message={formErrors.cardHolder} />
-                    </div>
-                    <div>
-                      <CheckoutLabel htmlFor="field-cardNumber" required>
-                        {lang === 'en' ? 'Card number' : 'Número de tarjeta'}
-                      </CheckoutLabel>
-                      <input
-                        id="field-cardNumber"
-                        type="text"
-                        inputMode="numeric"
-                        className="checkout-input"
-                        autoComplete="cc-number"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardDetails.number}
-                        onChange={(e) => {
-                          setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }));
-                          if (formErrors.cardNumber) setFormErrors(prev => ({ ...prev, cardNumber: null }));
-                        }}
-                        {...invalidProps('cardNumber', formErrors)}
-                      />
-                      <FieldError name="cardNumber" message={formErrors.cardNumber} />
-                    </div>
-                    {/* .card-payment-fields__row is a grid, and collapses to one
-                        column under 768px — the children size themselves. */}
-                    <div className="card-payment-fields__row">
-                      <div>
-                        <CheckoutLabel htmlFor="field-cardExpiry" required>
-                          {lang === 'en' ? 'Expiry date' : 'Fecha de vencimiento'}
-                        </CheckoutLabel>
-                        <input
-                          id="field-cardExpiry"
-                          type="text"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-exp"
-                          placeholder={lang === 'en' ? 'MM/YY' : 'MM/AA'}
-                          value={cardDetails.expiry}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                            setCardDetails(prev => ({ ...prev, expiry }));
-                            if (formErrors.cardExpiry) setFormErrors(prev => ({ ...prev, cardExpiry: null }));
-                          }}
-                          {...invalidProps('cardExpiry', formErrors)}
-                        />
-                        <FieldError name="cardExpiry" message={formErrors.cardExpiry} />
-                      </div>
-                      <div>
-                        <CheckoutLabel htmlFor="field-cardCvv" required>
-                          {lang === 'en' ? 'Security code (CVV)' : 'Código de seguridad (CVV)'}
-                        </CheckoutLabel>
-                        <input
-                          id="field-cardCvv"
-                          type="password"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-csc"
-                          placeholder={lang === 'en' ? '3 digits' : '3 dígitos'}
-                          value={cardDetails.cvv}
-                          onChange={(e) => {
-                            setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }));
-                            if (formErrors.cardCvv) setFormErrors(prev => ({ ...prev, cardCvv: null }));
-                          }}
-                          {...invalidProps('cardCvv', formErrors)}
-                        />
-                        <FieldError name="cardCvv" message={formErrors.cardCvv} />
-                      </div>
-                    </div>
                     <p className="card-payment-security-note">
                       {lang === 'en'
-                        ? 'Card details are sent securely to Shield Hub Pay and are not stored by Costa Peptides.'
-                        : 'Los datos de la tarjeta se envían de forma segura a Shield Hub Pay y no se almacenan en Costa Peptides.'}
+                        ? 'The next page is Chargex, our card processor. You enter the card there. We never see the card number.'
+                        : 'La siguiente página es Chargex, nuestro procesador de tarjetas. Ahí escribe la tarjeta. Nosotros nunca vemos el número.'}
                     </p>
                   </div>
                   <p className="card-payment-fee-note">
@@ -5758,20 +5634,53 @@ export default function CatalogPage() {
                       <ul className="card-payment-statement-notice__list">
                         <li>
                           {lang === 'en'
-                            ? <>The charge is processed through a <strong>Mexican bank</strong> with a USD conversion — this is normal and expected.</>                            
-                            : <>El cargo se procesa a través de un <strong>banco mexicano</strong> con conversión a USD — esto es normal y esperado.</>}
+                            ? <>The card is charged in <strong>US dollars</strong> by Chargex. Your order stays with us in Costa Rica.</>
+                            : <>La tarjeta se cobra en <strong>dólares</strong> a través de Chargex. Tu pedido sigue con nosotros en Costa Rica.</>}
                         </li>
                         <li>
                           {lang === 'en'
-                            ? <>It will appear on your statement as <strong>&ldquo;SOF IA&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
-                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;SOF IA&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
+                            ? <>It will appear on your statement as <strong>&ldquo;Agile disruptive tech&rdquo;</strong> (our payment processor&apos;s name). Do <strong>not</strong> dispute this charge — it is us.</>
+                            : <>Aparecerá en tu estado de cuenta como <strong>&ldquo;Agile disruptive tech&rdquo;</strong> (el nombre de nuestro procesador de pagos). <strong>No</strong> disputes este cargo — somos nosotros.</>}
                         </li>
                       </ul>
                     </div>
                   </div>
-                  {/* Always render the button. Hiding it behind a "fill in your
-                      details" notice made the customer hunt for the missing field
-                      themselves; validateForm now names it and scrolls to it. */}
+                </div>
+                {/* Pinned to the bottom of the cart, same as the WhatsApp
+                    button. Inside the scrolling notes a phone tap lands on
+                    the text instead of the button. */}
+                <div className="cart-sticky-submit">
+                  {!cardRetryBlocked && (
+                    <div className="wallet-pay-row">
+                      <button
+                        type="button"
+                        className="apple-pay-btn"
+                        aria-label="Apple Pay"
+                        disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
+                        onClick={startCardCheckout}
+                      >
+                        <svg viewBox="0 0 14 17" width="15" height="18" aria-hidden="true">
+                          <path fill="currentColor" d="M13.3 5.7c-.1.1-1.6.9-1.6 2.8 0 2.2 1.9 3 2 3-.1.1-.3 1.1-1.1 2.1-.7.9-1.4 1.8-2.5 1.8-1.1 0-1.4-.6-2.6-.6s-1.6.6-2.6.6c-1 0-1.9-.9-2.6-1.9C1.1 12 0 9.3 0 6.8 0 4.4 1.5 3.1 3 3.1c1.1 0 2 .7 2.6.7.6 0 1.7-.8 2.9-.7.5 0 1.9.2 2.8 1.5zM9.6 2.1c.5-.6.9-1.5.8-2.3-.8 0-1.7.5-2.2 1.2-.5.6-.9 1.5-.8 2.3.9.1 1.7-.4 2.2-1.2z" />
+                        </svg>
+                        <span>Pay</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="google-pay-btn"
+                        aria-label="Google Pay"
+                        disabled={cardSubmitting || cart.length === 0 || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
+                        onClick={startCardCheckout}
+                      >
+                        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.93l3.66-2.84z" />
+                          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                        </svg>
+                        <span>Pay</span>
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
                     disabled={cardSubmitting || cardRetryBlocked || cart.length === 0 || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
@@ -5798,11 +5707,11 @@ export default function CatalogPage() {
                   <p className="card-payment-caption">
                     {CARD_CHECKOUT_LIVE
                       ? (lang === 'en'
-                        ? 'Secure Visa / Mastercard checkout powered by Shield Hub Pay'
-                        : 'Pago seguro con Visa / Mastercard mediante Shield Hub Pay')
+                        ? 'Apple Pay, Google Pay, or card. Same page.'
+                        : 'Apple Pay, Google Pay o tarjeta. La misma página.')
                       : (lang === 'en'
-                        ? 'Secure card checkout powered by Shield Hub Pay sandbox'
-                        : 'Pago seguro con tarjeta mediante Shield Hub Pay sandbox')}
+                        ? 'Secure card checkout powered by Chargex sandbox'
+                        : 'Pago seguro con tarjeta mediante Chargex sandbox')}
                   </p>
                   {currency === 'CRC' && (
                     <p className="card-payment-caption">
@@ -5812,6 +5721,7 @@ export default function CatalogPage() {
                     </p>
                   )}
                 </div>
+                </>
               ) : (
                 <div className="cart-sticky-submit">
                   <button
