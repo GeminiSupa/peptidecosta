@@ -19,7 +19,7 @@ export default function PressBand({ lang = 'es', settings, variant = 'catalog' }
   const items = (Array.isArray(settings?.pressItems) && settings.pressItems.length
     ? settings.pressItems
     : DEFAULT_LANDING_PAGE_SETTINGS.pressItems
-  ).filter((item) => item?.url && item?.outlet);
+  ).filter((item) => item?.outlet);
 
   if (!items.length) return null;
 
@@ -31,13 +31,16 @@ export default function PressBand({ lang = 'es', settings, variant = 'catalog' }
       <span className="press-band-label">{label}</span>
 
       <div className="press-band-outlets">
-        {items.map((item, index) => (
-          <a
-            key={`${item.url}-${index}`}
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="press-band-outlet"
+        {items.map((item, index) => {
+          // A saved article address can still be in the site settings. The Tico
+          // Times piece stays on the page as a mention, and does not open.
+          const href = item.url && !/ticotimes\.net/i.test(item.url) ? item.url : '';
+          const Tag = href ? 'a' : 'span';
+          return (
+          <Tag
+            key={`${item.outlet}-${index}`}
+            {...(href ? { href, target: '_blank', rel: 'noopener noreferrer' } : {})}
+            className={`press-band-outlet${href ? '' : ' press-band-outlet--static'}`}
             aria-label={`${label} ${item.outlet}`}
             title={item[`title${suffix}`] || item.outlet}
           >
@@ -51,8 +54,9 @@ export default function PressBand({ lang = 'es', settings, variant = 'catalog' }
             {variant === 'landing' && items.length === 1 && (
               <em className="landing-press-cta">{cta} <ArrowUpRight size={14} /></em>
             )}
-          </a>
-        ))}
+          </Tag>
+          );
+        })}
       </div>
 
       {/* With two or more outlets the quote only ever renders as an ellipsis,

@@ -7315,6 +7315,12 @@ body:has(.product-grid.grid-view) {
     transform: translateY(-1px);
 }
 
+.press-band-outlet--static,
+.press-band-outlet--static:hover {
+    transform: none;
+    cursor: default;
+}
+
 .press-band-outlet + .press-band-outlet {
     padding-left: 16px;
     border-left: 1px solid var(--border);

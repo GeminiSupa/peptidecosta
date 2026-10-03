@@ -57,7 +57,8 @@ export const DEFAULT_LANDING_PAGE_SETTINGS = {
       // behind a firewall that refuses anything automated, so a remote <img>
       // would be a broken image on the customer's screen.
       logoUrl: '/tico-times-logo.png',
-      url: 'https://ticotimes.net/2026/07/26/why-two-fitness-veterans-chose-costa-rica-to-launch-a-new-peptide-company-peptides-costa-rica',
+      // Shown as "as seen in", not a link. The article used to send people off the site.
+      url: '',
       titleEn: 'Why Two Fitness Veterans Chose Costa Rica To Launch A Peptide Company.',
       titleEs: 'Por que dos veteranos del fitness eligieron Costa Rica para lanzar una empresa de peptidos.',
       quoteEn: '"Why Two Fitness Veterans Chose Costa Rica"',

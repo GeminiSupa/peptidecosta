@@ -180,13 +180,17 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {} 
       </div>
       <div className={styles.visual}>
         <img src="/figma/catalog-hero-vials.png" alt="" />
-        {press && (
-          <a className={styles.press} href={press.url} target="_blank" rel="noopener noreferrer">
-            <small>{en ? 'As seen in' : 'Visto en'}</small>
-            <img src={press.logoUrl || '/tico-times-logo.png'} alt={press.outlet} />
-            {quote && <em>{quote}</em>}
-          </a>
-        )}
+        {press && (() => {
+          const pressHref = press.url && !/ticotimes\.net/i.test(press.url) ? press.url : '';
+          const Tag = pressHref ? 'a' : 'span';
+          return (
+            <Tag className={styles.press} {...(pressHref ? { href: pressHref, target: '_blank', rel: 'noopener noreferrer' } : {})}>
+              <small>{en ? 'As seen in' : 'Visto en'}</small>
+              <img src={press.logoUrl || '/tico-times-logo.png'} alt={press.outlet} />
+              {quote && <em>{quote}</em>}
+            </Tag>
+          );
+        })()}
       </div>
     </section>
   );
