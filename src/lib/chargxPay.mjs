@@ -205,6 +205,76 @@ export async function processChargxCardPayment({
   return transaction;
 }
 
+/**
+ * Open Chargex's own card page. This store refuses a card typed on our site.
+ * Amount is dollars, as a number. The returned page says whether the key is live.
+ */
+export async function createChargxCardCheckout({
+  amount,
+  successUrl,
+  cancelUrl,
+}, { mode = 'live' } = {}) {
+  if (!isChargxConfigured(mode)) {
+    throw new Error('Chargex credentials are not configured');
+  }
+
+  const dollars = Number(Number(amount).toFixed(2));
+  if (!Number.isFinite(dollars) || dollars <= 0) {
+    throw new Error('Chargex payment amount is not usable');
+  }
+
+  const body = {
+    amount: dollars,
+    currency: 'usd',
+    success_url: successUrl,
+    type: 'card',
+  };
+  if (cancelUrl) body.cancel_url = cancelUrl;
+
+  let created = await chargxRequest('/v1/payment-request', { mode, method: 'POST', body });
+  if (!created.ok && cancelUrl && /cancel_url/i.test(String(created.data?.message || ''))) {
+    delete body.cancel_url;
+    created = await chargxRequest('/v1/payment-request', { mode, method: 'POST', body });
+  }
+
+  const page = created.data?.payment_request;
+  if (!created.ok || !page?.checkout_url) {
+    throw new Error(created.data?.message || `Chargex payment page failed (${created.status})`);
+  }
+  if (mode === 'test' && page.isProduction === true) {
+    throw new Error('Chargex test key belongs to a live store. Refusing the charge.');
+  }
+
+  return {
+    id: String(page.id),
+    status: 'Redirect',
+    redirect_url: String(page.checkout_url),
+    isProduction: page.isProduction === true,
+  };
+}
+
+/**
+ * Put the order number and the address on Chargex's page so the customer
+ * does not type them again. The order number is how their webhook finds us.
+ */
+export function withChargxCheckoutDetails(checkoutUrl, {
+  orderNumber,
+  email,
+  phone,
+  billing = {},
+} = {}) {
+  const url = new URL(checkoutUrl);
+  if (orderNumber) url.searchParams.set('external_order_id', String(orderNumber));
+  if (email) url.searchParams.set('email', String(email));
+  if (phone) url.searchParams.set('phone-number', String(phone));
+  if (billing.address) url.searchParams.set('street-address', String(billing.address));
+  if (billing.city) url.searchParams.set('city', String(billing.city));
+  if (billing.state) url.searchParams.set('state', String(billing.state));
+  if (billing.postal_code) url.searchParams.set('zip-code', String(billing.postal_code));
+  url.searchParams.set('country', String(billing.country || 'CR').toUpperCase() === 'USA' ? 'US' : 'CR');
+  return url.toString();
+}
+
 /** HMAC of `{timestamp}.{rawBody}`, matching the Chargex webhook signature header. */
 export function verifyChargxWebhookSignature({ secret, timestamp, signatureHeader, rawBody }) {
   if (!secret || !timestamp || !signatureHeader || rawBody == null) return false;

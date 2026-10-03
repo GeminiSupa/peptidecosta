@@ -475,12 +475,6 @@ export default function CatalogPage() {
   const [customerIdType, setCustomerIdType] = useState('1');
   const [customerIdNumber, setCustomerIdNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('whatsapp');
-  const [cardDetails, setCardDetails] = useState({
-    holder: '',
-    number: '',
-    expiry: '',
-    cvv: '',
-  });
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   // Has the customer ticked the research-use acknowledgement that stands in
@@ -3079,31 +3073,6 @@ export default function CatalogPage() {
       errors.shippingAddress = lang === 'en' ? 'Please complete your full shipping address.' : 'Por favor complete su dirección de envío completa.';
     }
 
-    if (paymentMethod === 'card') {
-      const cleanNumber = cardDetails.number.replace(/\D/g, '');
-      const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
-
-      if (!cardDetails.holder.trim()) errors.cardHolder = lang === 'en' ? 'Cardholder name is required.' : 'El nombre del titular es requerido.';
-
-      if (!cleanNumber) {
-        errors.cardNumber = lang === 'en' ? 'Card number is required.' : 'El número de tarjeta es requerido.';
-      } else if (cleanNumber.length < 12) {
-        errors.cardNumber = lang === 'en' ? 'Please enter a complete card number.' : 'Por favor ingrese el número completo de la tarjeta.';
-      }
-
-      if (!cardDetails.expiry.trim()) {
-        errors.cardExpiry = lang === 'en' ? 'Expiration date is required.' : 'La fecha de expiración es requerida.';
-      } else if (!/^\d{2}\/\d{2}$/.test(cardDetails.expiry)) {
-        errors.cardExpiry = lang === 'en' ? 'Use the MM/YY format.' : 'Use el formato MM/AA.';
-      }
-
-      if (!cleanCvv) {
-        errors.cardCvv = lang === 'en' ? 'CVV is required.' : 'El CVV es requerido.';
-      } else if (cleanCvv.length < 3) {
-        errors.cardCvv = lang === 'en' ? 'CVV must be at least 3 digits.' : 'El CVV debe tener al menos 3 dígitos.';
-      }
-    }
-
     setFormErrors(errors);
 
     // Keys are inserted in DOM order above, so the first one is the first
@@ -3146,9 +3115,6 @@ export default function CatalogPage() {
       revealField('bacMinimum');
       return;
     }
-
-    const cleanCardNumber = cardDetails.number.replace(/\D/g, '');
-    const cleanCvv = cardDetails.cvv.replace(/\D/g, '');
 
     cardSubmitLockRef.current = true;
     setCardSubmitting(true);
@@ -3222,12 +3188,6 @@ export default function CatalogPage() {
           customerIdType,
           customerIdNumber,
           customerIp: customerMetadata?.ip_address || null,
-          card: {
-            holder: cardDetails.holder,
-            number: cardDetails.number,
-            expiry: cardDetails.expiry,
-            cvv: cardDetails.cvv,
-          },
         }),
       });
 
@@ -5654,95 +5614,10 @@ export default function CatalogPage() {
               {paymentMethod === 'card' && CARD_CHECKOUT_AVAILABLE ? (
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
-                    <div>
-                      <CheckoutLabel htmlFor="field-cardHolder" required>
-                        {lang === 'en' ? 'Name on card' : 'Nombre en la tarjeta'}
-                      </CheckoutLabel>
-                      <input
-                        id="field-cardHolder"
-                        type="text"
-                        className="checkout-input"
-                        autoComplete="cc-name"
-                        placeholder={lang === 'en' ? 'e.g. ANA RODRIGUEZ' : 'ej. ANA RODRIGUEZ'}
-                        value={cardDetails.holder}
-                        onChange={(e) => {
-                          setCardDetails(prev => ({ ...prev, holder: e.target.value }));
-                          if (formErrors.cardHolder) setFormErrors(prev => ({ ...prev, cardHolder: null }));
-                        }}
-                        {...invalidProps('cardHolder', formErrors)}
-                      />
-                      <FieldError name="cardHolder" message={formErrors.cardHolder} />
-                    </div>
-                    <div>
-                      <CheckoutLabel htmlFor="field-cardNumber" required>
-                        {lang === 'en' ? 'Card number' : 'Número de tarjeta'}
-                      </CheckoutLabel>
-                      <input
-                        id="field-cardNumber"
-                        type="text"
-                        inputMode="numeric"
-                        className="checkout-input"
-                        autoComplete="cc-number"
-                        placeholder="1234 5678 9012 3456"
-                        value={cardDetails.number}
-                        onChange={(e) => {
-                          setCardDetails(prev => ({ ...prev, number: e.target.value.replace(/[^\d\s]/g, '').replace(/(\d{4})(?=\d)/g, '$1 ').trim().slice(0, 23) }));
-                          if (formErrors.cardNumber) setFormErrors(prev => ({ ...prev, cardNumber: null }));
-                        }}
-                        {...invalidProps('cardNumber', formErrors)}
-                      />
-                      <FieldError name="cardNumber" message={formErrors.cardNumber} />
-                    </div>
-                    {/* .card-payment-fields__row is a grid, and collapses to one
-                        column under 768px — the children size themselves. */}
-                    <div className="card-payment-fields__row">
-                      <div>
-                        <CheckoutLabel htmlFor="field-cardExpiry" required>
-                          {lang === 'en' ? 'Expiry date' : 'Fecha de vencimiento'}
-                        </CheckoutLabel>
-                        <input
-                          id="field-cardExpiry"
-                          type="text"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-exp"
-                          placeholder={lang === 'en' ? 'MM/YY' : 'MM/AA'}
-                          value={cardDetails.expiry}
-                          onChange={(e) => {
-                            const digits = e.target.value.replace(/\D/g, '').slice(0, 4);
-                            const expiry = digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-                            setCardDetails(prev => ({ ...prev, expiry }));
-                            if (formErrors.cardExpiry) setFormErrors(prev => ({ ...prev, cardExpiry: null }));
-                          }}
-                          {...invalidProps('cardExpiry', formErrors)}
-                        />
-                        <FieldError name="cardExpiry" message={formErrors.cardExpiry} />
-                      </div>
-                      <div>
-                        <CheckoutLabel htmlFor="field-cardCvv" required>
-                          {lang === 'en' ? 'Security code (CVV)' : 'Código de seguridad (CVV)'}
-                        </CheckoutLabel>
-                        <input
-                          id="field-cardCvv"
-                          type="password"
-                          inputMode="numeric"
-                          className="checkout-input"
-                          autoComplete="cc-csc"
-                          placeholder={lang === 'en' ? '3 digits' : '3 dígitos'}
-                          value={cardDetails.cvv}
-                          onChange={(e) => {
-                            setCardDetails(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '').slice(0, 4) }));
-                            if (formErrors.cardCvv) setFormErrors(prev => ({ ...prev, cardCvv: null }));
-                          }}
-                          {...invalidProps('cardCvv', formErrors)}
-                        />
-                        <FieldError name="cardCvv" message={formErrors.cardCvv} />
-                      </div>
-                    </div>
                     <p className="card-payment-security-note">
                       {lang === 'en'
-                        ? 'Card details are sent securely to Chargex and are not stored by Costa Peptides.'
-                        : 'Los datos de la tarjeta se envían de forma segura a Chargex y no se almacenan en Costa Peptides.'}
+                        ? 'The next page is Chargex, our card processor. You enter the card there. We never see the card number.'
+                        : 'La siguiente página es Chargex, nuestro procesador de tarjetas. Ahí escribe la tarjeta. Nosotros nunca vemos el número.'}
                     </p>
                   </div>
                   <p className="card-payment-fee-note">
@@ -5760,8 +5635,8 @@ export default function CatalogPage() {
                       <ul className="card-payment-statement-notice__list">
                         <li>
                           {lang === 'en'
-                            ? <>The charge is processed through a <strong>Mexican bank</strong> with a USD conversion — this is normal and expected.</>                            
-                            : <>El cargo se procesa a través de un <strong>banco mexicano</strong> con conversión a USD — esto es normal y esperado.</>}
+                            ? <>The card is charged in <strong>US dollars</strong> by Chargex. Your order stays with us in Costa Rica.</>
+                            : <>La tarjeta se cobra en <strong>dólares</strong> a través de Chargex. Tu pedido sigue con nosotros en Costa Rica.</>}
                         </li>
                         <li>
                           {lang === 'en'

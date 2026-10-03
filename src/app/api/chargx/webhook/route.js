@@ -25,10 +25,10 @@ function isDeclineEvent(name) {
 }
 
 function collectRefs(payload) {
-  const blobs = [payload, payload?.data, payload?.result, payload?.object].filter((item) => item && typeof item === 'object');
+  const blobs = [payload, payload?.data, payload?.data?.object, payload?.result, payload?.object].filter((item) => item && typeof item === 'object');
   const refs = [];
   for (const blob of blobs) {
-    for (const key of ['orderId', 'order_id', 'merchantOrderId', 'transaction_reference', 'id']) {
+    for (const key of ['external_order_id', 'orderId', 'order_id', 'merchantOrderId', 'transaction_reference', 'id']) {
       if (blob[key] != null && blob[key] !== '') refs.push(String(blob[key]));
     }
   }

@@ -6,6 +6,7 @@ import {
   opaqueDataFromTokenResponse,
   transactionFromChargxResponse,
   verifyChargxWebhookSignature,
+  withChargxCheckoutDetails,
 } from '../src/lib/chargxPay.mjs';
 
 test('a descriptor token is passed through and a bare token is wrapped', () => {
@@ -48,6 +49,18 @@ test('a decline body stays a decline even when HTTP is not ok', () => {
 
 test('an Ok body with no transaction id is not treated as paid', () => {
   assert.equal(transactionFromChargxResponse({ message: 'Ok', result: {} }, true), null);
+});
+
+test('the Chargex page link carries our order number', () => {
+  const url = withChargxCheckoutDetails('https://dashboard.chargx.io/payment-form/abc', {
+    orderNumber: 'CARD-1',
+    email: 'buyer@example.com',
+    billing: { address: 'Calle 1', city: 'San Jose', state: 'San Jose', postal_code: '10101', country: 'CR' },
+  });
+  const parsed = new URL(url);
+  assert.equal(parsed.searchParams.get('external_order_id'), 'CARD-1');
+  assert.equal(parsed.searchParams.get('country'), 'CR');
+  assert.equal(parsed.searchParams.get('email'), 'buyer@example.com');
 });
 
 test('webhook signatures accept the v1= prefix and reject a tampered body', () => {

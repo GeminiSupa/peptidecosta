@@ -1,7 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { normalizeShieldHubPayName } from '@/lib/shieldHubPay';
-import { isChargxConfigured, processChargxCardPayment } from '@/lib/chargxPay.mjs';
+import { isChargxConfigured, createChargxCardCheckout, withChargxCheckoutDetails } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus, ORDER_STATUS } from '@/lib/paymentOutcome.mjs';
 import { sendCardHandoffReceipt, sendPaymentResultEmails } from '@/lib/paymentResultEmail.mjs';
@@ -35,30 +34,6 @@ function normalizeAmount(amount, currency) {
   return currency === 'CRC'
     ? String(Math.round(Number(amount)))
     : Number(amount).toFixed(2);
-}
-
-function splitName(name = '') {
-  const parts = normalizeShieldHubPayName(name).split(/\s+/).filter(Boolean);
-  return {
-    first: parts[0] || 'Customer',
-    last: parts.slice(1).join(' ') || parts[0] || 'Customer',
-  };
-}
-
-function normalizeCard(card = {}, fallbackHolder = 'Customer') {
-  const expiry = String(card.expiry || '').replace(/\s+/g, '');
-  const [rawMonth, rawYear] = expiry.includes('/') ? expiry.split('/') : [card.expiryMonth, card.expiryYear];
-  const expiryMonth = String(rawMonth || '').replace(/\D/g, '').padStart(2, '0').slice(0, 2);
-  const yearDigits = String(rawYear || '').replace(/\D/g, '');
-  const expiryYear = yearDigits.length === 4 ? yearDigits.slice(2) : yearDigits;
-
-  return {
-    holder: normalizeShieldHubPayName(card.holder, fallbackHolder),
-    number: String(card.number || '').replace(/\D/g, ''),
-    cvv: String(card.cvv || '').replace(/\D/g, ''),
-    expiry_month: expiryMonth,
-    expiry_year: expiryYear,
-  };
 }
 
 function buildPaymentPatch(status, transaction) {
@@ -212,11 +187,10 @@ export async function POST(req) {
       currency = 'USD',
       orderNumber,
       paymentToken,
-      card,
       lang = 'es',
     } = body;
 
-    if (!amount || !orderNumber || !paymentToken || !card) {
+    if (!amount || !orderNumber || !paymentToken) {
       return stopCheckout('missing_details', lang, 400,
         `Missing required billing fields for ${orderNumber || 'unknown order'}`);
     }
@@ -287,16 +261,6 @@ export async function POST(req) {
       return stopCheckout('missing_details', lang, 400, `Stored order ${orderNumber} has incomplete customer details`);
     }
 
-    const normalizedCard = normalizeCard(card, customerName);
-    if (!normalizedCard.holder || normalizedCard.number.length < 12 || normalizedCard.number.length > 19
-        || normalizedCard.cvv.length < 3 || normalizedCard.cvv.length > 4
-        || !normalizedCard.expiry_month || !normalizedCard.expiry_year) {
-      await releaseOrderClaim(supabase, orderNumber);
-      return stopCheckout('card_details', lang, 400, `Invalid card details for ${orderNumber}`);
-    }
-
-    const name = splitName(customerName);
-
     // Price the charge from the order row, never from the request body.
     //
     // `amount` is POSTed by the browser, and until this existed it was handed
@@ -331,17 +295,21 @@ export async function POST(req) {
 
     let transaction;
     try {
-      transaction = await processChargxCardPayment({
+      const page = await createChargxCardCheckout({
         amount: formattedAmount,
-        orderId: orderNumber,
-        customer: {
-          name: normalizedCard.holder || `${name.first} ${name.last}`.trim(),
+        successUrl: `${baseUrl}/thank-you?lang=${encodeURIComponent(lang)}&order=${encodeURIComponent(orderNumber)}&payment=card`,
+        cancelUrl: `${baseUrl}/catalog?lang=${encodeURIComponent(lang)}&payment=cancel&order=${encodeURIComponent(orderNumber)}`,
+      });
+      transaction = {
+        ...page,
+        descriptor_text: 'Chargex',
+        redirect_url: withChargxCheckoutDetails(page.redirect_url, {
+          orderNumber,
           email: customerEmail,
           phone: customerPhone,
-        },
-        billing: parseBillingAddress(shippingAddress),
-        card: normalizedCard,
-      });
+          billing: parseBillingAddress(shippingAddress),
+        }),
+      };
     } catch (chargeErr) {
       // No charge result — release the claim so the customer can retry instead of
       // the order being stuck as "processing".

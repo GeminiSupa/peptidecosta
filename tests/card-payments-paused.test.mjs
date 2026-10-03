@@ -102,7 +102,7 @@ test('the pause is checked before the gateway is configured or reached', () => {
   ]) {
     const pauseAt = source.indexOf('areCardPaymentsPaused()');
     const configuredAt = source.indexOf(`if (!${configured}())`);
-    const chargeAt = source.indexOf('processChargxCardPayment(');
+    const chargeAt = source.indexOf('createChargxCardCheckout(');
     assert.ok(pauseAt > 0, `${name} does not check the pause at all`);
     assert.ok(pauseAt < configuredAt, `${name} checks the pause after the gateway config check`);
     assert.ok(pauseAt < chargeAt, `${name} checks the pause after charging the card`);
