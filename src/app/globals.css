@@ -3295,11 +3295,12 @@ body {
 
 .card-payment-btn {
     width: 100%;
-    margin-top: 12px;
+    margin-top: 0;
+    min-height: 52px;
     padding: 14px;
     border-radius: 12px;
     border: none;
-    background: var(--cta);
+    background: #16a34a;
     color: white;
     font-weight: 800;
     font-size: 0.95rem;
@@ -3308,14 +3309,16 @@ body {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    box-shadow: 0 4px 14px rgba(191, 79, 11, 0.35);
+    position: relative;
+    z-index: 2;
+    box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
     transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .card-payment-btn:hover:not(:disabled) {
     transform: translateY(-1px);
-    background: var(--cta-hover);
-    box-shadow: 0 8px 20px rgba(191, 79, 11, 0.3);
+    background: #15803d;
+    box-shadow: 0 8px 20px rgba(22, 163, 74, 0.3);
 }
 
 .card-payment-btn:disabled {

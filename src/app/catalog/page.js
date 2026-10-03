@@ -5612,6 +5612,7 @@ export default function CatalogPage() {
               )}
 
               {paymentMethod === 'card' && CARD_CHECKOUT_AVAILABLE ? (
+                <>
                 <div className="card-payment-panel">
                   <div className="card-payment-fields">
                     <p className="card-payment-security-note">
@@ -5646,9 +5647,11 @@ export default function CatalogPage() {
                       </ul>
                     </div>
                   </div>
-                  {/* Always render the button. Hiding it behind a "fill in your
-                      details" notice made the customer hunt for the missing field
-                      themselves; validateForm now names it and scrolls to it. */}
+                </div>
+                {/* Pinned to the bottom of the cart, same as the WhatsApp
+                    button. Inside the scrolling notes a phone tap lands on
+                    the text instead of the button. */}
+                <div className="cart-sticky-submit">
                   <button
                     type="button"
                     disabled={cardSubmitting || cardRetryBlocked || cart.length === 0 || checkBacOnlyMinimum(cart).blocked || Boolean(getWeeklyDealLimitError())}
@@ -5689,6 +5692,7 @@ export default function CatalogPage() {
                     </p>
                   )}
                 </div>
+                </>
               ) : (
                 <div className="cart-sticky-submit">
                   <button
