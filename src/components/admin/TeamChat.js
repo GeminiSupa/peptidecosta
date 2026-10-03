@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { confirmDelete } from '@/lib/confirmDelete.mjs';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { isInternalStaff } from '@/lib/subUserTier.mjs';
 import {
   Send, User, Users, ChevronLeft, Search, Smile,
   Edit2, Trash2, Check, CheckCheck, X, ShieldAlert,
@@ -93,7 +94,12 @@ export default function TeamChat({ profile }) {
     supabase
       .from('admin_profiles').select('*').order('name', { ascending: true })
       .then(({ data, error }) => {
-        if (!error && data) setContacts(data.filter(c => c.email !== profile.email));
+        // Affiliates hold a login but work outside the business, so they are not
+        // colleagues to message — and the staff chat is not somewhere a partner
+        // belongs, in either direction.
+        if (!error && data) {
+          setContacts(data.filter((c) => c.email !== profile.email && isInternalStaff(c)));
+        }
       });
   }, [profile]);
 

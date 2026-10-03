@@ -84,7 +84,7 @@ import {
   getDefaultAdminTab,
   resolveAdminTabAccess,
 } from '@/lib/adminModules';
-import { isAffiliateTier, isSubUser } from '@/lib/subUserTier.mjs';
+import { isAffiliateTier, isInternalStaff, isSubUser } from '@/lib/subUserTier.mjs';
 import {
   DEFAULT_LANDING_PAGE_SETTINGS,
   DEFAULT_PUBLIC_PAGE_SETTINGS,
@@ -2477,9 +2477,14 @@ Core Rules:
           .order('name', { ascending: true });
         
         if (!agentError && agentData) {
-          const loadedAgents = agentData.map(a => a.name || a.email).filter(Boolean);
+          // Staff only. This list feeds every "sales agent" and owner dropdown in
+          // the admin, so an affiliate left in it could be handed an order or a
+          // lead — and the owner lock would then treat an outside partner as the
+          // colleague who owns that customer.
+          const staff = agentData.filter(isInternalStaff);
+          const loadedAgents = staff.map(a => a.name || a.email).filter(Boolean);
           setAgents(loadedAgents.length > 0 ? loadedAgents : ['Joe', 'info@peptidescostarica.net']);
-          setAgentProfiles(agentData);
+          setAgentProfiles(staff);
         } else {
           setAgents(['Joe', 'info@peptidescostarica.net']);
         }

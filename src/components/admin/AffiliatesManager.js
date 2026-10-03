@@ -10,6 +10,7 @@ import ReferralAnalytics from '@/components/admin/ReferralAnalytics';
 import { isSalesAgentAffiliate } from '@/lib/salesAgentAffiliate.mjs';
 import PayoutSettlementDialog from './PayoutSettlementDialog';
 import AffiliateAccessPanel from '@/components/admin/AffiliateAccessPanel';
+import { isInternalStaff } from '@/lib/subUserTier.mjs';
 
 const CATALOG_BASE_URL = process.env.NEXT_PUBLIC_AFFILIATE_CATALOG_URL || 'https://catalog.peptidescostarica.net/catalog?lang=es';
 
@@ -114,10 +115,15 @@ export default function AffiliatesManager({ products = [], agentProfiles = [] })
     return url.toString();
   };
 
+  // isInternalStaff as well as the sub-user check: an affiliate login is a row
+  // here like any other, and "who handles this affiliate" must never offer an
+  // affiliate. The list arrives filtered already; this is the same rule stated
+  // where it is relied on, so a future caller cannot quietly undo it.
   const handlingAgents = (agentProfiles || []).filter((profile) => {
     const tier = String(profile?.tier || 'staff').trim().toLowerCase();
     const status = String(profile?.status || 'active').trim().toLowerCase();
-    return profile?.user_id && tier !== 'sub_user' && status !== 'pending' && status !== 'suspended';
+    return profile?.user_id && isInternalStaff(profile) && tier !== 'sub_user'
+      && status !== 'pending' && status !== 'suspended';
   });
 
   const agentNameFor = (userId) => {

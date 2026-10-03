@@ -14,6 +14,8 @@
 
 export const LANDING_ROTATION_SETTING_ID = 'landing_lead_rotation';
 
+import { isInternalStaff } from './subUserTier.mjs';
+
 const lower = (value) => String(value ?? '').trim().toLowerCase();
 
 /** The chosen agents that can work leads right now, in the admin's order. */
@@ -26,6 +28,10 @@ export function eligibleRotationAgents(profiles, rotationEmails) {
     .filter((profile) => (
       profile
       && (profile.status || 'active') === 'active'
+      // Staff only, whatever permissions the row happens to carry. A customer's
+      // lead is not something to hand to an outside affiliate, and an affiliate
+      // made the old way through Team can still be holding real permissions.
+      && isInternalStaff(profile)
       && Array.isArray(profile.permissions)
       && profile.permissions.includes('leads')
     ))

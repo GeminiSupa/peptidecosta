@@ -97,3 +97,17 @@ test('only a superadmin changes the rotation, from Team > Notification Settings'
   assert.match(team, /Share ad leads between agents/);
   assert.match(team, /body: JSON\.stringify\(\{ leadRotation: next \}\)/);
 });
+
+// An affiliate login sits in admin_profiles like anyone else. One made the old
+// way through Team can still be holding real permissions, so the tier decides
+// this, not the permission list — a customer's lead is not an outside partner's.
+test('an affiliate is never put in the rotation, even holding the leads permission', () => {
+  const profiles = [
+    { name: 'Agent', email: 'agent@example.com', status: 'active', permissions: ['leads'] },
+    { name: 'Partner', email: 'partner@example.com', status: 'active', tier: 'affiliate', permissions: ['leads'] },
+  ];
+  assert.deepEqual(
+    eligibleRotationAgents(profiles, ['agent@example.com', 'partner@example.com']),
+    [{ name: 'Agent', email: 'agent@example.com' }]
+  );
+});

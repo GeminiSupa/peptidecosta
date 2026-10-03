@@ -25,6 +25,7 @@
  */
 
 import { isUsableDestination, normalizeDestination } from './notificationRecipients.mjs';
+import { isInternalStaff } from './subUserTier.mjs';
 
 export const TIKTOK_ROTATION_AGENT_NAMES = ['Pollita', 'Dani', 'Korinne'];
 export const TIKTOK_ROTATION_SETTING_ID = 'tiktok_lead_rotation';
@@ -38,6 +39,8 @@ function eligibleRotationAgents(profiles) {
     .filter((profile) => (
       profile
       && (profile.status || 'active') === 'active'
+      // Staff only — same rule as the landing rotation in leadRotation.mjs.
+      && isInternalStaff(profile)
       && Array.isArray(profile.permissions)
       && profile.permissions.includes('leads')
     ))
