@@ -3,6 +3,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { AFFILIATE_ACCESS_MODES, AFFILIATE_ACCESS_READ } from '@/lib/affiliateAccess.mjs';
 import { describeAffiliateAccess } from '@/lib/affiliateAdminAccess.mjs';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,13 +93,13 @@ export async function POST(request) {
     return createLogin({ supabaseAdmin, affiliate, current, body, actor: auth.profile });
   }
   if (action === 'set_mode') {
-    return setMode({ supabaseAdmin, affiliate, current, body });
+    return setMode({ supabaseAdmin, affiliate, current, body, actor: auth.profile });
   }
   if (action === 'restrict') {
     return restrict({ supabaseAdmin, affiliate, current, actor: auth.profile });
   }
   if (action === 'revoke_login') {
-    return revokeLogin({ supabaseAdmin, affiliate, current });
+    return revokeLogin({ supabaseAdmin, affiliate, current, actor: auth.profile });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
@@ -190,13 +191,22 @@ async function createLogin({ supabaseAdmin, affiliate, current, body, actor }) {
     return NextResponse.json({ error: 'Could not link the login to the affiliate.' }, { status: 500 });
   }
 
+  await recordAdminActivity(supabaseAdmin, {
+    actor,
+    action: 'account.affiliate_login_created',
+    subjectType: 'account',
+    subjectId: authData.user.id,
+    subjectLabel: email,
+    detail: { access: { from: 'no login', to: mode === 'edit' ? 'view and edit' : 'view only' } },
+  });
+
   return NextResponse.json({
     ok: true,
     message: `${affiliate.name || email} can now sign in at /affiliate-dashboard.`,
   });
 }
 
-async function setMode({ supabaseAdmin, affiliate, current, body }) {
+async function setMode({ supabaseAdmin, affiliate, current, body, actor }) {
   if (!current.userId) {
     return NextResponse.json({ error: 'That affiliate has no login yet.' }, { status: 400 });
   }
@@ -213,6 +223,14 @@ async function setMode({ supabaseAdmin, affiliate, current, body }) {
     console.error('[affiliates/access] setMode:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+  await recordAdminActivity(supabaseAdmin, {
+    actor,
+    action: 'account.affiliate_access_changed',
+    subjectType: 'account',
+    subjectId: current.userId,
+    subjectLabel: current.profileEmail || affiliate.email,
+    detail: { access: { from: current.mode || '', to: body.mode } },
+  });
   return NextResponse.json({ ok: true, message: 'Saved.' });
 }
 
@@ -255,13 +273,21 @@ async function restrict({ supabaseAdmin, affiliate, current, actor }) {
   console.warn(
     `[affiliates/access] ${actor.email} restricted ${current.profileEmail} to affiliate-only`
   );
+  await recordAdminActivity(supabaseAdmin, {
+    actor,
+    action: 'account.restricted_to_affiliate',
+    subjectType: 'account',
+    subjectId: current.userId,
+    subjectLabel: current.profileEmail || affiliate.email,
+    detail: { was: { from: 'team login', to: 'affiliate only' } },
+  });
   return NextResponse.json({
     ok: true,
     message: `${affiliate.name || 'They'} can now only see their own link, orders and payouts.`,
   });
 }
 
-async function revokeLogin({ supabaseAdmin, affiliate, current }) {
+async function revokeLogin({ supabaseAdmin, affiliate, current, actor }) {
   if (current.state !== 'affiliate_only') {
     return NextResponse.json(
       { error: 'Only an affiliate-only login can be removed here. Team members are managed in Team.' },
@@ -269,9 +295,23 @@ async function revokeLogin({ supabaseAdmin, affiliate, current }) {
     );
   }
 
+  // Recorded before the row goes: once the profile is deleted there is nothing
+  // left to name, and a login removal is the exact event nobody could trace
+  // when an affiliate turned out to be reading every order.
+  const removedEmail = current.profileEmail || affiliate.email;
+
   await supabaseAdmin.from('affiliates').update({ admin_profile_user_id: null }).eq('id', affiliate.id);
   await supabaseAdmin.from('admin_profiles').delete().eq('user_id', current.userId);
   await supabaseAdmin.auth.admin.deleteUser(current.userId).catch(() => {});
+
+  await recordAdminActivity(supabaseAdmin, {
+    actor,
+    action: 'account.affiliate_login_revoked',
+    subjectType: 'account',
+    subjectId: current.userId,
+    subjectLabel: removedEmail,
+    detail: { access: { from: 'affiliate login', to: 'removed' } },
+  });
 
   return NextResponse.json({ ok: true, message: 'Their login has been removed.' });
 }

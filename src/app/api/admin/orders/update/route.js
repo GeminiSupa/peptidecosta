@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity, summariseChanges } from '@/lib/adminActivityLog.mjs';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { stripGiftSuffix } from '@/lib/bacWater.mjs';
 import { authoritativeCheckout, productNameResolver } from '@/lib/authoritativeCheckout.mjs';
@@ -561,6 +562,26 @@ export async function PATCH(request) {
           console.error('[admin/orders/update] Failed to send customer confirmation:', e);
         }
       }
+    }
+
+    // The order already keeps its own history; this is the same event seen from
+    // the other side — by account rather than by order — which is how "what has
+    // this person been doing" gets answered without opening every order.
+    // Money and ownership only: a note being retyped is not worth a row.
+    const orderChanges = summariseChanges(currentOrder, data, [
+      'status', 'sales_agent', 'total_usd', 'total_crc', 'payment_method', 'shipping_cost',
+      'manual_discount_type', 'manual_discount_value', 'promo_code', 'tracking_number',
+    ]);
+    if (orderChanges) {
+      await recordAdminActivity(supabase, {
+        actor: auth.profile,
+        action: orderChanges.sales_agent ? 'order.owner_changed' : 'order.updated',
+        subjectType: 'order',
+        subjectId: data?.id || orderId,
+        subjectLabel: data?.order_number || currentOrder.order_number,
+        detail: orderChanges,
+        request,
+      });
     }
 
     return NextResponse.json({ ok: true, order: data });

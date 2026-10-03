@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import nodemailer from 'nodemailer';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { sendTaxRecordsPayoutCopy } from '@/lib/taxRecordsEmail.mjs';
 import { resolveTaxRecordsMailer } from '@/lib/taxRecordsSmtp.mjs';
@@ -147,6 +148,21 @@ export async function POST(request) {
       console.error('[Affiliate Payout Approval] Error saving approval state:', updateError);
       return NextResponse.json({ error: 'Failed to update payout approval state in DB.' }, { status: 500 });
     }
+
+    // Approving a payout commits money. The row already says approved_by
+    // 'Super Admin', which names nobody; this names the account.
+    await recordAdminActivity(supabaseAdmin, {
+      actor: auth.profile,
+      action: 'payout.approved',
+      subjectType: 'payout',
+      subjectId: payoutId,
+      subjectLabel: payout.affiliate_name || payout.affiliate_email,
+      detail: {
+        amount: { from: '', to: `$${payout.usd_commission || 0} or ₡${payout.crc_commission || 0}` },
+        invoice_email: { from: '', to: emailSent ? 'sent' : `not sent${emailError ? ` (${emailError})` : ''}` },
+      },
+      request,
+    });
 
     return NextResponse.json({
       success: true,

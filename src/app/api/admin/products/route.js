@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity, summariseChanges } from '@/lib/adminActivityLog.mjs';
 import {
   liveDealProductConflicts,
   preserveLiveDealFields,
@@ -213,7 +214,7 @@ export async function PUT(request) {
  * Refused when the product has changed since the page loaded, so an old tab
  * cannot put its copy back over a teammate's edit.
  */
-async function saveOneProduct(supabase, { product, baseline, moveReviews }) {
+async function saveOneProduct(supabase, { product, baseline, moveReviews }, { actor, request } = {}) {
   const id = product?.id;
   if (!isExistingProductId(id)) {
     return NextResponse.json({ error: 'This product has not been saved yet. Use Save Changes to add it.' }, { status: 400 });
@@ -254,6 +255,25 @@ async function saveOneProduct(supabase, { product, baseline, moveReviews }) {
     ? await moveReviewsToNewName(supabase, currentRow.product, saved.product)
     : 0;
 
+  // Price, stock and visibility only. A description being reworded is not what
+  // anybody comes to this log for, and a row per keystroke-sized edit would
+  // bury the ones that matter.
+  const productChanges = summariseChanges(currentRow, saved, [
+    'product', 'price_usd', 'price_crc', 'cost_usd', 'cost_crc', 'status',
+    'discount', 'inventory_count', 'vial_size', 'is_default_size', 'category',
+  ]);
+  if (productChanges) {
+    await recordAdminActivity(supabase, {
+      actor,
+      action: 'product.updated',
+      subjectType: 'product',
+      subjectId: id,
+      subjectLabel: saved?.product || currentRow.product,
+      detail: productChanges,
+      request,
+    });
+  }
+
   return NextResponse.json({ ok: true, product: saved, fingerprint: productFingerprint(saved), movedReviews });
 }
 
@@ -266,7 +286,7 @@ export async function PATCH(request) {
     const supabase = getSupabaseAdmin();
 
     if (body?.product && typeof body.product === 'object') {
-      return await saveOneProduct(supabase, body);
+      return await saveOneProduct(supabase, body, { actor: auth.profile, request });
     }
 
     const { hiddenNames } = body || {};

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAffiliateSession } from '@/lib/affiliateSession';
 import { affiliateAccessMode } from '@/lib/affiliateAccess.mjs';
 import { buildReferralLink, catalogBaseUrl, slugify } from '@/lib/referralLink.mjs';
+import { recordSignInOnce } from '@/lib/adminActivityLog.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,16 @@ export async function GET(request) {
   if (session.error) return session.error;
 
   const { affiliate, profile, supabaseAdmin } = session;
+
+  // An affiliate's sign-in is recorded here because this is the first thing
+  // their dashboard asks for, and because the admin route that records staff
+  // sign-ins deliberately refuses the affiliate tier. Collapsed to one row per
+  // half hour, so a dashboard left open and refreshed does not fill the log.
+  // Never blocks the reply, and never fails it.
+  await recordSignInOnce(supabaseAdmin, {
+    actor: { ...profile, email: profile?.email || affiliate?.email },
+    request,
+  });
 
   const { data: codes, error } = await supabaseAdmin
     .from('promo_codes')

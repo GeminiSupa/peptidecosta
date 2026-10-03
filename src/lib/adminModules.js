@@ -84,6 +84,12 @@ export const ADMIN_MODULES = [
   // Sandbox card payments. The panel and its route existed for a while with
   // nothing mounting them, so there was no way to reach it from the dashboard.
   { id: 'payment_test', label: 'Payment Test', title: 'Payment Test (Sandbox)', group: 'System & AI', superadminOnly: true },
+  // What every account has been doing — team and affiliates alike. Superadmin
+  // only, and deliberately not assignable: a log of everyone's actions is the
+  // owner's to read, and a staff member who could grant it to themselves, or be
+  // granted it, could watch colleagues. The route refuses anybody else too, so
+  // the tab being hidden is not the only thing stopping them.
+  { id: 'activity_log', label: 'Activity Log', title: 'Activity Log', group: 'System & AI', superadminOnly: true },
   // Permission-gated for the same reason as messenger: internal staff talk is
   // not something a login handed to an outside partner should open by default.
   //

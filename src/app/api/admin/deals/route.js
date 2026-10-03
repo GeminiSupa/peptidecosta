@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 import {
   FLASH_KIND,
   endFlashSale,
@@ -119,6 +120,18 @@ export async function POST(request) {
         maxUnits: body.max_units,
         offers: body.offers || null,
       });
+      await recordAdminActivity(getSupabaseAdmin(), {
+        actor: auth.profile,
+        action: 'deal.launched',
+        subjectType: 'deal',
+        subjectId: result?.deal?.id || null,
+        subjectLabel: body.title_en || body.title_es || 'Deal of the Week',
+        detail: {
+          kind: { from: '', to: 'weekly' },
+          products: { from: '', to: `${(body.product_names || []).length} products` },
+        },
+        request,
+      });
       return NextResponse.json({ ok: true, ...result });
     }
 
@@ -133,11 +146,34 @@ export async function POST(request) {
         confirmedHighDiscount: body.confirm_high_discount === true,
         allowUntrackedStock: body.allow_untracked_stock === true,
       });
+      await recordAdminActivity(getSupabaseAdmin(), {
+        actor: auth.profile,
+        action: 'deal.launched',
+        subjectType: 'deal',
+        subjectId: result?.deal?.id || null,
+        subjectLabel: body.title_en || body.title_es || 'Flash sale',
+        detail: {
+          kind: { from: '', to: 'flash' },
+          discount: { from: '', to: `${body.discount_pct || ''}%` },
+          ends: { from: '', to: String(body.ends_at || '') },
+        },
+        request,
+      });
       return NextResponse.json({ ok: true, ...result });
     }
 
     if (action === 'flash_end') {
-      return NextResponse.json({ ok: true, ...(await endFlashSale()) });
+      const ended = await endFlashSale();
+      await recordAdminActivity(getSupabaseAdmin(), {
+        actor: auth.profile,
+        action: 'deal.ended',
+        subjectType: 'deal',
+        subjectId: ended?.deal?.id || null,
+        subjectLabel: 'Flash sale',
+        detail: { kind: { from: 'flash', to: 'ended' } },
+        request,
+      });
+      return NextResponse.json({ ok: true, ...ended });
     }
 
     if (action === 'end') {

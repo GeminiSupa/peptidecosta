@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 import { actorFrom, moveToBin } from '@/lib/recycleBinServer';
 
 export const runtime = 'nodejs';
@@ -120,6 +121,22 @@ export async function DELETE(request) {
         { status: 500 },
       );
     }
+
+    // Deleting a customer is the single most consequential thing an account can
+    // do in here, so it is recorded whatever the Bin's own retention is set to.
+    await recordAdminActivity(supabase, {
+      actor: auth.profile,
+      action: 'customer.deleted',
+      subjectType: 'customer',
+      subjectId: email || phone || name || null,
+      subjectLabel: name || email || phone || null,
+      detail: {
+        records: { from: `${total}`, to: 'moved to the Bin' },
+        ...(accountRemoved ? { login: { from: 'had one', to: 'deleted' } } : {}),
+        ...(reason ? { reason: { from: '', to: String(reason).slice(0, 200) } } : {}),
+      },
+      request,
+    });
 
     return NextResponse.json({
       ok: true,

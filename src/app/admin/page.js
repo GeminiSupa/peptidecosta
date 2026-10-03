@@ -30,7 +30,7 @@ import {
   Lock, LayoutDashboard, ListFilter, Plus, Trash2, Mail, MessageCircle, MessagesSquare,
   Save, Upload, Download, Share2, Clipboard, LogOut, Check, 
   AlertCircle, ChevronRight, ChevronUp, MessageSquare, Database,
-  Dna, FlaskConical, Syringe, TestTubes, Atom, 
+  Dna, FlaskConical, ShieldAlert, Syringe, TestTubes, Atom, 
   Brain, Shield, Moon, Sun, Flame, Zap, Sparkles, Microscope,
   KeyRound, ShoppingCart, Table, ClipboardList, Link2, Star, FileText, BarChart2, Users, UserPlus, Send, QrCode,
   Bell, X, TrendingUp, Target, Smartphone, Inbox, Search, ChevronLeft, Megaphone,
@@ -65,6 +65,7 @@ import ManualOrderModal from '@/components/admin/ManualOrderModal';
 import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
 import AdminHelpBot from '@/components/admin/AdminHelpBot';
+import ActivityLogPanel from '@/components/admin/ActivityLogPanel';
 import { productBaseline as buildProductBaseline } from '@/lib/productSaveGuard.mjs';
 import { catalogCompoundAndSize, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
@@ -1890,6 +1891,10 @@ Core Rules:
       icon: <MessageCircle size={iconSize} />,
       badge: unreadTeamMsgCount,
     },
+    activity_log: {
+      label: 'Activity Log',
+      icon: <ShieldAlert size={iconSize} style={{ color: activeTab === 'activity_log' ? 'inherit' : '#fbbf24' }} />,
+    },
   });
 
   const desktopTabMeta = makeAdminTabMeta(14);
@@ -1914,7 +1919,7 @@ Core Rules:
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
     { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
-    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'requests', 'recycle_bin', 'team_chat', 'payment_test'] },
+    { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'requests', 'recycle_bin', 'team_chat', 'payment_test', 'activity_log'] },
   ].map((group) => ({
     ...group,
     tabs: group.tabs.filter((tabId) => hasAccess(tabId) && !desktopPrimaryTabIds.includes(tabId)),
@@ -3076,6 +3081,12 @@ Core Rules:
 
         if (!error) {
           loggedInEmail.current = email.trim();
+          // Tell the activity log somebody signed in. Sign-in happens against
+          // Supabase directly and never passes through our own server, so this
+          // ping is the only moment it can be recorded. It names nobody: the
+          // route reads the account from the session it verifies, so a forged
+          // call can only ever record the caller's own sign-in.
+          adminFetch('/api/admin/activity-log', { method: 'POST' }).catch(() => {});
           setIsAuthenticated(true);
           setLoginError('');
           setLoginLoading(false);
@@ -7390,6 +7401,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px' }}>
             <ErrorBoundary>
               <TestPaymentPanel />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {activeTab === 'activity_log' && (
+          <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px' }}>
+            <ErrorBoundary>
+              <ActivityLogPanel adminProfile={adminProfile} />
             </ErrorBoundary>
           </div>
         )}

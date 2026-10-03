@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { planPayoutSettlement } from '@/lib/payoutSettlement.mjs';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 
 export async function POST(request) {
   const auth = await verifyAdminSession(request, { requireSuperadmin: true });
@@ -23,6 +24,19 @@ export async function POST(request) {
     const { data, error } = await supabase.from('affiliate_payouts')
       .update(plan.patch).eq('id', payout.id).select('*').single();
     if (error) throw error;
+    await recordAdminActivity(supabase, {
+      actor: auth.profile,
+      action: 'payout.settled',
+      subjectType: 'payout',
+      subjectId: payout.id,
+      subjectLabel: payout.affiliate_name || payout.affiliate_email,
+      detail: {
+        status: { from: String(payout.status || ''), to: String(data?.status || '') },
+        // One payout stated in two currencies, never a sum of the two.
+        amount: { from: '', to: `$${payout.usd_commission || 0} or ₡${payout.crc_commission || 0}` },
+      },
+      request,
+    });
     return NextResponse.json({ success: true, payout: data });
   } catch (error) {
     console.error('[affiliates/payouts/settle]', error);

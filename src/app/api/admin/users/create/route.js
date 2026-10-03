@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity } from '@/lib/adminActivityLog.mjs';
 import { ADMIN_PROFILE_OPTIONAL_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 export async function POST(request) {
@@ -73,6 +74,21 @@ export async function POST(request) {
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json({ error: profileError.message }, { status: 500 });
     }
+
+    await recordAdminActivity(supabaseAdmin, {
+      actor: auth.profile,
+      action: 'account.created',
+      subjectType: 'account',
+      subjectId: profileData?.user_id || userId,
+      subjectLabel: profileData?.email || email,
+      // What they were given, not the password. The count rather than the list:
+      // the list is on the row, and the log is for noticing, not auditing text.
+      detail: {
+        permissions: { from: 'none', to: `${(profileRow.permissions || []).length} areas` },
+        superadmin: { from: 'no', to: profileRow.is_superadmin ? 'yes' : 'no' },
+      },
+      request,
+    });
 
     return NextResponse.json({ success: true, user: profileData });
   } catch (error) {

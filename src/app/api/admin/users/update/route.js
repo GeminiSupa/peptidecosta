@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity, summariseChanges } from '@/lib/adminActivityLog.mjs';
 import { ADMIN_PROFILE_OPTIONAL_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 
 export async function PUT(request) {
@@ -50,6 +51,9 @@ export async function PUT(request) {
     if (whatsapp_number !== undefined) updateData.whatsapp_number = whatsapp_number ? String(whatsapp_number).trim() : null;
 
     if (Object.keys(updateData).length > 0) {
+      // Read first, so the log can say what a setting was before it moved.
+      const { data: before } = await supabaseAdmin
+        .from('admin_profiles').select('*').eq('user_id', userId).maybeSingle();
       const { data: profileData, error: profileError, droppedColumns } = await writeDroppingMissingColumns(
         updateData,
         ADMIN_PROFILE_OPTIONAL_COLUMNS,
@@ -64,6 +68,39 @@ export async function PUT(request) {
         console.error('Error updating admin profile:', profileError);
         return NextResponse.json({ error: profileError.message }, { status: 500 });
       }
+      // Permissions get their own action, because "who widened somebody's
+      // reach" is a different question from "who corrected a phone number" and
+      // should not need reading a diff to tell apart.
+      const permissionsMoved = updateData.permissions !== undefined
+        && JSON.stringify(before?.permissions || []) !== JSON.stringify(updateData.permissions || []);
+      const superadminMoved = updateData.is_superadmin !== undefined
+        && Boolean(before?.is_superadmin) !== Boolean(updateData.is_superadmin);
+
+      await recordAdminActivity(supabaseAdmin, {
+        actor: auth.profile,
+        action: (permissionsMoved || superadminMoved) ? 'account.permissions_changed' : 'account.updated',
+        subjectType: 'account',
+        subjectId: userId,
+        subjectLabel: profileData?.email || before?.email || userId,
+        detail: {
+          ...(permissionsMoved ? {
+            permissions: {
+              from: `${(before?.permissions || []).length} areas`,
+              to: `${(updateData.permissions || []).length} areas`,
+            },
+          } : {}),
+          ...(summariseChanges(before, updateData, [
+            'name', 'is_superadmin', 'status', 'tier', 'commission_rate', 'weekly_salary',
+            'salary_currency', 'notifications_enabled', 'order_email_notifications',
+            'lead_email_notifications', 'order_whatsapp_notifications', 'whatsapp_number',
+          ]) || {}),
+          // Named so the redaction rule does not blank it: that a password was
+          // reset is exactly what a log should say, and no value is recorded.
+          ...(password ? { sign_in: { from: '', to: 'password was reset' } } : {}),
+        },
+        request,
+      });
+
       return NextResponse.json({ success: true, user: profileData });
     }
 

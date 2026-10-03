@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { recordAdminActivity, summariseChanges } from '@/lib/adminActivityLog.mjs';
 import {
   NOTIFICATION_CHANNELS,
   isMissingRecipientsTable,
@@ -196,6 +197,24 @@ export async function POST(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // The question this log was built for: who added this address, and when.
+    await recordAdminActivity(supabase, {
+      actor: auth.profile,
+      action: 'notification_recipient.added',
+      subjectType: 'notification_recipient',
+      subjectId: data?.id,
+      subjectLabel: data?.destination || data?.label,
+      detail: {
+        channel: { from: '', to: String(data?.channel || '') },
+        alerts: {
+          from: '',
+          to: [data?.new_order && 'orders', data?.new_lead && 'leads', data?.adwords_lead && 'ads']
+            .filter(Boolean).join(', ') || 'none',
+        },
+      },
+      request,
+    });
+
     return NextResponse.json({ recipient: data });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -266,6 +285,10 @@ export async function PATCH(request) {
     }
 
     const supabase = getSupabaseAdmin();
+    // Read before writing, so the log can say what the value actually was
+    // rather than only what it became.
+    const { data: before } = await supabase
+      .from('notification_recipients').select('*').eq('id', body.id).maybeSingle();
     // Toggling a flag whose column does not exist yet reports success and
     // changes nothing, so the tick reappears unticked on the next load with no
     // explanation. Name the migration instead.
@@ -298,6 +321,16 @@ export async function PATCH(request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    await recordAdminActivity(supabase, {
+      actor: auth.profile,
+      action: 'notification_recipient.updated',
+      subjectType: 'notification_recipient',
+      subjectId: body.id,
+      subjectLabel: data?.destination || data?.label,
+      detail: summariseChanges(before, data, ['label', 'channel', 'destination', 'new_order', 'new_lead', 'adwords_lead', 'active']),
+      request,
+    });
+
     return NextResponse.json({ recipient: data });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -312,6 +345,10 @@ export async function DELETE(request) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
   const supabase = getSupabaseAdmin();
+  // Read it before the Bin takes it: the log must name what was removed, and
+  // the Bin's own copy is purged on whatever retention the owner has set.
+  const { data: removed } = await supabase
+    .from('notification_recipients').select('*').eq('id', id).maybeSingle();
   const binned = await moveToBin(
     { table: 'notification_recipients', ids: [id], actor: actorFrom(auth.profile) },
     supabase,
@@ -324,6 +361,16 @@ export async function DELETE(request) {
     console.error('[notification-recipients] Delete failed:', binned.error);
     return NextResponse.json({ error: binned.error }, { status: 500 });
   }
+
+  await recordAdminActivity(supabase, {
+    actor: auth.profile,
+    action: 'notification_recipient.removed',
+    subjectType: 'notification_recipient',
+    subjectId: id,
+    subjectLabel: removed?.destination || removed?.label || id,
+    detail: removed ? { channel: { from: String(removed.channel || ''), to: 'removed' } } : null,
+    request,
+  });
 
   return NextResponse.json({ success: true });
 }
