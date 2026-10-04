@@ -2948,15 +2948,46 @@ body {
 }
 
 .payment-method-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 32px;
+    color: var(--primary);
+    flex-shrink: 0;
+}
+
+.payment-wa-mark {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 32px;
     height: 32px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--primary);
+    border-radius: 50%;
+    background: #25D366;
     flex-shrink: 0;
+}
+
+.payment-wa-mark svg {
+    display: block;
+    width: 20px;
+    height: 20px;
+}
+
+.payment-brand-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    max-width: 148px;
+}
+
+.payment-brand-row svg {
+    display: block;
+    height: 22px;
+    width: auto;
+    max-width: 100%;
+    justify-self: center;
 }
 
 /* The middle column. Without min-width:0 a flex item refuses to shrink below

@@ -384,6 +384,53 @@ const bacBreakdownAmountStyle = {
   whiteSpace: 'nowrap',
 };
 
+function WhatsAppPayMark() {
+  return (
+    <span className="payment-wa-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        <path fill="#fff" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+      </svg>
+    </span>
+  );
+}
+
+function CardBrandMarks() {
+  return (
+    <span className="payment-brand-row" aria-hidden="true">
+      <svg viewBox="0 0 48 24" focusable="false">
+        <rect width="48" height="24" rx="4" fill="#1434CB" />
+        <text x="24" y="16.4" textAnchor="middle" fill="#fff" fontFamily="Arial, Helvetica, sans-serif" fontSize="11" fontWeight="800" fontStyle="italic" letterSpacing="0.6">VISA</text>
+      </svg>
+      <svg viewBox="0 0 38 24" focusable="false">
+        <rect width="38" height="24" rx="4" fill="#fff" stroke="#D0D5DD" />
+        <circle cx="15" cy="12" r="6.5" fill="#EB001B" />
+        <circle cx="23" cy="12" r="6.5" fill="#F79E1B" />
+        <clipPath id="card-brand-mc-clip">
+          <circle cx="15" cy="12" r="6.5" />
+        </clipPath>
+        <circle cx="23" cy="12" r="6.5" fill="#FF5F00" clipPath="url(#card-brand-mc-clip)" />
+      </svg>
+      <svg viewBox="0 0 58 24" focusable="false">
+        <rect width="58" height="24" rx="4" fill="#000" />
+        <g transform="translate(6, 4.2) scale(0.9)">
+          <path fill="#fff" d="M13.3 5.7c-.1.1-1.6.9-1.6 2.8 0 2.2 1.9 3 2 3-.1.1-.3 1.1-1.1 2.1-.7.9-1.4 1.8-2.5 1.8-1.1 0-1.4-.6-2.6-.6s-1.6.6-2.6.6c-1 0-1.9-.9-2.6-1.9C1.1 12 0 9.3 0 6.8 0 4.4 1.5 3.1 3 3.1c1.1 0 2 .7 2.6.7.6 0 1.7-.8 2.9-.7.5 0 1.9.2 2.8 1.5zM9.6 2.1c.5-.6.9-1.5.8-2.3-.8 0-1.7.5-2.2 1.2-.5.6-.9 1.5-.8 2.3.9.1 1.7-.4 2.2-1.2z" />
+        </g>
+        <text x="52" y="16" textAnchor="end" fill="#fff" fontFamily="Segoe UI, Arial, sans-serif" fontSize="11" fontWeight="600">Pay</text>
+      </svg>
+      <svg viewBox="0 0 58 24" focusable="false">
+        <rect x="0.5" y="0.5" width="57" height="23" rx="4" fill="#fff" stroke="#D0D5DD" />
+        <g transform="translate(5, 4) scale(0.66)">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A11 11 0 0 0 1 12c0 1.78.43 3.45 1.18 4.93l3.66-2.84z" />
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+        </g>
+        <text x="53" y="16" textAnchor="end" fill="#3C4043" fontFamily="Arial, Helvetica, sans-serif" fontSize="11" fontWeight="600">Pay</text>
+      </svg>
+    </span>
+  );
+}
+
 export default function CatalogPage() {
   const { links } = useBusinessLinks();
   const { rating: liveTrustpilotRating } = useTrustpilotRating();
@@ -5526,20 +5573,20 @@ export default function CatalogPage() {
                 {[
                   {
                     value: 'whatsapp',
-                    icon: <MessageCircle size={18} />,
-                    iconColor: '#22c55e', // Green
-                    title: lang === 'en' ? 'WhatsApp' : 'WhatsApp',
+                    icon: <WhatsAppPayMark />,
+                    title: 'WhatsApp',
                     detail: lang === 'en' ? 'Coordinate manually' : 'Coordinar manualmente',
                   },
                   {
                     value: 'card',
-                    icon: <CreditCard size={18} />,
-                    iconColor: '#0ea5e9', // Blue
+                    icon: <CardBrandMarks />,
                     title: lang === 'en' ? 'Card' : 'Tarjeta',
                     detail: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Under maintenance' : 'En mantenimiento')
                       : (CARD_CHECKOUT_LIVE
-                        ? 'Apple & Google Pay'
+                        ? (lang === 'en'
+                          ? 'Credit/Debit • Apple\u00A0Pay • Google\u00A0Pay'
+                          : 'Crédito/Débito • Apple\u00A0Pay • Google\u00A0Pay')
                         : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')),
                     badge: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Maintenance' : 'Mantenimiento')
@@ -5557,7 +5604,7 @@ export default function CatalogPage() {
                     className={`payment-method-card ${paymentMethod === method.value ? 'active' : ''} ${method.disabled ? 'disabled' : ''}`}
                     onClick={() => !method.disabled && setPaymentMethod(method.value)}
                   >
-                    <span className="payment-method-icon" style={method.iconColor ? { color: method.iconColor } : {}}>{method.icon}</span>
+                    <span className="payment-method-icon">{method.icon}</span>
                     <span className="payment-method-copy">
                       <strong>{method.title}</strong>
                       <small>{method.detail}</small>
