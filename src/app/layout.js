@@ -7,6 +7,7 @@ import AnalyticsTracker from "@/components/AnalyticsTracker";
 import EntryDisclaimer from "@/components/EntryDisclaimer";
 import CatchAccountSignIn from "@/components/CatchAccountSignIn";
 import { LIVE_SITE_URL } from "@/lib/publicUrl";
+import { ORGANIZATION_SAME_AS } from "@/lib/businessLinks";
 import { getTikTokPixelBootstrapScript } from "@/lib/tiktokPixel.mjs";
 
 // Served from this repo, not next/font/google. Google's font CDN 404'd twice
@@ -165,6 +166,7 @@ export default async function RootLayout({ children }) {
                   "name": "Peptides Costa Rica",
                   "url": LIVE_SITE_URL,
                   "logo": `${LIVE_SITE_URL}/logo.png`,
+                  "sameAs": ORGANIZATION_SAME_AS,
                   "contactPoint": {
                     "@type": "ContactPoint",
                     "telephone": businessLinks.whatsappDisplay,

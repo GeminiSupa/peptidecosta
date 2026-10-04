@@ -13,13 +13,28 @@ export const GOOGLE_LOCAL_LISTING_URL = 'https://maps.app.goo.gl/b9YaeUXyuvBuj8v
  */
 export const GOOGLE_REVIEW_URL = 'https://g.page/r/CfFdfEu7WZOHEBM/review';
 
-export const FACEBOOK_REVIEW_URL = 'https://www.facebook.com/costaricapeptides/reviews';
+// Public profiles. Tracking params stripped. Footer, Facebook badges, and
+// Organization sameAs all use these. The old /reviews page is retired below.
+export const INSTAGRAM_PROFILE_URL = 'https://www.instagram.com/researchpeptidescr';
+export const FACEBOOK_PROFILE_URL = 'https://www.facebook.com/share/1JQPdcc89z/';
+export const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/company/peptides-costa-rica/';
+
+export const FACEBOOK_REVIEW_URL = FACEBOOK_PROFILE_URL;
+
+export const ORGANIZATION_PROFILES = [
+  { label: 'Instagram', url: INSTAGRAM_PROFILE_URL },
+  { label: 'Facebook', url: FACEBOOK_PROFILE_URL },
+  { label: 'LinkedIn', url: LINKEDIN_PROFILE_URL },
+];
+
+export const ORGANIZATION_SAME_AS = ORGANIZATION_PROFILES.map((profile) => profile.url);
 
 // Retired Facebook profiles, same idea as the Google listings below: a stored
 // value matching one of these is cleared so the current page wins.
 const LEGACY_FACEBOOK_REVIEW_URLS = new Set([
   'https://www.facebook.com/Peptidescostaricaresearch/reviews',
   'https://www.facebook.com/Peptidescostaricaresearch',
+  'https://www.facebook.com/costaricapeptides/reviews',
 ]);
 
 export const TRUSTPILOT_REVIEW_URLS = {
@@ -100,6 +115,8 @@ export function normalizeBusinessLinks(value) {
 
   // Cleared rather than replaced, so a profile URL set in the CMS still gets
   // its turn before the built-in default.
+  merged.facebookReviewUrl = String(merged.facebookReviewUrl || '').trim();
+  merged.facebookUrl = String(merged.facebookUrl || '').trim();
   if (LEGACY_FACEBOOK_REVIEW_URLS.has(merged.facebookReviewUrl)) merged.facebookReviewUrl = '';
   if (LEGACY_FACEBOOK_REVIEW_URLS.has(merged.facebookUrl)) merged.facebookUrl = '';
 
@@ -119,14 +136,22 @@ export function getTrustpilotReviewUrl(lang = 'es', links = {}) {
 }
 
 /**
- * Where the Facebook reviews badge points.
+ * Where every Facebook badge points.
  *
- * The catalog had this URL hardcoded, so changing it in the CMS updated the
- * landing page and the storefront chrome and left the catalog on the old
- * profile. One helper now, so the three cannot drift apart again.
+ * The old reviews page is still saved on the business-links row. It is ignored
+ * so the badge, the footer, and the schema open the current Facebook page.
+ * A different address typed in the admin still wins.
  */
+function usableFacebookUrl(value) {
+  const url = String(value || '').trim();
+  if (!url || LEGACY_FACEBOOK_REVIEW_URLS.has(url)) return '';
+  return url;
+}
+
 export function getFacebookReviewUrl(links = {}) {
-  return links.facebookReviewUrl || links.facebookUrl || FACEBOOK_REVIEW_URL;
+  return usableFacebookUrl(links.facebookReviewUrl)
+    || usableFacebookUrl(links.facebookUrl)
+    || FACEBOOK_REVIEW_URL;
 }
 
 export function isExternalHttpUrl(href = '') {

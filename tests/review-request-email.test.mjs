@@ -20,10 +20,10 @@ test('both review pages are linked with nothing configured', () => {
 test('the admin CMS drives the links, as it does for the site badges', () => {
   const d = reviewDestinations({
     googleReviewUrl: 'https://maps.app.goo.gl/newlisting',
-    facebookReviewUrl: 'https://www.facebook.com/costaricapeptides/reviews',
+    facebookReviewUrl: 'https://www.facebook.com/custom-page',
   }, {});
   assert.equal(d.google, 'https://maps.app.goo.gl/newlisting');
-  assert.equal(d.facebook, 'https://www.facebook.com/costaricapeptides/reviews');
+  assert.equal(d.facebook, 'https://www.facebook.com/custom-page');
 });
 
 test('a REVIEW_LINK_* already set in Vercel still wins', () => {

@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import {
+  FACEBOOK_PROFILE_URL,
   FACEBOOK_REVIEW_URL,
   getFacebookReviewUrl,
   normalizeBusinessLinks,
 } from '../src/lib/businessLinks.js';
 
 test('the CMS review URL wins', () => {
-  const links = normalizeBusinessLinks({ facebookReviewUrl: 'https://www.facebook.com/costaricapeptides/reviews' });
-  assert.equal(getFacebookReviewUrl(links), 'https://www.facebook.com/costaricapeptides/reviews');
+  const links = normalizeBusinessLinks({ facebookReviewUrl: 'https://www.facebook.com/custom-page' });
+  assert.equal(getFacebookReviewUrl(links), 'https://www.facebook.com/custom-page');
 });
 
 test('setting only the profile field takes effect', () => {
@@ -18,6 +19,17 @@ test('setting only the profile field takes effect', () => {
   // outranked facebookUrl in every `a || b` chain, so this field was dead.
   const links = normalizeBusinessLinks({ facebookUrl: 'https://www.facebook.com/costaricapeptides' });
   assert.equal(getFacebookReviewUrl(links), 'https://www.facebook.com/costaricapeptides');
+});
+
+test('the retired reviews page opens the current Facebook page', () => {
+  const saved = normalizeBusinessLinks({
+    facebookUrl: 'https://www.facebook.com/costaricapeptides/reviews',
+    facebookReviewUrl: 'https://www.facebook.com/costaricapeptides/reviews ',
+  });
+  assert.equal(getFacebookReviewUrl(saved), FACEBOOK_PROFILE_URL);
+  assert.equal(getFacebookReviewUrl({
+    facebookReviewUrl: 'https://www.facebook.com/costaricapeptides/reviews ',
+  }), FACEBOOK_PROFILE_URL);
 });
 
 test('a stored retired profile loses to the current one', () => {
