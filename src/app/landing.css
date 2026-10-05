@@ -6,6 +6,7 @@
     color: #10214a;
     font-family: var(--font-inter), Arial, sans-serif;
     padding-bottom: 70px;
+    overflow-x: clip;
 }
 
 /* Room for the phone action bar only where it exists (it is hidden from 769px). */
