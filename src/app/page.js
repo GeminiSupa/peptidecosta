@@ -88,6 +88,35 @@ function WaIcon() {
   );
 }
 
+function HeroVialTurn({ products, fallbackSrc }) {
+  const vials = products.filter((product) => product.image_url).slice(0, 5);
+  const [index, setIndex] = useState(0);
+  const [spinning, setSpinning] = useState(false);
+
+  useEffect(() => {
+    if (vials.length < 2) return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const timer = setInterval(() => {
+      setSpinning(true);
+      window.setTimeout(() => setIndex((current) => (current + 1) % vials.length), 280);
+      window.setTimeout(() => setSpinning(false), 640);
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [vials.length]);
+
+  const current = vials[index];
+  if (!current) {
+    return <img src={fallbackSrc} alt="Peptides Costa Rica products" />;
+  }
+
+  return (
+    <div className="hero-turn">
+      <img className={spinning ? 'is-spinning' : ''} src={current.image_url} alt={current.product} />
+      <p>{current.product}</p>
+    </div>
+  );
+}
+
 function ProductCard({ product, lang }) {
   const price = lang === 'en'
     ? product.price_usd
@@ -259,7 +288,7 @@ export default function LandingPage() {
             </label>
           </div>
           <div className="clone-hero-media">
-            <img src={settings.heroImageUrl || '/catalog-promo-banner.webp'} alt="Peptides Costa Rica products" />
+            <HeroVialTurn products={products.length ? products : FALLBACK_PRODUCTS} fallbackSrc={settings.heroImageUrl || '/catalog-promo-banner.webp'} />
           </div>
         </section>
 
