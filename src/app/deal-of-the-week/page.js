@@ -9,6 +9,7 @@ import { usePublicPageContent } from '@/hooks/usePublicPageContent';
 import { useDealPageExperiment } from '@/hooks/useDealPageExperiment';
 import { useSharedCart } from '@/hooks/useSharedCart';
 import { PRODUCT_SELECT } from '@/lib/catalogProducts';
+import { sortCatalogPopOrder } from '@/lib/catalogFilters.mjs';
 import { dealMaxUnits, dealMinUnits, dealPricingMode } from '@/lib/dealOfWeek.mjs';
 import { OFFERS_PRICING_MODE, chooseDealOffer, dealOfferCartMessage, dealOfferRuleSummaries, dealOfferSummaries, normalizeDealOffers } from '@/lib/dealOffers.mjs';
 import { isBacWater } from '@/lib/bacWater.mjs';
@@ -35,6 +36,32 @@ const priceNumber = (value) => {
 // Some product names are stored with a non-breaking space ("GLP-1 10mg"),
 // so names are compared with every kind of space collapsed.
 const nameKey = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+const parseDbPrice = (value) => {
+  const number = Number.parseFloat(String(value ?? '').replace(/[^0-9.]/g, ''));
+  return Number.isFinite(number) ? number : 0;
+};
+
+// Same banding the catalog uses for its default "Most Popular" sort.
+const dealProductSortPredicates = {
+  isInStock: (product) => {
+    if (isBacWater(product.product)) return true;
+    if (product.inventory_count === 0) return false;
+    const status = String(product.status || '').toLowerCase().trim();
+    return status === 'in stock' || status === 'disponible';
+  },
+  isOnSale: (product) => {
+    if (isBacWater(product.product)) return false;
+    const now = new Date();
+    const saleActive = product.discount
+      && (!product.sale_start_time || new Date(product.sale_start_time) <= now)
+      && (!product.sale_end_time || new Date(product.sale_end_time) >= now);
+    if (!saleActive) return false;
+    const original = parseDbPrice(product.original_price_usd);
+    const current = parseDbPrice(product.price_usd);
+    return original > 0 && current > 0 && original > current;
+  },
+};
 
 // Time left until the deal ends, ticking every second. Version B only.
 function useTimeLeft(endsAt) {
@@ -115,9 +142,15 @@ export default function DealOfTheWeekPage() {
       .from('products')
       // The full catalog row: "Add to my order" builds the cart item from it.
       .select(PRODUCT_SELECT)
+      .order('priority', { ascending: true })
       .then(({ data }) => {
-        const byName = new Map((data || []).map((row) => [nameKey(row.product), row]));
-        setProducts(names.map((name) => byName.get(nameKey(name)) || { product: name }));
+        const allowed = new Set(names.map(nameKey));
+        const rows = (data || []).filter((row) => allowed.has(nameKey(row.product)));
+        const found = new Set(rows.map((row) => nameKey(row.product)));
+        const missing = names
+          .filter((name) => !found.has(nameKey(name)))
+          .map((name) => ({ product: name }));
+        setProducts(sortCatalogPopOrder([...rows, ...missing], dealProductSortPredicates));
         setProductsReady(true);
       }, () => setProductsReady(true));
   }, [deal]);

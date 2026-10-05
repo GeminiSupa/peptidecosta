@@ -254,3 +254,16 @@ export function catalogLeadRank(product) {
   if (name.startsWith('tirzepatide')) return 1;
   return 2;
 }
+
+/**
+ * Default catalog grid order ("Most Popular"): GLP-1 and Tirzepatide lead,
+ * then in-stock/on-sale banding. Within a band the incoming array order is
+ * kept (stable sort), so pass products already ordered by `priority` ascending.
+ */
+export function sortCatalogPopOrder(products, predicates) {
+  return [...products].sort((a, b) => {
+    const lead = catalogLeadRank(a) - catalogLeadRank(b);
+    if (lead !== 0) return lead;
+    return compareBySaleAndStock(a, b, predicates);
+  });
+}

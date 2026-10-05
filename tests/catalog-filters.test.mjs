@@ -10,6 +10,7 @@ import {
   productSortRank,
   compareBySaleAndStock,
   catalogLeadRank,
+  sortCatalogPopOrder,
 } from '../src/lib/catalogFilters.mjs';
 
 // The real category names on the products table — deliberately not the
@@ -181,6 +182,30 @@ test('sorting a mixed grid gives sale, then in stock, then sold out', () => {
   const grid = [plainSoldOut, plainInStock, onSaleSoldOut, onSaleInStock];
   const sorted = [...grid].sort((a, b) => compareBySaleAndStock(a, b, rank));
   assert.deepEqual(sorted.map((p) => p.product), ['GHK-Cu', 'BPC-157', 'DSIP', 'TB-500']);
+});
+
+test('sortCatalogPopOrder matches the catalog default sort', () => {
+  const grid = [
+    { product: 'GHK-Cu 50mg', inStock: true, onSale: true },
+    { product: 'Tirzepatide 30mg', inStock: false, onSale: false },
+    { product: 'BPC-157 10mg', inStock: true, onSale: false },
+    { product: 'GLP-1 60mg', inStock: false, onSale: false },
+    { product: 'Tirzepatide 10mg', inStock: true, onSale: false },
+    { product: 'GLP-1 5mg', inStock: true, onSale: false },
+  ].map(({ product, inStock, onSale }) => ({ product, inStock, onSale }));
+  const rank = {
+    isInStock: (p) => p.inStock,
+    isOnSale: (p) => p.onSale,
+  };
+  const sorted = sortCatalogPopOrder(grid, rank);
+  assert.deepEqual(sorted.map((p) => p.product), [
+    'GLP-1 5mg',
+    'GLP-1 60mg',
+    'Tirzepatide 10mg',
+    'Tirzepatide 30mg',
+    'GHK-Cu 50mg',
+    'BPC-157 10mg',
+  ]);
 });
 
 test('GLP-1 then Tirzepatide stay ahead of a sale, even when sold out', () => {
