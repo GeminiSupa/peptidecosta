@@ -298,3 +298,73 @@ test('checkout breakdown records the exact percentage and amount when Mix & Matc
   assert.equal(breakdown.weeklyGiftValue, 0);
   assert.equal(breakdown.totalUnits, 4);
 });
+
+const PAIR = {
+  items: [{
+    id: 'pair-1',
+    type: 'pair',
+    enabled: true,
+    product_names: ['Retatrutide 12mg', 'BPC-157 10mg'],
+    discount_pct: 0.5,
+    name_en: '2nd vial half off',
+    name_es: '2.º vial a mitad de precio',
+  }],
+};
+
+test('one vial does not get the 2nd-vial discount', () => {
+  const choice = chooseDealOffer(PAIR, [line('BPC-157 10mg', 1, 100)]);
+  assert.equal(choice.kind, 'none');
+  assert.equal(choice.savings, 0);
+  assert.match(dealOfferNextTierNudge(choice, 'en'), /Add 1 more vial and the lower-priced one is 50% off/);
+});
+
+test('two equal vials take 50% off one of them', () => {
+  const choice = chooseDealOffer(PAIR, [line('BPC-157 10mg', 2, 100)]);
+  assert.equal(choice.kind, 'pair');
+  assert.equal(choice.savings, 50);
+  const breakdown = buildCheckoutBreakdown({
+    lines: [line('BPC-157 10mg', 2, 100)],
+    dealChoice: choice,
+  });
+  assert.equal(breakdown.discountAmount, 50);
+  assert.equal(breakdown.discountPct, 0.5);
+});
+
+test('different prices discount the lower-priced vial, and a third vial stays full price', () => {
+  const two = chooseDealOffer(PAIR, [line('Retatrutide 12mg', 1, 200), line('BPC-157 10mg', 1, 70)]);
+  assert.equal(two.savings, 35);
+  const three = chooseDealOffer(PAIR, [line('Retatrutide 12mg', 2, 200), line('BPC-157 10mg', 1, 70)]);
+  // Sorted expensive-first: 200, 200, 70. The 2nd unit (200) is half off. The leftover 70 is full price.
+  assert.equal(three.savings, 100);
+});
+
+test('four vials discount two of them, and BAC water is left out', () => {
+  const choice = chooseDealOffer(PAIR, [
+    line('BPC-157 10mg', 4, 80),
+    line('Bacteriostatic Water 3ml', 2, 10),
+  ], { bacCharge: 20 });
+  assert.equal(choice.kind, 'pair');
+  assert.equal(choice.savings, 80);
+});
+
+test('2nd-vial copy says what checkout charges, in English and Spanish', () => {
+  assert.match(dealOfferSummaries(PAIR, 'en')[0], /Buy 1, get your 2nd vial 50% off/);
+  assert.match(dealOfferSummaries(PAIR, 'es')[0], /2\.º vial con 50% de descuento/);
+  const rules = dealOfferRuleSummaries(PAIR, 'en');
+  assert.match(rules[0], /lower-priced one is 50% off/);
+  assert.match(rules.join(' '), /BAC Water does not qualify and is not discounted/);
+  assert.match(dealOfferRuleSummaries(PAIR, 'es').join(' '), /no tiene descuento/);
+});
+
+test('checkout charges 50% off the 2nd vial and not the rest of the order', () => {
+  const result = authoritativeCheckout({
+    postedOrder: { currency: 'USD', lang: 'en', items: [{ product: 'BPC-157 10mg', qty: 2 }], total_usd: 0 },
+    products: PRODUCTS,
+    exchangeRate: 500,
+    dealOffers: PAIR,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.dealOffer, 'pair');
+  assert.equal(result.promoDiscount, 50);
+  assert.equal(result.total, 150 + result.shipping);
+});

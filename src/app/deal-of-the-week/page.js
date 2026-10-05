@@ -163,6 +163,13 @@ export default function DealOfTheWeekPage() {
           : `${en ? `On ${names.length} selected products` : `En ${names.length} productos seleccionados`}`,
       };
     }
+    if (offer.type === 'pair') {
+      return {
+        id: offer.id,
+        value: `${Math.round(offer.discount_pct * 100)}% ${en ? 'off' : 'de descuento'}`,
+        condition: en ? 'Your 2nd vial' : 'Tu 2.º vial',
+      };
+    }
     return {
       id: offer.id,
       value: en
@@ -254,7 +261,7 @@ export default function DealOfTheWeekPage() {
       volumePct: getVolumeDiscountPct(cart.reduce((sum, item) => sum + (isBacWater(item.product) ? 0 : Number(item.qty) || 0), 0)),
     })
     : null;
-  const offerEarned = offerChoice && (offerChoice.kind === 'mix' || offerChoice.kind === 'bundle');
+  const offerEarned = offerChoice && (offerChoice.kind === 'mix' || offerChoice.kind === 'bundle' || offerChoice.kind === 'pair');
 
   const progressText = offersDeal
     ? dealOfferCartMessage(offerChoice, pricingDeal || deal, lang)

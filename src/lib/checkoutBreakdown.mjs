@@ -40,7 +40,7 @@ export function buildCheckoutBreakdown({ lines = [], dealChoice = null, bacFreeL
   const weeklyGiftValue = weeklyGiftLines.reduce((sum, line) => sum + line.value, 0);
   // A flash sale's percentage is its own; a Mix & Match takes its rate from
   // the winning offer. Either way the invoice shows what came off.
-  const discountPct = dealChoice?.kind === 'mix' || dealChoice?.kind === 'flat'
+  const discountPct = dealChoice?.kind === 'mix' || dealChoice?.kind === 'flat' || dealChoice?.kind === 'pair'
     ? Number(dealChoice.offer?.discount_pct ?? dealChoice.mix?.discountPct) || 0
     : 0;
 
@@ -56,7 +56,7 @@ export function buildCheckoutBreakdown({ lines = [], dealChoice = null, bacFreeL
     weeklyGiftValue,
     totalProductValue: merchandiseSubtotal + weeklyGiftValue,
     discountPct,
-    discountAmount: dealChoice?.kind === 'mix' || dealChoice?.kind === 'flat' ? Math.max(0, Number(dealChoice.savings) || 0) : 0,
+    discountAmount: dealChoice?.kind === 'mix' || dealChoice?.kind === 'flat' || dealChoice?.kind === 'pair' ? Math.max(0, Number(dealChoice.savings) || 0) : 0,
     comparedMixPct: dealChoice?.kind === 'bundle' && dealChoice.mix?.qualifies
       ? Number(dealChoice.mix.discountPct) || 0
       : 0,

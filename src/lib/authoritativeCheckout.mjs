@@ -226,9 +226,10 @@ export function authoritativeCheckout({
       // "10% off your entire order": totals.subtotal is the merchandise plus
       // the paid BAC water, so the water is discounted too.
       discount = roundCurrency(lineTotals.subtotal * (Number(offer.offer?.discount_pct ?? offer.mix.discountPct) || 0), currency);
-    } else if (offer?.kind === 'flat') {
-      // A flash sale marks down only its own products. chooseDealOffer already
-      // measured that against the same lines, so its figure is the discount.
+    } else if (offer?.kind === 'flat' || offer?.kind === 'pair') {
+      // A flash sale marks down only its own products. A "2nd vial" offer
+      // marks down only the discounted vials in each pair. chooseDealOffer
+      // already measured that against the same lines, so its figure is the discount.
       discount = roundCurrency(offer.savings, currency);
     } else {
       discount = promoDiscountAmount(requested, lineTotals, usePromo ? promo : null, currency);

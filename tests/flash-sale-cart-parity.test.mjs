@@ -18,7 +18,7 @@ const browserVolumePct = (offer, tierPct) => (
 );
 const browserPromoDiscount = (offer, currency, discountableSubtotal, bacCharge = 0) => {
   if (!offer) return 0;
-  if (offer.kind === 'flat') {
+  if (offer.kind === 'flat' || offer.kind === 'pair') {
     const flat = Math.max(0, Number(offer.savings) || 0);
     return currency === 'USD' ? Math.round(flat * 100) / 100 : Math.round(flat);
   }
@@ -103,3 +103,41 @@ test('the order summary numbers add up on their own', () => {
     assert.ok(server.promoDiscount > 0, 'a flash sale cart must show a discount, not a silent gap');
   }
 });
+
+const pairOffers = { items: [
+  { id: 'pair', type: 'pair', enabled: true, product_names: [GHK, TIRZ], discount_pct: 0.50 },
+] };
+const pairCarts = [
+  [{ product: GHK, qty: 1 }],
+  [{ product: GHK, qty: 2 }],
+  [{ product: GHK, qty: 1 }, { product: TIRZ, qty: 1 }],
+  [{ product: GHK, qty: 2 }, { product: TIRZ, qty: 1 }],
+  [{ product: TIRZ, qty: 4 }],
+];
+
+for (const currency of ['USD', 'CRC']) {
+  for (const items of pairCarts) {
+    const label = `${currency}: ${items.map((i) => `${i.qty}x ${i.product}`).join(' + ')}`;
+    test(`browser and server agree on the 2nd-vial discount — ${label}`, () => {
+      const server = authoritativeCheckout({
+        postedOrder: { currency, items, lang: 'en' },
+        products, exchangeRate: 448.67, dealOffers: pairOffers,
+      });
+      assert.equal(server.ok, true);
+
+      const lines = items.map((item) => {
+        const row = products.find((p) => p.product === item.product);
+        const unitPrice = currency === 'USD'
+          ? Number(String(row.price_usd).replace(/[^0-9.]/g, ''))
+          : Number(String(row.price_crc).replace(/[^0-9.]/g, ''));
+        return { product: item.product, qty: item.qty, unitPrice, inventoryCount: row.inventory_count };
+      });
+      const offer = chooseDealOffer(pairOffers, lines, { volumePct: 0, bacCharge: 0 });
+      const discountableSubtotal = lines.reduce((sum, line) => sum + line.unitPrice * line.qty, 0);
+      assert.equal(browserPromoDiscount(offer, currency, discountableSubtotal), server.promoDiscount, 'discount must match');
+      assert.equal(browserVolumePct(offer, 0), server.volumeDiscountPct, 'volume tier must match');
+      const shown = server.subtotal - server.volumeDiscountAmount - server.promoDiscount + server.shipping;
+      assert.equal(Math.round(shown * 100) / 100, server.total);
+    });
+  }
+}

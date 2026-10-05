@@ -16,6 +16,12 @@
  *   products, never the rest of the cart, so it cannot quietly mark down an
  *   order that happens to contain one sale item.
  *
+ *   2nd vial half off — buy one qualifying vial at full price and the next one
+ *   is a percentage off (this week's deal is 50%). It repeats on every pair.
+ *   When the vials cost different amounts, the lower-priced one in each pair
+ *   is the one discounted. A leftover single vial stays full price. The
+ *   discount hits only that vial, never the rest of the cart or BAC water.
+ *
  * The offers never stack with each other, with promo codes, or with the
  * automatic volume tiers: the order gets whichever ONE saves the most, the
  * volume tier included, so a deal week can never leave a customer paying more
@@ -32,6 +38,7 @@ export const OFFERS_PRICING_MODE = 'offers';
 export const MIX_OFFER_TYPE = 'mix';
 export const FLAT_OFFER_TYPE = 'flat';
 export const BUNDLE_OFFER_TYPE = 'bundle';
+export const PAIR_OFFER_TYPE = 'pair';
 
 const nameKey = (value) => String(value ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
@@ -62,6 +69,7 @@ function rawOfferItems(raw) {
 function offerType(raw) {
   if (raw?.type === BUNDLE_OFFER_TYPE) return BUNDLE_OFFER_TYPE;
   if (raw?.type === FLAT_OFFER_TYPE) return FLAT_OFFER_TYPE;
+  if (raw?.type === PAIR_OFFER_TYPE) return PAIR_OFFER_TYPE;
   return MIX_OFFER_TYPE;
 }
 
@@ -82,7 +90,7 @@ function normalizeOffer(raw, index) {
   if (type === BUNDLE_OFFER_TYPE) {
     return { ...base, buy_qty: Math.max(1, toInt(raw?.buy_qty, 4)), free_qty: Math.max(1, toInt(raw?.free_qty, 1)) };
   }
-  if (type === FLAT_OFFER_TYPE) {
+  if (type === FLAT_OFFER_TYPE || type === PAIR_OFFER_TYPE) {
     return { ...base, discount_pct: Number(raw?.discount_pct) || 0 };
   }
   return { ...base, min_units: Math.max(1, toInt(raw?.min_units, 2)), discount_pct: Number(raw?.discount_pct) || 0 };
@@ -117,10 +125,10 @@ export function dealOffersError(offers) {
     const item = items[index] || {};
     if (item.enabled !== true) continue;
     const label = `Offer #${index + 1}`;
-    if (![MIX_OFFER_TYPE, BUNDLE_OFFER_TYPE, FLAT_OFFER_TYPE].includes(item.type)) return `${label}: choose a supported offer type.`;
+    if (![MIX_OFFER_TYPE, BUNDLE_OFFER_TYPE, FLAT_OFFER_TYPE, PAIR_OFFER_TYPE].includes(item.type)) return `${label}: choose a supported offer type.`;
     if (names(item.product_names).length === 0) return `${label}: choose which products qualify.`;
     if (names(item.product_names).some(isBacWater)) return `${label}: BAC Water cannot be an offer product.`;
-    if (item.type === FLAT_OFFER_TYPE) {
+    if (item.type === FLAT_OFFER_TYPE || item.type === PAIR_OFFER_TYPE) {
       if (!(Number(item.discount_pct) > 0 && Number(item.discount_pct) < 1)) return `${label}: the discount must be between 1% and 99%.`;
     } else if (item.type === MIX_OFFER_TYPE) {
       if (!Number.isInteger(Number(item.min_units)) || Number(item.min_units) < 1) return `${label}: the vial minimum must be a whole number of 1 or more.`;
@@ -144,7 +152,7 @@ export function dealOffersError(offers) {
  * @param opts.volumePct  the volume tier this cart would get with no deal
  * @param opts.bacCharge  the paid BAC water total, which Mix & Match discounts
  * @returns {{
- *   kind: 'mix'|'bundle'|'volume'|'none',
+ *   kind: 'mix'|'bundle'|'flat'|'pair'|'volume'|'none',
  *   savings: number,
  *   mix: { enabled: boolean, units: number, minUnits: number, qualifies: boolean, discountPct: number, savings: number },
  *   bundle: { enabled: boolean, qualifies: boolean, freeLines: Array<{product: string, qty: number, unitPrice: number}>, savings: number, shortByStock: string[] },
@@ -183,6 +191,29 @@ export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge =
       const qualifies = units >= item.min_units;
       const savings = qualifies ? item.discount_pct * (merchSubtotal + (Number(bacCharge) || 0)) : 0;
       return { id: item.id, dealId: item.deal_id, type: item.type, config: item, qualifies, savings, units, minUnits: item.min_units };
+    }
+    if (item.type === PAIR_OFFER_TYPE) {
+      // Every pair: the lower-priced vial is the one discounted. Sorting
+      // expensive-first and marking every second unit does that, and a
+      // leftover single vial (the 3rd, 5th, ...) stays full price.
+      const prices = [];
+      for (const line of paidLines) {
+        if (!eligibleKeys.has(line.key)) continue;
+        for (let i = 0; i < line.qty; i += 1) prices.push(line.unitPrice);
+      }
+      prices.sort((a, b) => b - a);
+      let savings = 0;
+      for (let i = 1; i < prices.length; i += 2) savings += prices[i] * item.discount_pct;
+      return {
+        id: item.id,
+        dealId: item.deal_id,
+        type: item.type,
+        config: item,
+        qualifies: savings > 0,
+        savings,
+        units: prices.length,
+        minUnits: 2,
+      };
     }
 
     const quantities = new Map();
@@ -271,17 +302,22 @@ function offerDisplayName(item, lang) {
 function offerSummary(item, lang = 'en') {
   const isEn = String(lang).toLowerCase().startsWith('en');
   const customName = offerDisplayName(item, lang);
+  const pct = Math.round(item.discount_pct * 100);
   const terms = item.type === FLAT_OFFER_TYPE
     ? (isEn
-      ? `${Math.round(item.discount_pct * 100)}% off ${item.product_names.join(', ')}`
-      : `${Math.round(item.discount_pct * 100)}% de descuento en ${item.product_names.join(', ')}`)
+      ? `${pct}% off ${item.product_names.join(', ')}`
+      : `${pct}% de descuento en ${item.product_names.join(', ')}`)
+    : item.type === PAIR_OFFER_TYPE
+    ? (isEn
+      ? `Buy 1, get your 2nd vial ${pct}% off`
+      : `Compra 1 y llévate el 2.º vial con ${pct}% de descuento`)
     : item.type === BUNDLE_OFFER_TYPE
     ? (isEn
       ? `Buy ${item.buy_qty} of the same vial, get ${item.free_qty} free`
       : `Compra ${item.buy_qty} del mismo vial y llévate ${item.free_qty} gratis`)
     : (isEn
-      ? `Buy ${item.min_units}+ vials, get ${Math.round(item.discount_pct * 100)}% off your whole order`
-      : `Compra ${item.min_units}+ viales y obtén ${Math.round(item.discount_pct * 100)}% de descuento en todo tu pedido`);
+      ? `Buy ${item.min_units}+ vials, get ${pct}% off your whole order`
+      : `Compra ${item.min_units}+ viales y obtén ${pct}% de descuento en todo tu pedido`);
   return customName ? `${customName}: ${terms}` : terms;
 }
 
@@ -332,9 +368,24 @@ export function dealOfferNextTierGap(choice) {
 }
 
 export function dealOfferNextTierNudge(choice, lang = 'en') {
-  if (!dealOfferNextTierGap(choice)) return '';
-  const next = nextUnreachedMix(choice);
-  return next ? mixTierNudgeText(next, lang) : '';
+  if (dealOfferNextTierGap(choice)) {
+    const next = nextUnreachedMix(choice);
+    if (next) return mixTierNudgeText(next, lang);
+  }
+  return pairShortNudge(choice, lang);
+}
+
+function pairShortNudge(choice, lang) {
+  const pending = (choice?.offers || []).find((item) => item.type === PAIR_OFFER_TYPE && item.config && !item.qualifies);
+  if (!pending) return '';
+  const have = pending.units || 0;
+  const toGo = 2 - have;
+  const pct = Math.round((Number(pending.config.discount_pct) || 0) * 100);
+  if (toGo <= 0 || pct <= 0) return '';
+  const isEn = String(lang).toLowerCase().startsWith('en');
+  return isEn
+    ? `Add ${toGo} more ${toGo === 1 ? 'vial' : 'vials'} and the lower-priced one is ${pct}% off.`
+    : `Agrega ${toGo} ${toGo === 1 ? 'vial' : 'viales'} más y el de menor precio queda con ${pct}% de descuento.`;
 }
 
 /** One line for the cart: which offer applied, or how to reach one. */
@@ -369,6 +420,12 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       ? `Flash sale — ${pct}% off ${what} is applied. Offers do not stack, so you always get the biggest saving.`
       : `Oferta relámpago — ${pct}% de descuento en ${what} aplicado. Las ofertas no se acumulan; siempre recibes el mayor ahorro.`;
   }
+  if (choice.kind === PAIR_OFFER_TYPE && winning) {
+    const pct = Math.round(winning.discount_pct * 100);
+    return isEn
+      ? `Deal of the Week — ${offerDisplayName(winning, lang) || '2nd vial'}: ${pct}% off your 2nd vial is applied. Offers do not stack.`
+      : `Oferta de la Semana — ${offerDisplayName(winning, lang) || '2.º vial'}: ${pct}% de descuento en tu 2.º vial aplicado. Las ofertas no se acumulan.`;
+  }
   if (choice.kind === 'volume') {
     return isEn
       ? 'Your volume discount saves more than this week\'s offers, so it is applied instead.'
@@ -382,6 +439,12 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
       return isEn
         ? `add ${item.product_names.join(' or ')} for ${pct}% off`
         : `agrega ${item.product_names.join(' o ')} para ${pct}% de descuento`;
+    }
+    if (item.type === PAIR_OFFER_TYPE) {
+      const pct = Math.round(item.discount_pct * 100);
+      return isEn
+        ? `add a 2nd vial and the lower-priced one is ${pct}% off`
+        : `agrega un 2.º vial y el de menor precio queda con ${pct}% de descuento`;
     }
     return isEn
       ? `buy ${item.buy_qty} of the same qualifying vial to get ${item.free_qty} free`
@@ -419,13 +482,20 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
       ? (isEn ? 'Mix & Match' : 'Combina')
       : item.type === FLAT_OFFER_TYPE
         ? (isEn ? 'Flash sale' : 'Oferta relámpago')
-        : (isEn ? 'Buy & Get Free' : 'Compra y recibe gratis'));
+        : item.type === PAIR_OFFER_TYPE
+          ? (isEn ? '2nd vial' : '2.º vial')
+          : (isEn ? 'Buy & Get Free' : 'Compra y recibe gratis'));
     if (item.type === FLAT_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       const names = item.product_names.join(', ');
       rules.push(isEn
         ? `${prefix}: ${pct}% off ${names}, from a single vial, with no minimum and no code. The discount applies to those products only, not to the rest of the order.`
         : `${prefix}: ${pct}% de descuento en ${names}, desde un solo vial, sin mínimo y sin código. El descuento aplica solo a esos productos, no al resto del pedido.`);
+    } else if (item.type === PAIR_OFFER_TYPE) {
+      const pct = Math.round(item.discount_pct * 100);
+      rules.push(isEn
+        ? `${prefix}: buy one qualifying vial and the next one is ${pct}% off. Every two qualifying vials, the lower-priced one is ${pct}% off (2 vials → one discounted, 4 → two). One leftover vial stays full price. Only that vial is discounted, not the rest of the order.`
+        : `${prefix}: compra un vial participante y el siguiente queda con ${pct}% de descuento. Cada dos viales participantes, el de menor precio queda con ${pct}% de descuento (2 viales → uno con descuento, 4 → dos). Un vial suelto se paga completo. El descuento aplica solo a ese vial, no al resto del pedido.`);
     } else if (item.type === MIX_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       rules.push(isEn
@@ -444,6 +514,7 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
     : 'Si califica más de una oferta o el descuento normal por volumen, el pago aplica automáticamente solo la opción que más ahorra al cliente. Los códigos y promociones nunca se acumulan.');
   const hasMix = clean.items.some((item) => item.enabled && item.type === MIX_OFFER_TYPE);
   const hasBundle = clean.items.some((item) => item.enabled && item.type === BUNDLE_OFFER_TYPE);
+  const hasPair = clean.items.some((item) => item.enabled && item.type === PAIR_OFFER_TYPE);
   if (hasMix && hasBundle) {
     rules.push(isEn
       ? 'BAC Water does not count toward the Mix & Match minimum and cannot earn a free vial. Once Mix & Match is unlocked, its whole-order discount still includes BAC Water.'
@@ -452,6 +523,10 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
     rules.push(isEn
       ? 'BAC Water does not count toward the Mix & Match minimum. Once the offer is unlocked, its whole-order discount still includes BAC Water.'
       : 'El agua bacteriostática no cuenta para el mínimo de Combina. Cuando se activa la oferta, su descuento para todo el pedido sí incluye el agua bacteriostática.');
+  } else if (hasPair && !hasBundle) {
+    rules.push(isEn
+      ? 'BAC Water does not qualify and is not discounted.'
+      : 'El agua bacteriostática no califica y no tiene descuento.');
   } else {
     rules.push(isEn
       ? 'BAC Water does not qualify and cannot earn a free vial.'

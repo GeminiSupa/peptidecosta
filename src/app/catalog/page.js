@@ -2591,10 +2591,11 @@ export default function CatalogPage() {
     // before the deal became live; the server enforces the same rule again.
     const offer = getDealWinner();
     if (offer) {
-      if (offer.kind === 'flat') {
-        // A flash sale discounts only its own products. chooseDealOffer has
-        // already measured that against these exact lines, so its figure is
-        // the discount - matching authoritativeCheckout, which the server
+      if (offer.kind === 'flat' || offer.kind === 'pair') {
+        // A flash sale discounts only its own products. A "2nd vial" offer
+        // discounts only the lower-priced vial in each pair. chooseDealOffer
+        // has already measured that against these exact lines, so its figure
+        // is the discount - matching authoritativeCheckout, which the server
         // charges from.
         const flat = Math.max(0, Number(offer.savings) || 0);
         return currency === 'USD' ? Math.round(flat * 100) / 100 : Math.round(flat);
@@ -3672,9 +3673,10 @@ export default function CatalogPage() {
     // plus shipping and then a smaller total, with nothing saying where the
     // missing money went.
     const isFlashSale = dealChoice?.kind === 'flat';
-    const hasWeeklyDealDiscount = Boolean(automaticDeal) || dealChoice?.kind === 'mix' || isFlashSale;
+    const isSecondVial = dealChoice?.kind === 'pair';
+    const hasWeeklyDealDiscount = Boolean(automaticDeal) || dealChoice?.kind === 'mix' || isFlashSale || isSecondVial;
     const hasWeeklyBundle = dealChoice?.kind === 'bundle' && breakdown.weeklyGiftLines.length > 0;
-    const weeklyPct = dealChoice?.kind === 'mix' || isFlashSale
+    const weeklyPct = dealChoice?.kind === 'mix' || isFlashSale || isSecondVial
       ? breakdown.discountPct
       : Number(automaticDeal?.discount_pct) || 0;
     const hasAmountDiscount = hasVolumeDiscount || hasPromoDiscount || hasWeeklyDealDiscount;
@@ -3796,6 +3798,10 @@ export default function CatalogPage() {
                 ? (lang === 'en'
                   ? `FLASH SALE (${percentLabel(weeklyPct)}% OFF)`
                   : `OFERTA RELÁMPAGO (${percentLabel(weeklyPct)}% DESC.)`)
+                : isSecondVial
+                ? (lang === 'en'
+                  ? `WEEKLY DEAL (2ND VIAL ${percentLabel(weeklyPct)}% OFF)`
+                  : `OFERTA SEMANAL (2.º VIAL ${percentLabel(weeklyPct)}% DESC.)`)
                 : (lang === 'en'
                   ? `WEEKLY DEAL (${percentLabel(weeklyPct)}% OFF)`
                   : `OFERTA SEMANAL (${percentLabel(weeklyPct)}% DESC.)`)}
