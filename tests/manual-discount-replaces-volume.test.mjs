@@ -233,6 +233,9 @@ test('manual order negotiated discounts are superadmin-only', () => {
   );
 
   assert.match(manualOrderModal, /const manualDiscountType = isSuperadmin && form\.manual_discount_type !== 'none'/);
-  assert.match(manualOrderModal, /apply_volume_discount: isSuperadmin \? form\.apply_volume_discount : true/);
+  // Every agent can turn the automatic volume discount off. The extra
+  // hand-typed discount stays in the superadmin-only payload above.
+  assert.match(manualOrderModal, /apply_volume_discount: form\.apply_volume_discount/);
+  assert.doesNotMatch(manualOrderModal, /apply_volume_discount: isSuperadmin \? form\.apply_volume_discount : true/);
   assert.match(manualOrderModal, /\.\.\.\(isSuperadmin \? \{\s*manual_discount_type: manualDiscountType,/s);
 });

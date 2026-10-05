@@ -252,7 +252,7 @@ export default function ManualOrderModal({
             shipping_cost_crc: shippingCosts.crc,
             internal_notes: form.internal_notes.trim() || null,
             notify_customer: form.notify_customer,
-            apply_volume_discount: isSuperadmin ? form.apply_volume_discount : true,
+            apply_volume_discount: form.apply_volume_discount,
             ...(isSuperadmin ? {
               manual_discount_type: manualDiscountType,
               manual_discount_value: manualDiscountType ? discountValue : 0,
@@ -485,42 +485,32 @@ export default function ManualOrderModal({
                   placeholder="Reason shown on receipt (optional)"
                 />
               </div>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '10px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={form.apply_volume_discount}
-                  onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
-                  style={{ marginTop: '2px' }}
-                />
-                <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
-                  Also apply the automatic volume discount ({volumeTierLabel})
-                  <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
-                    {form.apply_volume_discount
-                      ? (manualDiscountType
-                        ? 'Both discounts come off — the customer pays less than the figure you typed above.'
-                        : 'The usual bulk pricing applies.')
-                      : 'Off, so the discount you typed above is the whole discount.'}
-                  </span>
-                </span>
-              </label>
               <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
                 The order discount is applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
               </p>
             </div>
-          ) : (
-            <div style={{
-              marginTop: '12px',
-              padding: '11px 12px',
-              borderRadius: '10px',
-              border: '1px solid rgba(34, 197, 94, 0.22)',
-              background: 'rgba(34, 197, 94, 0.06)',
-              color: '#bbf7d0',
-              fontSize: '0.76rem',
-              lineHeight: 1.45,
-            }}>
-              Automatic discounts are applied for this manual order. Volume discounts and valid promo codes are priced by the server from the live catalog.
-            </div>
-          )}
+          ) : null}
+
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '12px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.apply_volume_discount}
+              onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
+              style={{ marginTop: '2px' }}
+            />
+            <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+              Also apply the automatic volume discount ({volumeTierLabel})
+              <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
+                {form.apply_volume_discount
+                  ? (manualDiscountType
+                    ? 'Both discounts come off — the customer pays less than the figure you typed above.'
+                    : 'The usual bulk pricing applies.')
+                  : (manualDiscountType
+                    ? 'Off, so the discount you typed above is the whole discount.'
+                    : 'Off. This order is charged the list price, with no automatic volume discount.')}
+              </span>
+            </span>
+          </label>
 
           <div className="order-detail-totals" style={{ marginTop: '12px' }}>
             <div><span>Items subtotal</span><span>{money(itemsSubtotal)}</span></div>
