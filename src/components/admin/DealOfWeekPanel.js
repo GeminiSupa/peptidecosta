@@ -1217,9 +1217,8 @@ It ends automatically at ${formatCrInstant(flashEndsIso)}.`)) return;
                             </div>
                           </div>
                           <p className="weekly-deal-offer-explanation">
-                            Buy one qualifying vial and the next one is {offer.discount_pct || '?'}% off. It repeats on every pair.
-                            If the vials cost different amounts, the lower-priced one is the one discounted. A leftover single vial stays full price.
-                            BAC Water does not qualify.
+                            Once the order has 2 or more qualifying vials, the single cheapest one is {offer.discount_pct || '?'}% off.
+                            Buying 3 or 4 still discounts only that one vial. BAC Water does not qualify.
                           </p>
                         </>
                       ) : (

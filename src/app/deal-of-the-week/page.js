@@ -167,7 +167,7 @@ export default function DealOfTheWeekPage() {
       return {
         id: offer.id,
         value: `${Math.round(offer.discount_pct * 100)}% ${en ? 'off' : 'de descuento'}`,
-        condition: en ? 'Your 2nd vial' : 'Tu 2.º vial',
+        condition: en ? 'The cheaper vial, once per order' : 'El más barato, una vez por pedido',
       };
     }
     return {

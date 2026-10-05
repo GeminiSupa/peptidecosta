@@ -330,28 +330,28 @@ test('two equal vials take 50% off one of them', () => {
   assert.equal(breakdown.discountPct, 0.5);
 });
 
-test('different prices discount the lower-priced vial, and a third vial stays full price', () => {
+test('different prices discount only the cheaper vial, even with a third', () => {
   const two = chooseDealOffer(PAIR, [line('Retatrutide 12mg', 1, 200), line('BPC-157 10mg', 1, 70)]);
   assert.equal(two.savings, 35);
   const three = chooseDealOffer(PAIR, [line('Retatrutide 12mg', 2, 200), line('BPC-157 10mg', 1, 70)]);
-  // Sorted expensive-first: 200, 200, 70. The 2nd unit (200) is half off. The leftover 70 is full price.
-  assert.equal(three.savings, 100);
+  assert.equal(three.savings, 35);
 });
 
-test('four vials discount two of them, and BAC water is left out', () => {
+test('four vials still discount only the cheapest one, and BAC water is left out', () => {
   const choice = chooseDealOffer(PAIR, [
     line('BPC-157 10mg', 4, 80),
     line('Bacteriostatic Water 3ml', 2, 10),
   ], { bacCharge: 20 });
   assert.equal(choice.kind, 'pair');
-  assert.equal(choice.savings, 80);
+  assert.equal(choice.savings, 40);
 });
 
 test('2nd-vial copy says what checkout charges, in English and Spanish', () => {
-  assert.match(dealOfferSummaries(PAIR, 'en')[0], /Buy 1, get your 2nd vial 50% off/);
-  assert.match(dealOfferSummaries(PAIR, 'es')[0], /2\.º vial con 50% de descuento/);
+  assert.match(dealOfferSummaries(PAIR, 'en')[0], /Buy 1, get your 2nd vial 50% off — the cheaper one, once per order/);
+  assert.match(dealOfferSummaries(PAIR, 'es')[0], /más barato, una sola vez por pedido/);
   const rules = dealOfferRuleSummaries(PAIR, 'en');
-  assert.match(rules[0], /lower-priced one is 50% off/);
+  assert.match(rules[0], /single cheapest one is 50% off/);
+  assert.match(rules[0], /Buying 3 or 4 still discounts only that one vial/);
   assert.match(rules.join(' '), /BAC Water does not qualify and is not discounted/);
   assert.match(dealOfferRuleSummaries(PAIR, 'es').join(' '), /no tiene descuento/);
 });

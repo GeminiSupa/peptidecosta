@@ -16,11 +16,10 @@
  *   products, never the rest of the cart, so it cannot quietly mark down an
  *   order that happens to contain one sale item.
  *
- *   2nd vial half off — buy one qualifying vial at full price and the next one
- *   is a percentage off (this week's deal is 50%). It repeats on every pair.
- *   When the vials cost different amounts, the lower-priced one in each pair
- *   is the one discounted. A leftover single vial stays full price. The
- *   discount hits only that vial, never the rest of the cart or BAC water.
+ *   2nd vial half off — once the cart has two or more qualifying vials, the
+ *   single cheapest one is a percentage off (this week's deal is 50%). Buying
+ *   three or four still discounts only that one vial. The rest of the cart,
+ *   and BAC water, stay full price.
  *
  * The offers never stack with each other, with promo codes, or with the
  * automatic volume tiers: the order gets whichever ONE saves the most, the
@@ -193,17 +192,16 @@ export function chooseDealOffer(offers, lines = [], { volumePct = 0, bacCharge =
       return { id: item.id, dealId: item.deal_id, type: item.type, config: item, qualifies, savings, units, minUnits: item.min_units };
     }
     if (item.type === PAIR_OFFER_TYPE) {
-      // Every pair: the lower-priced vial is the one discounted. Sorting
-      // expensive-first and marking every second unit does that, and a
-      // leftover single vial (the 3rd, 5th, ...) stays full price.
+      // One discount per order: the single cheapest qualifying vial, and only
+      // after a second vial is in the cart. A third or a fourth does not earn
+      // another half-price vial.
       const prices = [];
       for (const line of paidLines) {
         if (!eligibleKeys.has(line.key)) continue;
         for (let i = 0; i < line.qty; i += 1) prices.push(line.unitPrice);
       }
-      prices.sort((a, b) => b - a);
-      let savings = 0;
-      for (let i = 1; i < prices.length; i += 2) savings += prices[i] * item.discount_pct;
+      const cheapest = prices.length >= 2 ? Math.min(...prices) : 0;
+      const savings = cheapest * item.discount_pct;
       return {
         id: item.id,
         dealId: item.deal_id,
@@ -309,8 +307,8 @@ function offerSummary(item, lang = 'en') {
       : `${pct}% de descuento en ${item.product_names.join(', ')}`)
     : item.type === PAIR_OFFER_TYPE
     ? (isEn
-      ? `Buy 1, get your 2nd vial ${pct}% off`
-      : `Compra 1 y llévate el 2.º vial con ${pct}% de descuento`)
+      ? `Buy 1, get your 2nd vial ${pct}% off — the cheaper one, once per order`
+      : `Compra 1 y el 2.º vial queda con ${pct}% de descuento — el más barato, una sola vez por pedido`)
     : item.type === BUNDLE_OFFER_TYPE
     ? (isEn
       ? `Buy ${item.buy_qty} of the same vial, get ${item.free_qty} free`
@@ -423,8 +421,8 @@ export function dealOfferCartMessage(choice, deal, lang = 'en') {
   if (choice.kind === PAIR_OFFER_TYPE && winning) {
     const pct = Math.round(winning.discount_pct * 100);
     return isEn
-      ? `Deal of the Week — ${offerDisplayName(winning, lang) || '2nd vial'}: ${pct}% off your 2nd vial is applied. Offers do not stack.`
-      : `Oferta de la Semana — ${offerDisplayName(winning, lang) || '2.º vial'}: ${pct}% de descuento en tu 2.º vial aplicado. Las ofertas no se acumulan.`;
+      ? `Deal of the Week — ${offerDisplayName(winning, lang) || '2nd vial'}: ${pct}% off the cheaper vial, once per order. Offers do not stack.`
+      : `Oferta de la Semana — ${offerDisplayName(winning, lang) || '2.º vial'}: ${pct}% de descuento en el vial más barato, una sola vez por pedido. Las ofertas no se acumulan.`;
   }
   if (choice.kind === 'volume') {
     return isEn
@@ -494,8 +492,8 @@ export function dealOfferRuleSummaries(offers, lang = 'en') {
     } else if (item.type === PAIR_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       rules.push(isEn
-        ? `${prefix}: buy one qualifying vial and the next one is ${pct}% off. Every two qualifying vials, the lower-priced one is ${pct}% off (2 vials → one discounted, 4 → two). One leftover vial stays full price. Only that vial is discounted, not the rest of the order.`
-        : `${prefix}: compra un vial participante y el siguiente queda con ${pct}% de descuento. Cada dos viales participantes, el de menor precio queda con ${pct}% de descuento (2 viales → uno con descuento, 4 → dos). Un vial suelto se paga completo. El descuento aplica solo a ese vial, no al resto del pedido.`);
+        ? `${prefix}: once the order has 2 or more qualifying vials, the single cheapest one is ${pct}% off. Buying 3 or 4 still discounts only that one vial. The rest of the order stays full price.`
+        : `${prefix}: con 2 o más viales participantes, solo el más barato queda con ${pct}% de descuento. Si compras 3 o 4, el descuento sigue siendo un solo vial. El resto del pedido se paga completo.`);
     } else if (item.type === MIX_OFFER_TYPE) {
       const pct = Math.round(item.discount_pct * 100);
       rules.push(isEn
