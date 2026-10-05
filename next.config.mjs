@@ -136,6 +136,21 @@ const nextConfig = {
           { key: 'Cache-Control', value: 'no-store' },
         ],
       },
+      // The admin login is linked from the footer, so Google can find the URL.
+      // noindex tells it not to list the page. Both paths: the login itself and
+      // anything under it, such as the automations screen.
+      {
+        source: '/admin',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      },
+      {
+        source: '/admin/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      },
       // Same reasoning for the GLP-1 variant's confirmation page.
       {
         source: '/glp-1/thank-you',
