@@ -170,60 +170,106 @@ function NotificationSettings({
         />
       </div>
 
-      {leadRotation && (
-        <div style={panel}>
-          <NotificationToggle
-            icon={<Users size={15} />}
-            title="Share Google Ads leads between agents"
-            hint="/lp and /glp-1 form leads. On: each new lead goes to the next ticked agent, in turn, even if they are offline. Off: the lead arrives unassigned and the Chatwoot team picks it up."
-            checked={leadRotation.googleAds ?? leadRotation.enabled}
-            disabled={!canEdit || leadRotationSaving}
-            onChange={(googleAds) => onLeadRotationChange({ googleAds })}
-            activeColor="#22c55e"
-          />
-          <NotificationToggle
-            icon={<Users size={15} />}
-            title="Share TikTok leads between agents"
-            hint="TikTok form leads, controlled separately from Google Ads. On: they go to the next ticked agent below. Off: they use TikTok's own agent rotation instead — a TikTok lead is always given an owner either way."
-            checked={leadRotation.tiktok ?? leadRotation.enabled}
-            disabled={!canEdit || leadRotationSaving}
-            onChange={(tiktok) => onLeadRotationChange({ tiktok })}
-            activeColor="#22c55e"
-          />
-          {((leadRotation.googleAds ?? leadRotation.enabled) || (leadRotation.tiktok ?? leadRotation.enabled)) && (
-            <>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
-                {leadRotation.agents.map((agent) => {
-                  const ticked = leadRotation.agentEmails.includes(agent.email);
-                  return (
-                    <label key={agent.email} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 10px', borderRadius: '8px', color: ticked ? '#e2e8f0' : '#94a3b8', background: ticked ? 'rgba(34, 197, 94, 0.12)' : 'rgba(0,0,0,0.25)', border: `1px solid ${ticked ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255,255,255,0.06)'}`, cursor: canEdit ? 'pointer' : 'not-allowed' }}>
-                      <input
-                        type="checkbox"
-                        checked={ticked}
-                        disabled={!canEdit || leadRotationSaving}
-                        onChange={(e) => onLeadRotationChange({
-                          agentEmails: e.target.checked
-                            ? [...leadRotation.agentEmails, agent.email]
-                            : leadRotation.agentEmails.filter((email) => email !== agent.email),
-                        })}
-                      />
-                      {agent.name}
-                    </label>
-                  );
-                })}
-              </div>
-              {leadRotation.agentEmails.length === 0 && (
-                <p style={{ fontSize: '0.74rem', color: '#fbbf24', margin: '10px 0 0 0' }}>
-                  No agents ticked — new leads arrive unassigned until you tick at least one.
-                </p>
-              )}
-              <p style={{ fontSize: '0.72rem', color: '#64748b', margin: '10px 0 0 0' }}>
-                Only agents with the Leads permission are listed. A returning customer still goes to the agent who already has them.
+      {leadRotation && (() => {
+        // Google Ads and TikTok are two self-contained boxes: each has its own
+        // switch and its own ticked agents. They shared one agent list at
+        // first, which read as if it belonged to whichever switch it sat under
+        // and meant unticking someone for one source silently dropped them
+        // from the other.
+        const googleAdsOn = leadRotation.googleAds ?? leadRotation.enabled;
+        const tiktokOn = leadRotation.tiktok ?? leadRotation.enabled;
+        const googleAdsAgents = leadRotation.googleAdsAgentEmails ?? leadRotation.agentEmails ?? [];
+        const tiktokAgents = leadRotation.tiktokAgentEmails ?? leadRotation.agentEmails ?? [];
+        const box = {
+          background: 'rgba(0,0,0,0.22)',
+          border: '1px solid rgba(255,255,255,0.07)',
+          borderRadius: '12px',
+          padding: '4px 14px 14px',
+          marginBottom: '12px',
+        };
+        const heading = {
+          fontSize: '0.7rem',
+          fontWeight: 800,
+          color: '#94a3b8',
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          margin: '0 0 10px 0',
+        };
+
+        const agentPicker = (ticked, field) => (
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '12px' }}>
+            <p style={{ fontSize: '0.72rem', color: '#94a3b8', margin: '0 0 8px 0', fontWeight: 700 }}>
+              Agents who take turns on these leads
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {leadRotation.agents.map((agent) => {
+                const on = ticked.includes(agent.email);
+                return (
+                  <label key={agent.email} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', padding: '6px 10px', borderRadius: '8px', color: on ? '#e2e8f0' : '#94a3b8', background: on ? 'rgba(34, 197, 94, 0.12)' : 'rgba(0,0,0,0.25)', border: `1px solid ${on ? 'rgba(34, 197, 94, 0.35)' : 'rgba(255,255,255,0.06)'}`, cursor: canEdit ? 'pointer' : 'not-allowed' }}>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={!canEdit || leadRotationSaving}
+                      onChange={(e) => onLeadRotationChange({
+                        [field]: e.target.checked
+                          ? [...ticked, agent.email]
+                          : ticked.filter((email) => email !== agent.email),
+                      })}
+                    />
+                    {agent.name}
+                  </label>
+                );
+              })}
+            </div>
+            {ticked.length === 0 && (
+              <p style={{ fontSize: '0.74rem', color: '#fbbf24', margin: '10px 0 0 0' }}>
+                Nobody ticked — these leads arrive unassigned until you tick at least one.
               </p>
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+
+        return (
+          <div style={panel}>
+            <p style={heading}>Who gets a new ad lead</p>
+
+            <div style={box}>
+              <NotificationToggle
+                icon={<Users size={15} />}
+                title="Google Ads leads  ( /lp and /glp-1 )"
+                hint={googleAdsOn
+                  ? 'ON — each new lead is given to the next agent ticked below, in turn, even if that agent is offline.'
+                  : 'OFF — each new lead arrives with no agent on it, and the Chatwoot team picks it up.'}
+                checked={googleAdsOn}
+                disabled={!canEdit || leadRotationSaving}
+                onChange={(googleAds) => onLeadRotationChange({ googleAds })}
+                activeColor="#22c55e"
+              />
+              {googleAdsOn && agentPicker(googleAdsAgents, 'googleAdsAgentEmails')}
+            </div>
+
+            <div style={box}>
+              <NotificationToggle
+                icon={<Users size={15} />}
+                title="TikTok leads  ( TikTok forms )"
+                hint={tiktokOn
+                  ? 'ON — each new lead is given to the next agent ticked below, in turn.'
+                  : "OFF — each new lead goes to TikTok's own agent list instead. A TikTok lead is always given an owner."}
+                checked={tiktokOn}
+                disabled={!canEdit || leadRotationSaving}
+                onChange={(tiktok) => onLeadRotationChange({ tiktok })}
+                activeColor="#22c55e"
+              />
+              {tiktokOn && agentPicker(tiktokAgents, 'tiktokAgentEmails')}
+            </div>
+
+            <p style={{ fontSize: '0.72rem', color: '#64748b', margin: 0 }}>
+              The two boxes are separate — changing one never changes the other. Only agents with the Leads
+              permission are listed, and a returning customer still goes to the agent who already has them.
+            </p>
+          </div>
+        );
+      })()}
 
       {!tableReady && (
         <div style={{ background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px', fontSize: '0.85rem', color: '#fde68a' }}>
@@ -429,6 +475,8 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
       enabled: leadRotation.enabled,
       googleAds: leadRotation.googleAds ?? leadRotation.enabled,
       tiktok: leadRotation.tiktok ?? leadRotation.enabled,
+      googleAdsAgentEmails: leadRotation.googleAdsAgentEmails ?? leadRotation.agentEmails,
+      tiktokAgentEmails: leadRotation.tiktokAgentEmails ?? leadRotation.agentEmails,
       agentEmails: leadRotation.agentEmails,
       ...change,
     };

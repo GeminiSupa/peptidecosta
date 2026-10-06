@@ -258,7 +258,7 @@ export async function POST(request) {
           ? await resolveCampaignAgent(supabase, landingSettings)
           : null;
         const picked = campaignAgent || (landingSettings.rotationAppliesToTikTok
-          ? await resolveRotationAgent(supabase, landingSettings)
+          ? await resolveRotationAgent(supabase, landingSettings, 'tiktok')
           : null);
         if (picked?.name) {
           rotatedAgent = picked;

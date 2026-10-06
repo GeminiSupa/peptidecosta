@@ -4,6 +4,7 @@ import {
   DEFAULT_LANDING_LEAD_SETTINGS,
   normalizeLandingLeadSettings,
 } from '../src/lib/landingLeadSettings.mjs';
+import { pickNextRotationAgent, rotationAgentEmailsFor } from '../src/lib/leadRotation.mjs';
 
 /**
  * Google Ads (/lp, /glp-1) and TikTok used to share one "Share ad leads
@@ -61,6 +62,12 @@ test('the rotation agent list survives switching a source off', () => {
  * so a save that names one switch can never move the other.
  */
 function applySave(settings, body) {
+  const googleAdsAgentEmails = Array.isArray(body.googleAdsAgentEmails)
+    ? body.googleAdsAgentEmails
+    : settings.googleAdsAgentEmails;
+  const tiktokAgentEmails = Array.isArray(body.tiktokAgentEmails)
+    ? body.tiktokAgentEmails
+    : settings.tiktokAgentEmails;
   const googleAds = typeof body.googleAds === 'boolean' ? body.googleAds : settings.rotationAppliesToGoogleAds;
   const tiktok = typeof body.tiktok === 'boolean' ? body.tiktok : settings.rotationAppliesToTikTok;
   const legacyEnabled = typeof body.enabled === 'boolean'
@@ -76,6 +83,8 @@ function applySave(settings, body) {
     assignmentMode: enabled ? 'rotation' : (settings.assignmentMode === 'rotation' ? 'unassigned' : settings.assignmentMode),
     rotationAppliesToGoogleAds: appliesToGoogleAds,
     rotationAppliesToTikTok: appliesToTikTok,
+    googleAdsAgentEmails,
+    tiktokAgentEmails,
   });
 }
 
@@ -116,4 +125,75 @@ test('saving only the agent list moves neither switch', () => {
   const next = applySave(start, { agentEmails: ['c@example.com'] });
   assert.equal(next.rotationAppliesToGoogleAds, false, 'Google Ads must stay off');
   assert.equal(next.rotationAppliesToTikTok, true, 'TikTok must stay on');
+});
+
+
+/* Each source keeps its own agent list, which is the half that is easy to
+   regress back into one shared list. */
+
+test('a row saved before the split seeds both lists with the shared agents', () => {
+  const settings = normalizeLandingLeadSettings({
+    assignmentMode: 'rotation',
+    rotationAgentEmails: ['a@example.com', 'b@example.com'],
+  });
+  assert.deepEqual(settings.googleAdsAgentEmails, ['a@example.com', 'b@example.com']);
+  assert.deepEqual(settings.tiktokAgentEmails, ['a@example.com', 'b@example.com']);
+});
+
+test('unticking everyone for one source is kept, not re-seeded', () => {
+  // An empty list that was actually saved means "nobody". Re-seeding it from
+  // the old shared list would silently put the agents back.
+  const settings = normalizeLandingLeadSettings({
+    assignmentMode: 'rotation',
+    rotationAgentEmails: ['a@example.com'],
+    googleAdsAgentEmails: [],
+  });
+  assert.deepEqual(settings.googleAdsAgentEmails, []);
+  assert.deepEqual(settings.tiktokAgentEmails, ['a@example.com']);
+});
+
+test('ticking an agent for Google Ads does not change the TikTok list', () => {
+  const start = normalizeLandingLeadSettings({
+    assignmentMode: 'rotation',
+    googleAdsAgentEmails: ['a@example.com'],
+    tiktokAgentEmails: ['b@example.com'],
+  });
+  const next = applySave(start, { googleAdsAgentEmails: ['a@example.com', 'c@example.com'] });
+  assert.deepEqual(next.googleAdsAgentEmails, ['a@example.com', 'c@example.com']);
+  assert.deepEqual(next.tiktokAgentEmails, ['b@example.com'], 'TikTok list must not move');
+});
+
+test('ticking an agent for TikTok does not change the Google Ads list', () => {
+  const start = normalizeLandingLeadSettings({
+    assignmentMode: 'rotation',
+    googleAdsAgentEmails: ['a@example.com'],
+    tiktokAgentEmails: ['b@example.com'],
+  });
+  const next = applySave(start, { tiktokAgentEmails: [] });
+  assert.deepEqual(next.googleAdsAgentEmails, ['a@example.com'], 'Google Ads list must not move');
+  assert.deepEqual(next.tiktokAgentEmails, []);
+});
+
+test('each source reads its own list', () => {
+  const settings = normalizeLandingLeadSettings({
+    assignmentMode: 'rotation',
+    googleAdsAgentEmails: ['a@example.com'],
+    tiktokAgentEmails: ['b@example.com'],
+  });
+  assert.deepEqual(rotationAgentEmailsFor(settings, 'googleAds'), ['a@example.com']);
+  assert.deepEqual(rotationAgentEmailsFor(settings, 'tiktok'), ['b@example.com']);
+  assert.deepEqual(rotationAgentEmailsFor(settings), ['a@example.com'], 'Google Ads is the default');
+});
+
+test('the two rotations keep separate places in their lists', () => {
+  // One shared pointer meant a TikTok lead pushed the Google Ads rotation on a
+  // step, so an agent could be skipped without a lead ever reaching them.
+  const agents = [
+    { name: 'A', email: 'a@example.com' },
+    { name: 'B', email: 'b@example.com' },
+    { name: 'C', email: 'c@example.com' },
+  ];
+  const cursor = { lastAgentEmail: 'a@example.com', lastAgentEmailTiktok: 'c@example.com' };
+  assert.equal(pickNextRotationAgent(agents, cursor.lastAgentEmail).email, 'b@example.com');
+  assert.equal(pickNextRotationAgent(agents, cursor.lastAgentEmailTiktok).email, 'a@example.com');
 });

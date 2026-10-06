@@ -200,7 +200,8 @@ test('CRM route stores qualification notes and sends the alert only after save',
   // A new lead goes to the campaign agent, the next rotation agent, or nobody.
   assert.doesNotMatch(route, /assign_next_landing_lead_agent/);
   assert.match(route, /resolveCampaignAgent\(supabase, landingSettings\)/);
-  assert.match(route, /resolveRotationAgent\(supabase, landingSettings\)/);
+  // Each source draws from its own agent list, so the call has to name one.
+  assert.match(route, /resolveRotationAgent\(supabase, landingSettings, 'googleAds'\)/);
   assert.match(route, /qualification_data/);
   assert.match(route, /response_due_at/);
   assert.match(route, /isDuplicateLandingLeadSubmission/);

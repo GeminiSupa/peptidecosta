@@ -96,8 +96,12 @@ test('only a superadmin changes the rotation, from Team > Notification Settings'
   assert.match(api, /leadRotation/);
   // Google Ads and TikTok are two switches, not one. If these ever collapse
   // back into a single control, turning one off silently stops the other.
-  assert.match(team, /Share Google Ads leads between agents/);
-  assert.match(team, /Share TikTok leads between agents/);
+  assert.match(team, /title="Google Ads leads/);
+  assert.match(team, /title="TikTok leads/);
+  // Each switch owns its agent list. Collapsing these back into one field is
+  // what made unticking an agent for one source drop them from the other.
+  assert.match(team, /googleAdsAgentEmails/);
+  assert.match(team, /tiktokAgentEmails/);
   assert.match(team, /body: JSON\.stringify\(\{ leadRotation: next \}\)/);
 });
 

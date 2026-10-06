@@ -74,7 +74,9 @@ test('TikTok form leads use the same Chatwoot switch, owner lookup and rotation 
   assert.match(tiktok, /resolveLeadOwnerDetailed\(/);
   assert.match(tiktok, /HISTORY_RETRY_WINDOW_MS = 30_000/);
   assert.match(tiktok, /resolveCampaignAgent\(supabase, landingSettings\)/);
-  assert.match(tiktok, /resolveRotationAgent\(supabase, landingSettings\)/);
+  // TikTok draws from its own ticked agents, and only while its own switch is on.
+  assert.match(tiktok, /resolveRotationAgent\(supabase, landingSettings, 'tiktok'\)/);
+  assert.match(tiktok, /rotationAppliesToTikTok/);
   // The old TikTok-only rotation is kept only as the fallback.
   assert.ok(tiktok.indexOf('resolveRotationAgent(supabase') < tiktok.indexOf('resolveNextTikTokAgent(supabase)'));
 });

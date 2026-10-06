@@ -342,7 +342,7 @@ export async function POST(request) {
     if (!owner && hasLandingQualification(qualification) && landingSettings.rotationAppliesToGoogleAds) {
       try {
         const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
-        const rotationAgent = campaignAgent ? null : await resolveRotationAgent(supabase, landingSettings);
+        const rotationAgent = campaignAgent ? null : await resolveRotationAgent(supabase, landingSettings, 'googleAds');
         const picked = campaignAgent || rotationAgent;
         if (picked?.name) {
           owner = picked.name;

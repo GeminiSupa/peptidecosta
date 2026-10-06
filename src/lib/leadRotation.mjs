@@ -52,7 +52,28 @@ export function pickNextRotationAgent(agents, lastEmail) {
  * Advances the rotation and returns { name, email }, or null when rotation is
  * off or none of the chosen agents can take leads.
  */
-export async function resolveRotationAgent(supabase, settings) {
+/** The ticked agents for one source. */
+export function rotationAgentEmailsFor(settings, source = 'googleAds') {
+  if (source === 'tiktok') return settings?.tiktokAgentEmails || [];
+  return settings?.googleAdsAgentEmails || [];
+}
+
+/**
+ * Where each source keeps its place in its own list. Google Ads keeps the
+ * original key so its rotation carries on from whoever was last, rather than
+ * restarting at the top of the list the day this ships.
+ */
+const CURSOR_KEY = { googleAds: 'lastAgentEmail', tiktok: 'lastAgentEmailTiktok' };
+
+/**
+ * Advances one source's rotation and returns { name, email }, or null when
+ * rotation is off for it or none of its chosen agents can take leads.
+ *
+ * The two sources hold separate places in separate lists: a TikTok lead must
+ * not push the Google Ads rotation on a step, which is what a single shared
+ * pointer did.
+ */
+export async function resolveRotationAgent(supabase, settings, source = 'googleAds') {
   if (settings?.assignmentMode !== 'rotation') return null;
 
   const { data: profiles, error } = await supabase
@@ -60,22 +81,28 @@ export async function resolveRotationAgent(supabase, settings) {
     .select('name, email, status, permissions');
   if (error) throw error;
 
-  const agents = eligibleRotationAgents(profiles, settings.rotationAgentEmails);
+  const agents = eligibleRotationAgents(profiles, rotationAgentEmailsFor(settings, source));
   if (!agents.length) {
-    console.warn('[lead-rotation] No chosen agent is active with the leads permission; lead left unassigned.');
+    console.warn(`[lead-rotation] No ${source} agent is active with the leads permission; lead left unassigned.`);
     return null;
   }
 
+  const cursorKey = CURSOR_KEY[source] || CURSOR_KEY.googleAds;
   const { data: cursorRow } = await supabase
     .from('site_settings')
     .select('value')
     .eq('id', LANDING_ROTATION_SETTING_ID)
     .maybeSingle();
-  const next = pickNextRotationAgent(agents, cursorRow?.value?.lastAgentEmail);
+  const next = pickNextRotationAgent(agents, cursorRow?.value?.[cursorKey]);
 
+  // The other source's place is read back and written again untouched, since
+  // both live in this one row.
   const { error: writeError } = await supabase
     .from('site_settings')
-    .upsert({ id: LANDING_ROTATION_SETTING_ID, value: { lastAgentEmail: next.email } });
+    .upsert({
+      id: LANDING_ROTATION_SETTING_ID,
+      value: { ...(cursorRow?.value || {}), [cursorKey]: next.email },
+    });
   if (writeError) console.warn('[lead-rotation] Could not save the rotation pointer:', writeError.message);
 
   return next;

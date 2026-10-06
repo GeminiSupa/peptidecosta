@@ -22,6 +22,13 @@ export const DEFAULT_LANDING_LEAD_SETTINGS = {
   // exactly as it did.
   rotationAppliesToGoogleAds: true,
   rotationAppliesToTikTok: true,
+  // One agent list per source. `rotationAgentEmails` above is what both used
+  // to share; it stays as the value these are seeded from, so a settings row
+  // saved before the split starts with the same agents on both sides. After
+  // that the two lists move independently - unticking an agent for Google Ads
+  // must not quietly drop them from TikTok as well.
+  googleAdsAgentEmails: [],
+  tiktokAgentEmails: [],
   autoOpenEnabled: true,
   timeTriggerMs: 5000,
   scrollTriggerPct: 55,
@@ -110,6 +117,12 @@ function normalizeQuestion(question, index) {
   };
 }
 
+/** Tidy a saved email list, falling back to `seed` only when it was never set. */
+function cleanEmailList(list, seed) {
+  const chosen = Array.isArray(list) ? list : (Array.isArray(seed) ? seed : []);
+  return [...new Set(chosen.map((email) => clean(email, 200).toLowerCase()).filter(Boolean))].slice(0, 30);
+}
+
 export function normalizeLandingLeadSettings(value = {}) {
   const source = value && typeof value === 'object' ? value : {};
   const suppliedQuestions = Array.isArray(source.questions) ? source.questions : null;
@@ -125,6 +138,10 @@ export function normalizeLandingLeadSettings(value = {}) {
       .filter(Boolean))].slice(0, 30),
     rotationAppliesToGoogleAds: source.rotationAppliesToGoogleAds !== false,
     rotationAppliesToTikTok: source.rotationAppliesToTikTok !== false,
+    // An array that is present is used as-is, empty included: "nobody ticked"
+    // is a real choice. Only a missing one is seeded from the shared list.
+    googleAdsAgentEmails: cleanEmailList(source.googleAdsAgentEmails, source.rotationAgentEmails),
+    tiktokAgentEmails: cleanEmailList(source.tiktokAgentEmails, source.rotationAgentEmails),
     autoOpenEnabled: source.autoOpenEnabled !== false,
     timeTriggerMs: Math.min(60000, Math.max(0, Number(source.timeTriggerMs) || DEFAULT_LANDING_LEAD_SETTINGS.timeTriggerMs)),
     scrollTriggerPct: Math.min(95, Math.max(10, Number(source.scrollTriggerPct) || DEFAULT_LANDING_LEAD_SETTINGS.scrollTriggerPct)),

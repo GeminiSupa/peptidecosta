@@ -37,6 +37,9 @@ async function loadLeadRotation(supabase) {
       // off, so an older admin bundle still reads this response correctly.
       googleAds: settings.assignmentMode === 'rotation' && settings.rotationAppliesToGoogleAds,
       tiktok: settings.assignmentMode === 'rotation' && settings.rotationAppliesToTikTok,
+      googleAdsAgentEmails: settings.googleAdsAgentEmails,
+      tiktokAgentEmails: settings.tiktokAgentEmails,
+      // Kept so an admin page served from cache still shows a ticked list.
       agentEmails: settings.rotationAgentEmails,
       agents,
     },
@@ -249,9 +252,18 @@ export async function PATCH(request) {
       const supabase = getSupabaseAdmin();
       const { settings, rotation } = await loadLeadRotation(supabase);
       const allowed = new Set(rotation.agents.map((agent) => agent.email));
-      const agentEmails = (Array.isArray(body.leadRotation.agentEmails) ? body.leadRotation.agentEmails : rotation.agentEmails)
+      const tidy = (list) => list
         .map((email) => String(email || '').trim().toLowerCase())
         .filter((email) => allowed.has(email));
+      const agentEmails = tidy(Array.isArray(body.leadRotation.agentEmails) ? body.leadRotation.agentEmails : rotation.agentEmails);
+      // Each source's list is only touched when this save names it, so ticking
+      // an agent for one cannot move the other's list.
+      const googleAdsAgentEmails = Array.isArray(body.leadRotation.googleAdsAgentEmails)
+        ? tidy(body.leadRotation.googleAdsAgentEmails)
+        : settings.googleAdsAgentEmails;
+      const tiktokAgentEmails = Array.isArray(body.leadRotation.tiktokAgentEmails)
+        ? tidy(body.leadRotation.tiktokAgentEmails)
+        : settings.tiktokAgentEmails;
       // Each source keeps its own switch. Whichever is sent is the one that
       // changes; the other holds its saved value, so turning Google Ads off
       // cannot quietly stop TikTok assigning as well - which is exactly what
@@ -281,6 +293,8 @@ export async function PATCH(request) {
         rotationAgentEmails: agentEmails,
         rotationAppliesToGoogleAds: appliesToGoogleAds,
         rotationAppliesToTikTok: appliesToTikTok,
+        googleAdsAgentEmails,
+        tiktokAgentEmails,
       });
       const { error } = await supabase.from('site_settings').upsert({ id: LANDING_LEAD_SETTINGS_ID, value });
       if (error) {
@@ -293,6 +307,8 @@ export async function PATCH(request) {
           enabled: value.assignmentMode === 'rotation',
           googleAds: value.assignmentMode === 'rotation' && value.rotationAppliesToGoogleAds,
           tiktok: value.assignmentMode === 'rotation' && value.rotationAppliesToTikTok,
+          googleAdsAgentEmails: value.googleAdsAgentEmails,
+          tiktokAgentEmails: value.tiktokAgentEmails,
           agentEmails: value.rotationAgentEmails,
         },
       });
