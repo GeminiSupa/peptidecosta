@@ -299,18 +299,18 @@ function shelfCartCount(key, avoid = null) {
 }
 
 /**
- * Short orange line on a catalog card. The first two in-stock products always
- * get a cart note; a few others do too (stable from the product key). Cart
- * counts stay in 2–4 and never match the previous card's cart count on the
- * shelf. A "left" number is real stock, only when it is already low.
+ * Short orange line on a catalog card. Some in-stock products get a fake cart
+ * note (stable from the product key, about one in five). Cart counts stay in
+ * 2–4 and never match the previous card's cart count on the shelf. A "left"
+ * number is real stock, only when it is already low.
  *
  * Returns { text, carts } so the grid can pass the last cart count into the
  * next card and skip a duplicate.
  */
-function catalogShelfNote({ key, lead, inStock, units, lang, avoidCarts = null }) {
+function catalogShelfNote({ key, inStock, units, lang, avoidCarts = null }) {
   if (!inStock) return { text: '', carts: null };
   const low = Number.isFinite(units) && units > 0 && units < 20;
-  const showCarts = lead || shelfNoteHash(key) % 5 === 0;
+  const showCarts = shelfNoteHash(key) % 5 === 0;
   if (!showCarts && !low) return { text: '', carts: null };
   const en = lang === 'en';
   if (showCarts) {
@@ -4518,7 +4518,6 @@ export default function CatalogPage() {
           <>
           <div className={`product-grid ${viewMode}-view`}>
             {(() => {
-              let leadNotes = 2;
               let lastCarts = null;
               return groupCatalogCards(filteredProducts).map((card, idx) => {
               const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
@@ -4627,11 +4626,8 @@ export default function CatalogPage() {
                   </div>
                   <div className="product-info">
                     {(() => {
-                      const lead = inStock && !isBac && leadNotes > 0;
-                      if (lead) leadNotes -= 1;
                       const scarcity = catalogShelfNote({
                         key: card.key,
-                        lead,
                         inStock: inStock && !isBac,
                         units: Number(p.inventoryCount),
                         lang,
@@ -5878,7 +5874,6 @@ export default function CatalogPage() {
                 : '';
               const shelf = catalogShelfNote({
                 key: compoundKey,
-                lead: true,
                 inStock: inStock && !isBacWater(selectedProduct.product),
                 units,
                 lang,
