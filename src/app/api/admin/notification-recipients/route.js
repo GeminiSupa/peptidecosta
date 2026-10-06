@@ -32,6 +32,11 @@ async function loadLeadRotation(supabase) {
     settings,
     rotation: {
       enabled: settings.assignmentMode === 'rotation',
+      // Google Ads and TikTok each own their switch. `enabled` stays the
+      // shared "is the rotation configured at all" flag the agent list hangs
+      // off, so an older admin bundle still reads this response correctly.
+      googleAds: settings.assignmentMode === 'rotation' && settings.rotationAppliesToGoogleAds,
+      tiktok: settings.assignmentMode === 'rotation' && settings.rotationAppliesToTikTok,
       agentEmails: settings.rotationAgentEmails,
       agents,
     },
@@ -247,13 +252,35 @@ export async function PATCH(request) {
       const agentEmails = (Array.isArray(body.leadRotation.agentEmails) ? body.leadRotation.agentEmails : rotation.agentEmails)
         .map((email) => String(email || '').trim().toLowerCase())
         .filter((email) => allowed.has(email));
-      const enabled = body.leadRotation.enabled === true;
-      // Switching off leaves new leads unassigned for anyone to claim, not
-      // quietly back on whichever single agent was chosen months ago.
+      // Each source keeps its own switch. Whichever is sent is the one that
+      // changes; the other holds its saved value, so turning Google Ads off
+      // cannot quietly stop TikTok assigning as well - which is exactly what
+      // the single shared switch used to do.
+      const googleAds = typeof body.leadRotation.googleAds === 'boolean'
+        ? body.leadRotation.googleAds
+        : settings.rotationAppliesToGoogleAds;
+      const tiktok = typeof body.leadRotation.tiktok === 'boolean'
+        ? body.leadRotation.tiktok
+        : settings.rotationAppliesToTikTok;
+      // `enabled` is still accepted so an older admin bundle keeps working: it
+      // means both sources at once.
+      const legacyEnabled = typeof body.leadRotation.enabled === 'boolean'
+        && typeof body.leadRotation.googleAds !== 'boolean'
+        && typeof body.leadRotation.tiktok !== 'boolean'
+        ? body.leadRotation.enabled
+        : null;
+      const appliesToGoogleAds = legacyEnabled === null ? googleAds : legacyEnabled;
+      const appliesToTikTok = legacyEnabled === null ? tiktok : legacyEnabled;
+      // The rotation itself is on while either source still uses it. With both
+      // off, new leads are left unassigned for anyone to claim - never handed
+      // quietly back to whichever single agent was chosen months ago.
+      const enabled = appliesToGoogleAds || appliesToTikTok;
       const value = normalizeLandingLeadSettings({
         ...settings,
         assignmentMode: enabled ? 'rotation' : (settings.assignmentMode === 'rotation' ? 'unassigned' : settings.assignmentMode),
         rotationAgentEmails: agentEmails,
+        rotationAppliesToGoogleAds: appliesToGoogleAds,
+        rotationAppliesToTikTok: appliesToTikTok,
       });
       const { error } = await supabase.from('site_settings').upsert({ id: LANDING_LEAD_SETTINGS_ID, value });
       if (error) {
@@ -261,7 +288,13 @@ export async function PATCH(request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
       return NextResponse.json({
-        leadRotation: { ...rotation, enabled: value.assignmentMode === 'rotation', agentEmails: value.rotationAgentEmails },
+        leadRotation: {
+          ...rotation,
+          enabled: value.assignmentMode === 'rotation',
+          googleAds: value.assignmentMode === 'rotation' && value.rotationAppliesToGoogleAds,
+          tiktok: value.assignmentMode === 'rotation' && value.rotationAppliesToTikTok,
+          agentEmails: value.rotationAgentEmails,
+        },
       });
     }
     if (!body?.id) return NextResponse.json({ error: 'id is required' }, { status: 400 });

@@ -241,7 +241,9 @@ test('the campaign agent is only assigned to a lead nobody already owns', () => 
   const route = fs.readFileSync('src/app/api/leads/contact/route.js', 'utf8');
   assert.match(
     route,
-    /if \(!owner && hasLandingQualification\(qualification\)\) \{/,
+    // Further conditions may be added (the Google Ads switch is one), but
+    // `!owner` has to stay first: it is what protects a returning customer.
+    /if \(!owner && hasLandingQualification\(qualification\)/,
     'dropping the !owner guard sends every returning customer to the campaign agent again',
   );
   // A failed history read is retried before falling back, and the fallback is logged.

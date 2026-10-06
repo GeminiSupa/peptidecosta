@@ -250,8 +250,16 @@ export async function POST(request) {
     if (!owner) {
       try {
         const landingSettings = await loadLandingLeadSettings(supabase);
-        const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
-        const picked = campaignAgent || await resolveRotationAgent(supabase, landingSettings);
+        // The shared ad-lead rotation is opt-in per source. With TikTok's
+        // switch off this falls through to TikTok's own rotation below, so a
+        // TikTok lead still always has an owner - unlike a Google Ads lead,
+        // which is allowed to arrive unassigned for Chatwoot to hand out.
+        const campaignAgent = landingSettings.rotationAppliesToTikTok
+          ? await resolveCampaignAgent(supabase, landingSettings)
+          : null;
+        const picked = campaignAgent || (landingSettings.rotationAppliesToTikTok
+          ? await resolveRotationAgent(supabase, landingSettings)
+          : null);
         if (picked?.name) {
           rotatedAgent = picked;
           assignmentSource = campaignAgent ? 'fixed_agent' : 'rotation';

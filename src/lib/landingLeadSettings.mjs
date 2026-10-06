@@ -14,6 +14,14 @@ export const DEFAULT_LANDING_LEAD_SETTINGS = {
   assignmentMode: 'unassigned',
   assignedAgentEmail: '',
   rotationAgentEmails: [],
+  // Which ad source the assignment above actually applies to. Google Ads
+  // (/lp, /glp-1, /landing) and TikTok used to share one switch, so turning
+  // the rotation off for Google Ads - because Chatwoot assigns those chats
+  // now - also turned it off for TikTok, which nobody asked for. Both default
+  // to true, so a settings row saved before this existed keeps assigning
+  // exactly as it did.
+  rotationAppliesToGoogleAds: true,
+  rotationAppliesToTikTok: true,
   autoOpenEnabled: true,
   timeTriggerMs: 5000,
   scrollTriggerPct: 55,
@@ -115,6 +123,8 @@ export function normalizeLandingLeadSettings(value = {}) {
     rotationAgentEmails: [...new Set((Array.isArray(source.rotationAgentEmails) ? source.rotationAgentEmails : [])
       .map((email) => clean(email, 200).toLowerCase())
       .filter(Boolean))].slice(0, 30),
+    rotationAppliesToGoogleAds: source.rotationAppliesToGoogleAds !== false,
+    rotationAppliesToTikTok: source.rotationAppliesToTikTok !== false,
     autoOpenEnabled: source.autoOpenEnabled !== false,
     timeTriggerMs: Math.min(60000, Math.max(0, Number(source.timeTriggerMs) || DEFAULT_LANDING_LEAD_SETTINGS.timeTriggerMs)),
     scrollTriggerPct: Math.min(95, Math.max(10, Number(source.scrollTriggerPct) || DEFAULT_LANDING_LEAD_SETTINGS.scrollTriggerPct)),

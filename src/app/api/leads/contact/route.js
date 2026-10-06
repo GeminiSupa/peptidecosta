@@ -336,7 +336,10 @@ export async function POST(request) {
           + `It may be a returning customer — check who sold to them before. email=${JSON.stringify(email)} phone=${JSON.stringify(phone)}`,
       );
     }
-    if (!owner && hasLandingQualification(qualification)) {
+    // Google Ads leads only follow the rotation while its Google Ads switch is
+    // on. Turning it off hands those chats to Chatwoot unassigned, which is the
+    // point - and leaves TikTok's own switch alone.
+    if (!owner && hasLandingQualification(qualification) && landingSettings.rotationAppliesToGoogleAds) {
       try {
         const campaignAgent = await resolveCampaignAgent(supabase, landingSettings);
         const rotationAgent = campaignAgent ? null : await resolveRotationAgent(supabase, landingSettings);

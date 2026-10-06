@@ -174,14 +174,23 @@ function NotificationSettings({
         <div style={panel}>
           <NotificationToggle
             icon={<Users size={15} />}
-            title="Share ad leads between agents"
-            hint="Each new /lp, /glp-1 or TikTok form lead goes to the next ticked agent, in turn, even if they are offline. The Chatwoot chat is assigned to the same agent, and their sale counts for their commission."
-            checked={leadRotation.enabled}
+            title="Share Google Ads leads between agents"
+            hint="/lp and /glp-1 form leads. On: each new lead goes to the next ticked agent, in turn, even if they are offline. Off: the lead arrives unassigned and the Chatwoot team picks it up."
+            checked={leadRotation.googleAds ?? leadRotation.enabled}
             disabled={!canEdit || leadRotationSaving}
-            onChange={(enabled) => onLeadRotationChange({ enabled })}
+            onChange={(googleAds) => onLeadRotationChange({ googleAds })}
             activeColor="#22c55e"
           />
-          {leadRotation.enabled && (
+          <NotificationToggle
+            icon={<Users size={15} />}
+            title="Share TikTok leads between agents"
+            hint="TikTok form leads, controlled separately from Google Ads. On: they go to the next ticked agent below. Off: they use TikTok's own agent rotation instead — a TikTok lead is always given an owner either way."
+            checked={leadRotation.tiktok ?? leadRotation.enabled}
+            disabled={!canEdit || leadRotationSaving}
+            onChange={(tiktok) => onLeadRotationChange({ tiktok })}
+            activeColor="#22c55e"
+          />
+          {((leadRotation.googleAds ?? leadRotation.enabled) || (leadRotation.tiktok ?? leadRotation.enabled)) && (
             <>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px' }}>
                 {leadRotation.agents.map((agent) => {
@@ -413,7 +422,16 @@ export default function TeamManagement({ currentUserProfile, currentUserEmail, o
 
   const updateLeadRotation = async (change) => {
     if (!leadRotation) return;
-    const next = { enabled: leadRotation.enabled, agentEmails: leadRotation.agentEmails, ...change };
+    // Both switches travel on every save. Sending only the one that changed
+    // would let the server fall back to its stored value for the other, which
+    // is right, but sending both keeps the optimistic update on screen honest.
+    const next = {
+      enabled: leadRotation.enabled,
+      googleAds: leadRotation.googleAds ?? leadRotation.enabled,
+      tiktok: leadRotation.tiktok ?? leadRotation.enabled,
+      agentEmails: leadRotation.agentEmails,
+      ...change,
+    };
     setLeadRotationSaving(true);
     setRecipientsError('');
     setLeadRotation({ ...leadRotation, ...next });
