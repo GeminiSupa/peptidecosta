@@ -42,6 +42,17 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
   }
 
   try {
+    const parameters = templateName
+      ? buildTemplateParameters(
+        firstName,
+        languageCode,
+        greetingVariable,
+        message,
+        parameterMode,
+        templateParameters,
+      ).map((text) => ({ type: 'text', text }))
+      : [];
+
     const payload = templateName ? {
       messaging_product: 'whatsapp',
       to: formatted,
@@ -49,17 +60,9 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
       template: {
         name: templateName,
         language: { code: languageCode || 'es' },
-        components: [{
-          type: 'body',
-          parameters: buildTemplateParameters(
-            firstName,
-            languageCode,
-            greetingVariable,
-            message,
-            parameterMode,
-            templateParameters,
-          ).map((text) => ({ type: 'text', text })),
-        }],
+        // Mirrors the send-now route: a template with no {{n}} must go with no
+        // components at all, or Meta refuses it on parameter count.
+        ...(parameters.length ? { components: [{ type: 'body', parameters }] } : {}),
       },
     } : {
       messaging_product: 'whatsapp',

@@ -860,7 +860,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           </select>
 
           <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', fontSize: '0.78rem', color: '#4ade80', lineHeight: 1.45 }}>
-            🛡️ <strong>WhatsApp messages only go to contacts who opted in</strong>, no matter which audience you pick — non-opted-in numbers are skipped automatically to protect your number from spam flags. Email still reaches everyone in the audience.
+            🛡️ <strong>WhatsApp messages only go to contacts who opted in</strong>, no matter which audience you pick — non-opted-in numbers are skipped automatically to protect your number from spam flags. <strong>Email only goes to contacts who have an email address</strong>; phone-only contacts are skipped, so there is no &quot;has an email&quot; audience to pick. The Email counter below is how many will actually receive it.
           </div>
 
           <div style={{ marginTop: '10px', padding: '12px', background: 'rgba(15, 23, 42, 0.9)', border: '1px solid rgba(56, 189, 248, 0.18)', borderRadius: '10px' }}>

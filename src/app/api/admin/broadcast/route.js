@@ -46,6 +46,15 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
     };
 
     if (templateName) {
+      const parameters = buildTemplateParameters(
+        firstName,
+        languageCode,
+        greetingVariable,
+        message,
+        parameterMode,
+        templateParameters,
+      ).map((text) => ({ type: 'text', text }));
+
       payload = {
         messaging_product: 'whatsapp',
         to: formatted,
@@ -53,19 +62,11 @@ async function sendWhatsApp(to, message, templateName = null, firstName = null, 
         template: {
           name: templateName,
           language: { code: languageCode || 'es' },
-          components: [
-            {
-              type: 'body',
-              parameters: buildTemplateParameters(
-                firstName,
-                languageCode,
-                greetingVariable,
-                message,
-                parameterMode,
-                templateParameters,
-              ).map((text) => ({ type: 'text', text }))
-            }
-          ]
+          // A template with no {{n}} at all must be sent with no components.
+          // An empty body component is a parameter-count mismatch to Meta, so
+          // the whole send is refused. Announcement templates are written
+          // without a name variable precisely so nobody gets "Hola Cliente".
+          ...(parameters.length ? { components: [{ type: 'body', parameters }] } : {}),
         }
       };
     }
@@ -426,7 +427,11 @@ export async function POST(request) {
       && channels?.whatsappTemplateParamMode === 'custom'
       && (
         !Array.isArray(channels.whatsappTemplateParameters)
-        || channels.whatsappTemplateParameters.length === 0
+        // An EMPTY list is the correct, complete answer for a template that has
+        // no {{n}} at all — announcement templates are written that way so a
+        // customer with no name on file never reads "Hola Cliente". Refusing it
+        // here blocked those sends entirely. A half-filled list is still wrong,
+        // and the panel checks the count against the real template from Meta.
         || channels.whatsappTemplateParameters.some((value) => !String(value || '').trim())
       )
     ) {
