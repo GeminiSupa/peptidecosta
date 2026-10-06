@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifyAdminSession } from '@/lib/adminAuth';
+import {
+  PRODUCT_IMAGE_RULES,
+  checkProductImage,
+  measureProductImage,
+  productImageRequirements,
+} from '@/lib/productImageRules';
 
 export const runtime = 'nodejs';
 
@@ -69,6 +75,52 @@ export async function POST(request) {
       );
     }
 
+    const bytes = Buffer.from(await file.arrayBuffer());
+
+    // Product photos are measured before they are stored. The catalog scales
+    // the whole file into a fixed tall box, so a square photo, or one with
+    // blank space around the vial, renders the product far smaller than its
+    // neighbours - which is how six products ended up looking shrunken on the
+    // live catalog. Refusing the file here is the only point where the person
+    // who has the original is still standing in front of it.
+    //
+    // Blog covers go through this same route and are supposed to be wide, so
+    // they are deliberately not measured.
+    if (kind === 'product') {
+      let measured = null;
+      try {
+        measured = await measureProductImage(bytes);
+      } catch (measureError) {
+        // A file we cannot measure is not a file we can judge. Letting it
+        // through beats blocking every upload because the image library is
+        // unavailable, but it is logged so it does not pass silently.
+        console.error('Product image could not be measured, allowing upload:', measureError?.message);
+      }
+
+      if (measured) {
+        const verdict = checkProductImage(measured);
+        if (!verdict.ok) {
+          return NextResponse.json(
+            {
+              error: verdict.problems[0],
+              imageCheck: {
+                problems: verdict.problems,
+                requirements: productImageRequirements(),
+                measured: {
+                  width: measured.width,
+                  height: measured.height,
+                  fillWidthPct: Math.round(measured.fillWidth * 100),
+                  fillHeightPct: Math.round(measured.fillHeight * 100),
+                },
+                ideal: `${PRODUCT_IMAGE_RULES.idealWidth} x ${PRODUCT_IMAGE_RULES.idealHeight}`,
+              },
+            },
+            { status: 422 },
+          );
+        }
+      }
+    }
+
     const extension = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
     const prefix = PREFIXES[kind] ?? '';
     const path = `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
@@ -76,7 +128,7 @@ export async function POST(request) {
     const supabase = getSupabaseAdmin();
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(path, Buffer.from(await file.arrayBuffer()), {
+      .upload(path, bytes, {
         contentType: file.type || 'image/jpeg',
         upsert: false,
         // A year. Supabase defaults to an hour, which means every visitor

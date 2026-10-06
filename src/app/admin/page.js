@@ -443,6 +443,9 @@ export default function AdminPage() {
   const [fbView, setFbView] = useState('inbox'); // 'inbox' | 'posts' | 'alerts' — Facebook tab sub-view
   const [fbFilter, setFbFilter] = useState('All');
   const [toastMessage, setToastMessage] = useState('');
+  // Set when the server refuses a product photo for its shape or size. Holds
+  // the server's own wording so the popup and the rule never drift apart.
+  const [rejectedImage, setRejectedImage] = useState(null);
   const [leadsSearch, setLeadsSearch] = useState('');
   const [leadsSourceFilter, setLeadsSourceFilter] = useState('active');
   const [leadsAreaFilter, setLeadsAreaFilter] = useState('All');
@@ -3446,7 +3449,16 @@ Core Rules:
 
         const response = await adminFetch('/api/admin/upload-image', { method: 'POST', body: form });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Upload failed.');
+        if (!response.ok) {
+          // A photo refused for its shape or size is not a failure to report
+          // as one: the person can fix it, so they get the popup that says how.
+          if (data.imageCheck) {
+            handleCellChange(productId, 'imageUrl', previousUrl);
+            setRejectedImage({ fileName: file.name, ...data.imageCheck });
+            return null;
+          }
+          throw new Error(data.error || 'Upload failed.');
+        }
 
         handleCellChange(productId, 'imageUrl', data.url);
         fetchBucketImages(); // Refresh the list of images in the background
@@ -8363,7 +8375,56 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
             </form>
           </div>
         </div>
-      )}      {/* Change Password Modal */}
+      )}
+
+      {/* Product photo refused: tells whoever uploaded it exactly what to change.
+          Admin is hard-coded dark, so the colours here are explicit - the theme
+          variables are the light ones and would paint this white on white. */}
+      {rejectedImage && (
+        <div className="modal active" onClick={() => setRejectedImage(null)} style={{ zIndex: 400 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px', background: '#0e1626', color: '#f8fafc' }}>
+            <button className="close-modal" onClick={() => setRejectedImage(null)} style={{ color: '#94a3b8' }}>&times;</button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <AlertCircle size={22} style={{ color: '#f87171', flexShrink: 0 }} />
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 900, color: '#f8fafc', margin: 0 }}>
+                Picture not uploaded
+              </h2>
+            </div>
+            {rejectedImage.fileName && (
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0 0 16px 32px', wordBreak: 'break-all' }}>
+                {rejectedImage.fileName}
+              </p>
+            )}
+
+            <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '10px', padding: '12px 14px', marginBottom: '16px' }}>
+              {(rejectedImage.problems || []).map((problem, i) => (
+                <p key={i} style={{ fontSize: '0.82rem', lineHeight: 1.55, color: '#fecaca', margin: i === 0 ? 0 : '10px 0 0' }}>
+                  {problem}
+                </p>
+              ))}
+            </div>
+
+            <h3 style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px' }}>
+              Needs to be
+            </h3>
+            <ul style={{ margin: 0, paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+              {(rejectedImage.requirements || []).map((rule, i) => (
+                <li key={i} style={{ fontSize: '0.82rem', lineHeight: 1.5, color: '#cbd5e1' }}>{rule}</li>
+              ))}
+            </ul>
+
+            <button
+              onClick={() => setRejectedImage(null)}
+              style={{ marginTop: '18px', width: '100%', padding: '11px', borderRadius: '10px', border: 'none', background: '#38bdf8', color: '#0b1220', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
       {showPasswordModal && (
         <div className="modal active" onClick={() => setShowPasswordModal(false)} style={{ zIndex: 200 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px', background: '#0e1626', color: '#f8fafc' }}>
