@@ -19,6 +19,7 @@ import {
 } from '@/lib/leadNotificationStatus.mjs';
 import { formatCrDate } from '@/lib/crTime.mjs';
 import { isAdLandingLead } from '@/lib/adLandingLeads.mjs';
+import AiSummary from './AiSummary';
 
 /**
  * A dropdown row has to carry BOTH its colour and its background. With only
@@ -130,6 +131,32 @@ export default function LeadsManager({
   useEffect(() => {
     loadNotificationJobs();
   }, [loadNotificationJobs]);
+
+  // Who is holding each ad chat in Chatwoot, read from Chatwoot itself.
+  //
+  // These chats are handed over deliberately unassigned and Chatwoot decides
+  // who takes them, so the lead row cannot know the answer - and the column
+  // that was meant to carry it, chatwoot_assignee_name, is filled by a webhook
+  // that has never fired on this account. Asking Chatwoot directly is what
+  // makes this answerable from the admin instead of by logging in there.
+  const [chatwootAssignees, setChatwootAssignees] = useState({});
+
+  const loadChatwootAssignees = useCallback(async () => {
+    if (!notificationLeadIds.length) return;
+    try {
+      const response = await adminFetch('/api/admin/chatwoot-assignees');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not read Chatwoot');
+      setChatwootAssignees(data.assignees || {});
+    } catch (error) {
+      // Chatwoot being unreachable must not break the Leads screen.
+      console.warn('[Leads] Chatwoot assignees unavailable:', error.message);
+    }
+  }, [notificationLeadIds.length]);
+
+  useEffect(() => {
+    loadChatwootAssignees();
+  }, [loadChatwootAssignees]);
 
   const retryLeadNotification = async (job) => {
     if (!job?.id || !isSuperadmin) return;
@@ -437,8 +464,8 @@ export default function LeadsManager({
     const status = String(lead.chatwoot_conversation_status || 'sent').toLowerCase();
     const tone = status === 'resolved' ? 'success' : status === 'open' ? 'pending' : 'warning';
     const response = Number(lead.chatwoot_first_response_seconds);
+    const live = chatwootAssignees[String(lead.chatwoot_conversation_id)];
     const detail = [
-      lead.chatwoot_assignee_name ? `Assigned to ${lead.chatwoot_assignee_name}` : null,
       Number.isFinite(response) ? `First response ${formatResponseTime(response)}` : 'Awaiting first response',
       Number(lead.chatwoot_message_count) ? `${lead.chatwoot_message_count} messages` : null,
     ].filter(Boolean).join(' · ');
@@ -447,6 +474,14 @@ export default function LeadsManager({
         <span className={`lead-alert-status ${tone}`} title={detail}>
           <MessageCircle size={12} /> {status.replace(/_/g, ' ')}
         </span>
+        {live && (
+          <span
+            style={{ fontSize: '.68rem', color: live.name ? '#86efac' : '#fbbf24', fontWeight: 700 }}
+            title={live.email || 'No agent has picked this chat up in Chatwoot yet'}
+          >
+            {live.name ? `Chatwoot: ${live.name}` : 'Chatwoot: nobody yet'}
+          </span>
+        )}
         <span style={{ color: '#94a3b8', fontSize: '.67rem' }}>{detail}</span>
         {lead.chatwoot_conversation_url && (
           <a
@@ -993,13 +1028,9 @@ export default function LeadsManager({
               <Sparkles size={18} style={{ color: '#38bdf8' }}/>
               <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#f8fafc' }}>AI Lead Intelligence</span>
             </div>
-            <div 
-              style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}
-              dangerouslySetInnerHTML={{
-                __html: leadsAiText
-                  .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #38bdf8">$1</strong>')
-                  .replace(/^- (.*)$/gm, '<li style="margin-left: 12px; margin-bottom: 6px; list-style-type: square">$1</li>')
-              }}
+            <AiSummary
+              text={leadsAiText}
+              style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: '1.6' }}
             />
           </div>
         ) : (
