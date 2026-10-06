@@ -197,3 +197,21 @@ test('the two rotations keep separate places in their lists', () => {
   assert.equal(pickNextRotationAgent(agents, cursor.lastAgentEmail).email, 'b@example.com');
   assert.equal(pickNextRotationAgent(agents, cursor.lastAgentEmailTiktok).email, 'a@example.com');
 });
+
+/* The Chatwoot chat for a Google Ads lead is handed over with nobody on it.
+   The CRM still records an owner on the lead - that is what the customer
+   profile shows - but the owner is never sent to Chatwoot, not even for a
+   returning customer who keeps their agent in the CRM. */
+
+test('the Google Ads route never sends an owner to Chatwoot', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile(new URL('../src/app/api/leads/contact/route.js', import.meta.url), 'utf8');
+
+  assert.match(route, /assigneeEmail: ''/, 'the chat has to go over unassigned');
+  assert.doesNotMatch(route, /assigneeEmail: ownerEmail/, 'the owner must not be sent to Chatwoot');
+  assert.doesNotMatch(route, /findAgentEmail/, 'looking the owner up again is how this creeps back');
+
+  // The owner still has to be written to the lead, or the customer profile
+  // loses who it belongs to.
+  assert.match(route, /sales_agent/);
+});

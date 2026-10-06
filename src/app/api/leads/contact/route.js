@@ -56,19 +56,6 @@ const escapeHtml = (value = '') => String(value)
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-// CRM owners are stored by name; Chatwoot agents are matched by login email.
-async function findAgentEmail(supabase, agentName) {
-  try {
-    const { data } = await supabase.from('admin_profiles').select('name, email');
-    const wanted = String(agentName || '').trim().toLowerCase();
-    const match = (data || []).find((profile) => String(profile.name || '').trim().toLowerCase() === wanted);
-    return String(match?.email || '').trim().toLowerCase();
-  } catch (error) {
-    console.warn('[leads/contact] Owner email lookup failed:', error.message);
-    return '';
-  }
-}
-
 async function sendLandingLeadAlert({
   supabase,
   leadId,
@@ -314,7 +301,6 @@ export async function POST(request) {
       await new Promise((resolve) => setTimeout(resolve, HISTORY_RETRY_GAP_MS));
     }
     let owner = resolvedOwner.agent;
-    let ownerEmail = '';
     let assignmentSource = resolvedOwner.source === 'existing' ? 'existing_owner' : resolvedOwner.source;
 
     // A contact an agent already owns keeps that agent: whoever is mid-conversation
@@ -346,7 +332,6 @@ export async function POST(request) {
         const picked = campaignAgent || rotationAgent;
         if (picked?.name) {
           owner = picked.name;
-          ownerEmail = picked.email;
           assignmentSource = campaignAgent ? 'fixed_agent' : 'rotation';
         }
       } catch (assignError) {
@@ -467,9 +452,12 @@ export async function POST(request) {
       ? await loadChatwootLeadEnabled(supabase)
       : false;
     if (chatwootEnabled) {
-      // The Chatwoot chat is assigned to the same person as the CRM lead, so
-      // the agent answering is the one credited when the customer orders.
-      if (owner && !ownerEmail) ownerEmail = await findAgentEmail(supabase, owner);
+      // The chat is handed over with nobody on it. Chatwoot decides who takes
+      // a Google Ads lead, because the agent it would otherwise be given to is
+      // not necessarily the one at their desk - which is the whole reason
+      // these leads were going cold. The CRM still records the owner on the
+      // lead itself; it is simply never sent on. This holds for a returning
+      // customer too: the CRM keeps them with their agent, the chat does not.
       chatwootResult = await sendAdLeadToChatwoot({
         leadId,
         name,
@@ -478,7 +466,7 @@ export async function POST(request) {
         source,
         qualificationLines: landingQualificationNotes(qualification),
         campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
-        assigneeEmail: ownerEmail,
+        assigneeEmail: '',
         dueAt,
       });
       if (chatwootResult.assignmentError) {
