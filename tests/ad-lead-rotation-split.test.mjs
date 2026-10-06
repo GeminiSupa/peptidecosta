@@ -215,3 +215,45 @@ test('the Google Ads route never sends an owner to Chatwoot', async () => {
   // loses who it belongs to.
   assert.match(route, /sales_agent/);
 });
+
+/* The visitor must get an answer. The lead is saved before the Chatwoot
+   handover begins, so a slow Chatwoot has to cost the chat, never the enquiry
+   and never the visitor's patience. */
+
+test('the visitor is answered before the handover and the alerts run', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile(new URL('../src/app/api/leads/contact/route.js', import.meta.url), 'utf8');
+
+  // The browser aborts after 15s and retries once, so anything slow sitting
+  // between the save and the reply shows a paid Google Ads visitor an error
+  // about an enquiry that was saved all along.
+  assert.match(route, /import \{ NextResponse, after \} from 'next\/server'/);
+  const afterAt = route.indexOf('after(async () => {');
+  // Anchored on the final reply specifically: the duplicate-suppression reply
+  // earlier in the route also says success, and matching that proves nothing.
+  const replyAt = route.indexOf("record: existing ? 'updated' : 'created'");
+  assert.ok(afterAt > 0, 'the slow work has to be handed to after()');
+  assert.ok(replyAt > afterAt, 'the reply has to come after that hand-off, not behind the work');
+
+  // lastIndexOf, so the import at the top of the file and the local definition
+  // of sendLandingLeadAlert are not mistaken for where it is called.
+  for (const slow of ['sendAdLeadToChatwoot', 'sendLandingLeadAlert', 'sendLandingLeadWhatsAppAlerts']) {
+    assert.ok(route.lastIndexOf(slow) > afterAt, `${slow} must not run before the visitor is answered`);
+  }
+});
+
+test('the Chatwoot handover cannot run past the request budget', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const route = await readFile(new URL('../src/app/api/leads/contact/route.js', import.meta.url), 'utf8');
+
+  assert.match(route, /CHATWOOT_STAGE_MS/, 'the handover needs its own deadline');
+  assert.match(route, /withDeadline\(\s*\n?\s*sendAdLeadToChatwoot/, 'the deadline has to wrap the handover itself');
+
+  // 30s of customer-history retries plus the handover has to leave room inside
+  // the 60s function limit, or the request is killed and the visitor is told
+  // their details did not send - for a lead that is already in the CRM.
+  const stage = Number(route.match(/CHATWOOT_STAGE_MS\s*=\s*([0-9_]+)/)[1].replace(/_/g, ''));
+  const history = Number(route.match(/HISTORY_RETRY_WINDOW_MS\s*=\s*([0-9_]+)/)[1].replace(/_/g, ''));
+  const limit = Number(route.match(/maxDuration\s*=\s*(\d+)/)[1]) * 1000;
+  assert.ok(history + stage < limit, `history ${history}ms + chatwoot ${stage}ms must fit inside ${limit}ms`);
+});

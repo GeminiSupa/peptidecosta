@@ -459,6 +459,25 @@ export default function LeadsManager({
 
   const renderChatwootActivity = (lead) => {
     if (!lead.chatwoot_conversation_id && !lead.chatwoot_conversation_url) {
+      // A Google Ads lead that is not in Chatwoot is not being worked by
+      // anybody, because Chatwoot is where these are answered. A dash said
+      // nothing, so the one case worth noticing looked like the quiet one.
+      // The 15-minute job retries it; this says so until it lands.
+      if (isGoogleAdsLead(lead)) {
+        return (
+          <div className="lead-alert-control">
+            <span className="lead-alert-status warning" title={lead.chatwoot_error || 'The handover did not complete. It is retried every 15 minutes.'}>
+              <TriangleAlert size={12} /> not in Chatwoot
+            </span>
+            <span style={{ color: '#fbbf24', fontSize: '.67rem' }}>
+              Nobody is working this yet — retrying every 15 min
+            </span>
+            {lead.chatwoot_error && (
+              <span style={{ color: '#94a3b8', fontSize: '.65rem' }}>{lead.chatwoot_error}</span>
+            )}
+          </div>
+        );
+      }
       return <span className="lead-alert-muted">—</span>;
     }
     const status = String(lead.chatwoot_conversation_status || 'sent').toLowerCase();

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { cleanPhoneNumber } from '@/lib/whatsapp';
 import { isDiallablePhone } from '@/lib/leadContact.mjs';
@@ -40,6 +40,35 @@ export const maxDuration = 60;
 // If the database does not answer the "has this person bought before?" check,
 // keep asking for this long before giving the lead to the round robin.
 const HISTORY_RETRY_WINDOW_MS = 30_000;
+
+/**
+ * How long the Chatwoot handover may take before the visitor stops waiting
+ * for it.
+ *
+ * Nothing used to bound the whole request. The customer-history check retries
+ * for up to 30 seconds when Supabase is slow, and the Chatwoot handover is five
+ * calls in a row with an 8-second timeout each - 40 seconds. Together that is
+ * past the 60-second function limit, so the request was killed, and the visitor
+ * was told "We could not send your details just then" about a lead that had
+ * already been saved. They then submit again.
+ *
+ * The lead is in the CRM before this stage begins, so giving up on Chatwoot
+ * costs a chat that the Leads tab reports as failed - not the enquiry.
+ */
+const CHATWOOT_STAGE_MS = 15_000;
+
+/** Resolve to `onTimeout` rather than hanging, when `work` takes too long. */
+async function withDeadline(work, ms, onTimeout) {
+  let timer;
+  try {
+    return await Promise.race([
+      work,
+      new Promise((resolve) => { timer = setTimeout(() => resolve(onTimeout), ms); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 const HISTORY_RETRY_GAP_MS = 3_000;
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -443,126 +472,142 @@ export async function POST(request) {
       if (eventError) console.warn('[leads/contact] Assignment audit skipped:', eventError.message);
     }
 
-    // /lp and /glp-1 are the paid Google Ads forms. Chatwoot is their working
-    // inbox; email/WhatsApp below are optional monitoring copies controlled by
-    // Team > Notification Settings. A Chatwoot outage cannot reject or retry a
-    // lead that is already safely stored in the CRM.
-    let chatwootResult = null;
-    const chatwootEnabled = isAdLandingSource(source)
-      ? await loadChatwootLeadEnabled(supabase)
-      : false;
-    if (chatwootEnabled) {
-      // The chat is handed over with nobody on it. Chatwoot decides who takes
-      // a Google Ads lead, because the agent it would otherwise be given to is
-      // not necessarily the one at their desk - which is the whole reason
-      // these leads were going cold. The CRM still records the owner on the
-      // lead itself; it is simply never sent on. This holds for a returning
-      // customer too: the CRM keeps them with their agent, the chat does not.
-      chatwootResult = await sendAdLeadToChatwoot({
-        leadId,
-        name,
-        email,
-        phone,
-        source,
-        qualificationLines: landingQualificationNotes(qualification),
-        campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
-        assigneeEmail: '',
-        dueAt,
-      });
-      if (chatwootResult.assignmentError) {
-        console.warn('[leads/contact] Chatwoot chat left unassigned:', chatwootResult.assignmentError);
-      }
-      if (!chatwootResult.sent) {
-        console.error('[leads/contact] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
-      }
-    }
-
-    // Kept on the lead so the Leads tab shows which chats failed; the logs alone
-    // made a lost chat invisible. Optional columns: add-chatwoot-status-to-leads.sql.
-    if (leadId && isAdLandingSource(source)) {
+    // Nothing below here is anything the visitor is waiting for. Their lead is
+    // already in the CRM; the Chatwoot handover and the team alerts are our
+    // business, not theirs.
+    //
+    // They used to run before the reply, and that is what made the form hang.
+    // The browser gives up after 15 seconds and retries once, so a slow
+    // Chatwoot or a slow mail server showed a paid Google Ads visitor "We could
+    // not send your details just then" about half a minute after they pressed
+    // the button - for an enquiry that had been saved the whole time. On the
+    // most expensive leads the business buys.
+    //
+    // `after` runs this once the response has gone out, so the button answers
+    // as soon as the lead is saved no matter how slow any of it is.
+    after(async () => {
       try {
-        const { error: statusError } = await writeDroppingMissingColumns(
-          chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
-          [
-            'chatwoot_status',
-            'chatwoot_error',
-            'chatwoot_conversation_id',
-            'chatwoot_contact_id',
-            'chatwoot_conversation_status',
-            'chatwoot_assignee_email',
-            'chatwoot_conversation_url',
-            'chatwoot_synced_at',
-          ],
-          (row) => (Object.keys(row).length
-            ? supabase.from('catalog_leads').update(row).eq('id', leadId)
-            : Promise.resolve({ error: null })),
+      // /lp and /glp-1 are the paid Google Ads forms. Chatwoot is their working
+      // inbox; email/WhatsApp below are optional monitoring copies controlled by
+      // Team > Notification Settings. A Chatwoot outage cannot reject or retry a
+      // lead that is already safely stored in the CRM.
+      let chatwootResult = null;
+      const chatwootEnabled = isAdLandingSource(source)
+        ? await loadChatwootLeadEnabled(supabase)
+        : false;
+      if (chatwootEnabled) {
+        // The chat is handed over with nobody on it. Chatwoot decides who takes
+        // a Google Ads lead, because the agent it would otherwise be given to is
+        // not necessarily the one at their desk - which is the whole reason
+        // these leads were going cold. The CRM still records the owner on the
+        // lead itself; it is simply never sent on. This holds for a returning
+        // customer too: the CRM keeps them with their agent, the chat does not.
+        chatwootResult = await withDeadline(
+          sendAdLeadToChatwoot({
+            leadId,
+            name,
+            email,
+            phone,
+            source,
+            qualificationLines: landingQualificationNotes(qualification),
+            campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
+            assigneeEmail: '',
+            dueAt,
+          }),
+          CHATWOOT_STAGE_MS,
+          { configured: true, sent: false, error: `Chatwoot did not answer within ${CHATWOOT_STAGE_MS / 1000}s` },
         );
-        if (statusError) console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
-      } catch (statusError) {
-        console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
-      }
-    }
-
-    // Saving the lead is the source of truth. A temporary email-provider issue
-    // must never make the browser retry and create duplicate CRM activity.
-    let notificationResult = null;
-    if (hasLandingQualification(qualification)) {
-      try {
-        notificationResult = await sendLandingLeadAlert({
-          supabase,
-          leadId,
-          enquiryAt: nowIso,
-          name,
-          email,
-          phone,
-          source,
-          qualification,
-          campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
-          assignedAgent: owner,
-          dueAt,
-          slaMinutes: landingSettings.responseSlaMinutes,
-        });
-      } catch (alertError) {
-        console.error('[leads/contact] lead alert failed:', alertError);
-      }
-
-      // Campaign leads only. The storefront form reaches this same route, and
-      // buzzing an agent's personal phone for every catalog enquiry is how an
-      // alert stops being read. Sent after the email and in its own try, so a
-      // WhatsApp outage cannot cost us the email as well.
-      if (isAdLandingSource(source) && !notificationResult?.outbox) {
-        try {
-          const { whatsapp } = await getLeadAlertAudience(supabase, { source, owner });
-          const result = await sendLandingLeadWhatsAppAlerts(supabase, {
-            name, phone, qualification, dueAt, recipients: whatsapp,
-          });
-          if (result.sent) console.log(`[leads/contact] WhatsApp lead alert sent to ${result.sent} recipient(s)`);
-        } catch (whatsAppError) {
-          console.error('[leads/contact] WhatsApp lead alert failed:', whatsAppError);
+        if (chatwootResult.assignmentError) {
+          console.warn('[leads/contact] Chatwoot chat left unassigned:', chatwootResult.assignmentError);
+        }
+        if (!chatwootResult.sent) {
+          console.error('[leads/contact] Chatwoot lead delivery failed:', chatwootResult.error || 'not configured');
         }
       }
-    }
 
+      // Kept on the lead so the Leads tab shows which chats failed; the logs alone
+      // made a lost chat invisible. Optional columns: add-chatwoot-status-to-leads.sql.
+      if (leadId && isAdLandingSource(source)) {
+        try {
+          const { error: statusError } = await writeDroppingMissingColumns(
+            chatwootLeadColumns(chatwootResult, { enabled: chatwootEnabled }),
+            [
+              'chatwoot_status',
+              'chatwoot_error',
+              'chatwoot_conversation_id',
+              'chatwoot_contact_id',
+              'chatwoot_conversation_status',
+              'chatwoot_assignee_email',
+              'chatwoot_conversation_url',
+              'chatwoot_synced_at',
+            ],
+            (row) => (Object.keys(row).length
+              ? supabase.from('catalog_leads').update(row).eq('id', leadId)
+              : Promise.resolve({ error: null })),
+          );
+          if (statusError) console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
+        } catch (statusError) {
+          console.warn('[leads/contact] Chatwoot status not saved:', statusError.message);
+        }
+      }
+
+      // Saving the lead is the source of truth. A temporary email-provider issue
+      // must never make the browser retry and create duplicate CRM activity.
+      let notificationResult = null;
+      if (hasLandingQualification(qualification)) {
+        try {
+          notificationResult = await sendLandingLeadAlert({
+            supabase,
+            leadId,
+            enquiryAt: nowIso,
+            name,
+            email,
+            phone,
+            source,
+            qualification,
+            campaign: [utmSource, utmMedium, utmCampaign].filter(Boolean).join(' / '),
+            assignedAgent: owner,
+            dueAt,
+            slaMinutes: landingSettings.responseSlaMinutes,
+          });
+        } catch (alertError) {
+          console.error('[leads/contact] lead alert failed:', alertError);
+        }
+
+        // Campaign leads only. The storefront form reaches this same route, and
+        // buzzing an agent's personal phone for every catalog enquiry is how an
+        // alert stops being read. Sent after the email and in its own try, so a
+        // WhatsApp outage cannot cost us the email as well.
+        if (isAdLandingSource(source) && !notificationResult?.outbox) {
+          try {
+            const { whatsapp } = await getLeadAlertAudience(supabase, { source, owner });
+            const result = await sendLandingLeadWhatsAppAlerts(supabase, {
+              name, phone, qualification, dueAt, recipients: whatsapp,
+            });
+            if (result.sent) console.log(`[leads/contact] WhatsApp lead alert sent to ${result.sent} recipient(s)`);
+          } catch (whatsAppError) {
+            console.error('[leads/contact] WhatsApp lead alert failed:', whatsAppError);
+          }
+        }
+      }
+      } catch (backgroundError) {
+        // Already logged in the branches above; this is the last net so a
+        // failure here can never surface to the visitor.
+        console.error('[leads/contact] post-reply work failed:', backgroundError);
+      }
+    });
+
+    // The handover and the alerts are reported as 'queued' rather than with a
+    // result: they have not run yet, and nothing reads these fields - the
+    // landing page only checks that the response was ok. The Leads tab is where
+    // a failed handover shows up, from the row itself.
     return withCors({
       success: true,
       leadId: saved?.id || existing?.id || null,
       record: existing ? 'updated' : 'created',
       assignedAgent: owner || null,
-      chatwoot: isAdLandingSource(source)
-        ? {
-          enabled: chatwootEnabled,
-          configured: chatwootEnabled ? chatwootResult?.configured === true : null,
-          sent: chatwootEnabled ? chatwootResult?.sent === true : false,
-        }
-        : undefined,
-      notifications: notificationResult?.outbox
-        ? {
-          tracked: true,
-          status: notificationResult.status || notificationResult.job?.status || 'processing',
-          sent: notificationResult.sent ?? null,
-          failed: notificationResult.failed ?? null,
-        }
-        : { tracked: false, status: 'legacy' },
+      chatwoot: isAdLandingSource(source) ? { queued: true } : undefined,
+      notifications: { tracked: false, status: 'queued' },
     });
   } catch (err) {
     console.error('[leads/contact] failed:', err);

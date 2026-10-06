@@ -153,3 +153,45 @@ test('the job is scheduled', async () => {
   assert.ok(entry, 'an unscheduled sync never runs, and the CRM owner silently drifts again');
   assert.equal(entry.schedule, '*/15 * * * *');
 });
+
+/* The owner has to read the same on every screen. The Customers tab works
+   ownership out from closed orders, and a CRM lead has none - so a lead the
+   Leads tab showed as Kattia's read "Owner: Unassigned" there. */
+
+test('the Customers tab falls back to the lead own agent', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const crm = await readFile(new URL('../src/components/admin/CustomersCRM.js', import.meta.url), 'utf8');
+
+  assert.match(crm, /leadAgent:/, 'the lead row agent has to be carried onto the customer');
+  assert.match(
+    crm,
+    /findHistoricalAgent\(history, \{[\s\S]{0,160}\}\)\?\.agent \|\| customer\.leadAgent/,
+    'order history must still win, with the lead agent only as the fallback',
+  );
+});
+
+/* A Google Ads lead that never reached Chatwoot is not being worked by anyone,
+   because Chatwoot is where these are answered. The handover now runs after the
+   visitor has been answered, so a failure there is invisible to them - it has
+   to be retried, and visible until it lands. */
+
+test('the job retries a lead that never reached Chatwoot', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const job = await readFile(new URL('../src/app/api/cron/chatwoot-owner-sync/route.js', import.meta.url), 'utf8');
+
+  assert.match(job, /\.is\('chatwoot_conversation_id', null\)/, 'it has to look for leads with no chat');
+  assert.match(job, /sendAdLeadToChatwoot\(/, 'and actually send them');
+  assert.match(job, /isAdLandingSource\(row\.lead_source\)/, 'only the paid ad leads');
+  assert.match(job, /assigneeEmail: ''/, 'a retry must not start assigning owners again');
+  assert.match(job, /chatwootLeadColumns\(result\)/, 'the outcome has to be written back, or it resends forever');
+  assert.match(job, /STILL not in Chatwoot/, 'a retry that fails again has to be loud');
+});
+
+test('the Leads screen shows a Google Ads lead that is missing from Chatwoot', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const screen = await readFile(new URL('../src/components/admin/LeadsManager.js', import.meta.url), 'utf8');
+
+  assert.match(screen, /not in Chatwoot/, 'a dash made the one case worth noticing look like the quiet one');
+  assert.match(screen, /isGoogleAdsLead\(lead\)/, 'only ad leads belong in Chatwoot, so only they can be missing from it');
+  assert.match(screen, /retrying every 15 min/, 'say it is being retried, so nobody re-enters it by hand');
+});

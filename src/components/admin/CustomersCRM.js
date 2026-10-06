@@ -412,6 +412,10 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
         lang: lead.language || 'es',
         purchasedItems: [],
         owner: null,
+        // The agent on the lead row itself. Ownership below is worked out from
+        // closed orders, and a lead has none - so a lead that the Leads tab
+        // plainly shows as Kattia's read "Owner: Unassigned" on this screen.
+        leadAgent: String(lead.sales_agent || lead.owner || lead.assigned_to || '').trim() || null,
       };
       if (email) idByEmail.set(email, id);
       if (tail.length === 8) idByPhoneTail.set(tail, id);
@@ -426,10 +430,13 @@ export default function CustomersCRM({ orders = [], abandonedCarts = [], leads =
     const resolveAgent = buildAgentNameResolver(agentProfiles);
     const history = buildAgentHistory(orders, { resolveAgent });
     for (const customer of Object.values(map)) {
+      // Order history still wins - the agent who closed the earliest order keeps
+      // the customer. The lead's own agent is the fallback for somebody who has
+      // not ordered yet, which is every CRM lead.
       customer.owner = findHistoricalAgent(history, {
         phone: customer.phone || customer.whatsappWaId,
         email: customer.email,
-      })?.agent || null;
+      })?.agent || customer.leadAgent || null;
     }
 
     // Convert to array and sort by customer type (Customers first, then Leads) and LTV/Last updated

@@ -3,6 +3,9 @@ import { verifyCronRequest } from '@/lib/cronAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { chatwootOwnerColumns, planChatwootOwnerUpdates } from '@/lib/chatwootOwnerSync.mjs';
+import { chatwootLeadColumns, loadChatwootLeadEnabled, sendAdLeadToChatwoot } from '@/lib/chatwootLead.mjs';
+import { landingQualificationNotes } from '@/lib/landingLead.mjs';
+import { isAdLandingSource } from '@/lib/leadNotificationRecipients';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,6 +68,50 @@ export async function GET(request) {
   const since = new Date(Date.now() - LEAD_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
   try {
+    // A lead that never reached Chatwoot is the one that costs money: nobody is
+    // looking at it, because Chatwoot is where these are worked. The handover
+    // now runs after the visitor has been answered, so a failure there is
+    // invisible to them and must be retried here rather than written off.
+    let resent = 0;
+    const resendFailures = [];
+    if (await loadChatwootLeadEnabled(supabase)) {
+      const { data: missing } = await supabase
+        .from('catalog_leads')
+        .select('id, name, email, phone, contact_value, lead_source, qualification_data, response_due_at, utm_source, utm_medium, utm_campaign')
+        .is('chatwoot_conversation_id', null)
+        .gte('created_at', since)
+        .limit(25);
+
+      for (const lead of (missing || []).filter((row) => isAdLandingSource(row.lead_source))) {
+        const result = await sendAdLeadToChatwoot({
+          leadId: lead.id,
+          name: lead.name || lead.contact_value,
+          email: lead.email,
+          phone: lead.phone,
+          source: lead.lead_source,
+          qualificationLines: landingQualificationNotes(lead.qualification_data || {}),
+          campaign: [lead.utm_source, lead.utm_medium, lead.utm_campaign].filter(Boolean).join(' / '),
+          // Still handed over with nobody on it; Chatwoot decides, as it does
+          // on the first attempt.
+          assigneeEmail: '',
+          dueAt: lead.response_due_at,
+        });
+        await writeDroppingMissingColumns(
+          chatwootLeadColumns(result),
+          ['chatwoot_status', 'chatwoot_error', 'chatwoot_conversation_id', 'chatwoot_contact_id',
+            'chatwoot_conversation_status', 'chatwoot_assignee_email', 'chatwoot_conversation_url', 'chatwoot_synced_at'],
+          (row) => supabase.from('catalog_leads').update(row).eq('id', lead.id),
+        );
+        if (result.sent) {
+          resent += 1;
+          console.log(`[chatwoot-owner-sync] resent lead ${lead.id} to Chatwoot as conversation ${result.conversationId}`);
+        } else {
+          resendFailures.push(lead.id);
+          console.error(`[chatwoot-owner-sync] lead ${lead.id} STILL not in Chatwoot: ${result.error || 'unknown'}`);
+        }
+      }
+    }
+
     const { data: leads, error: leadError } = await supabase
       .from('catalog_leads')
       .select('id, sales_agent, chatwoot_conversation_id')
@@ -111,6 +158,8 @@ export async function GET(request) {
 
     return NextResponse.json({
       ok: true,
+      chatwootResent: resent,
+      stillMissingFromChatwoot: resendFailures,
       leadsChecked: (leads || []).length,
       conversationsRead: Object.keys(assignees).length,
       ownersChanged: changed,
