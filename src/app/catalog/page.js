@@ -289,15 +289,38 @@ function shelfNoteHash(key) {
   return h >>> 0;
 }
 
-/** Short orange line on a catalog card — real low stock only.
- *  Fake "in N carts" numbers used to sit here; two neighbours both saying
- *  "En 3 carritos" is how that read on the shelf. Stock under 20 is still
- *  worth calling out because the figure comes from inventoryCount. */
-function catalogShelfNote({ inStock, units, lang }) {
-  if (!inStock) return '';
+/** Fake cart count in the 2–4 range, stable per product. When the neighbour
+ *  already used the preferred number, step to the next so two cards in a row
+ *  never both say "En 3 carritos". */
+function shelfCartCount(key, avoid = null) {
+  const preferred = 2 + (shelfNoteHash(key) % 3);
+  if (avoid == null || preferred !== avoid) return preferred;
+  return preferred === 4 ? 2 : preferred + 1;
+}
+
+/**
+ * Short orange line on a catalog card. The first two in-stock products always
+ * get a cart note; a few others do too (stable from the product key). Cart
+ * counts stay in 2–4 and never match the previous card's cart count on the
+ * shelf. A "left" number is real stock, only when it is already low.
+ *
+ * Returns { text, carts } so the grid can pass the last cart count into the
+ * next card and skip a duplicate.
+ */
+function catalogShelfNote({ key, lead, inStock, units, lang, avoidCarts = null }) {
+  if (!inStock) return { text: '', carts: null };
   const low = Number.isFinite(units) && units > 0 && units < 20;
-  if (!low) return '';
-  return lang === 'en' ? `Only ${units} left` : `Quedan ${units}`;
+  const showCarts = lead || shelfNoteHash(key) % 5 === 0;
+  if (!showCarts && !low) return { text: '', carts: null };
+  const en = lang === 'en';
+  if (showCarts) {
+    const carts = shelfCartCount(key, avoidCarts);
+    const text = low
+      ? (en ? `In ${carts} carts · ${units} left` : `En ${carts} carritos · quedan ${units}`)
+      : (en ? `In ${carts} carts` : `En ${carts} carritos`);
+    return { text, carts };
+  }
+  return { text: en ? `Only ${units} left` : `Quedan ${units}`, carts: null };
 }
 
 /**
@@ -4495,6 +4518,8 @@ export default function CatalogPage() {
           <>
           <div className={`product-grid ${viewMode}-view`}>
             {(() => {
+              let leadNotes = 2;
+              let lastCarts = null;
               return groupCatalogCards(filteredProducts).map((card, idx) => {
               const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
               const fallback = cardOpeningItem(card, (prod) => isBacWater(prod.product) || isInStock(prod.status));
@@ -4602,12 +4627,18 @@ export default function CatalogPage() {
                   </div>
                   <div className="product-info">
                     {(() => {
+                      const lead = inStock && !isBac && leadNotes > 0;
+                      if (lead) leadNotes -= 1;
                       const scarcity = catalogShelfNote({
+                        key: card.key,
+                        lead,
                         inStock: inStock && !isBac,
                         units: Number(p.inventoryCount),
                         lang,
+                        avoidCarts: lastCarts,
                       });
-                      return <div className="card-scarcity">{scarcity}</div>;
+                      if (scarcity.carts != null) lastCarts = scarcity.carts;
+                      return <div className="card-scarcity">{scarcity.text}</div>;
                     })()}
                     <h3 className="product-name">{showSizes ? catalogFacingCompound(card.compound, lang) : catalogFacingName(p.product, lang)}</h3>
                     {(() => {
@@ -5846,6 +5877,8 @@ export default function CatalogPage() {
                   : `Agrega ${unlockNeed} ${unlockNeed === 1 ? 'vial' : 'viales'} más para ${unlockPct}% de descuento`)
                 : '';
               const shelf = catalogShelfNote({
+                key: compoundKey,
+                lead: true,
                 inStock: inStock && !isBacWater(selectedProduct.product),
                 units,
                 lang,
@@ -5885,7 +5918,7 @@ export default function CatalogPage() {
                           <Share2 size={16} />
                         </button>
                       </div>
-                      {shelf && <p className="product-page-left">{shelf}</p>}
+                      {shelf.text && <p className="product-page-left">{shelf.text}</p>}
                       <h2 id="product-detail-title">{catalogFacingCompound(catalogCompoundAndSize(selectedProduct).compound, lang)}</h2>
                       <div className="product-page-rating">{renderRatingSummary(selectedProduct.product)}</div>
                       <p className="product-page-price">
