@@ -289,24 +289,15 @@ function shelfNoteHash(key) {
   return h >>> 0;
 }
 
-/** Short orange line on a catalog card. The first two in-stock products always
- *  get one. A few others do too, picked from the product name so the same card
- *  keeps the same line on refresh. Cart counts stay in the 2–4 range. A "left"
- *  number is the real stock count, and only when it is already low. */
-function catalogShelfNote({ key, lead, inStock, units, lang }) {
+/** Short orange line on a catalog card — real low stock only.
+ *  Fake "in N carts" numbers used to sit here; two neighbours both saying
+ *  "En 3 carritos" is how that read on the shelf. Stock under 20 is still
+ *  worth calling out because the figure comes from inventoryCount. */
+function catalogShelfNote({ inStock, units, lang }) {
   if (!inStock) return '';
   const low = Number.isFinite(units) && units > 0 && units < 20;
-  const showCarts = lead || shelfNoteHash(key) % 5 === 0;
-  if (!showCarts && !low) return '';
-  const carts = 2 + (shelfNoteHash(key) % 3);
-  const en = lang === 'en';
-  if (showCarts && low) {
-    return en ? `In ${carts} carts · ${units} left` : `En ${carts} carritos · quedan ${units}`;
-  }
-  if (showCarts) {
-    return en ? `In ${carts} carts` : `En ${carts} carritos`;
-  }
-  return en ? `Only ${units} left` : `Quedan ${units}`;
+  if (!low) return '';
+  return lang === 'en' ? `Only ${units} left` : `Quedan ${units}`;
 }
 
 /**
@@ -4504,7 +4495,6 @@ export default function CatalogPage() {
           <>
           <div className={`product-grid ${viewMode}-view`}>
             {(() => {
-              let leadNotes = 2;
               return groupCatalogCards(filteredProducts).map((card, idx) => {
               const chosen = card.items.find((item) => item.product.product === dosagePick[card.key]);
               const fallback = cardOpeningItem(card, (prod) => isBacWater(prod.product) || isInStock(prod.status));
@@ -4612,14 +4602,9 @@ export default function CatalogPage() {
                   </div>
                   <div className="product-info">
                     {(() => {
-                      const units = Number(p.inventoryCount);
-                      const lead = inStock && !isBac && leadNotes > 0;
-                      if (lead) leadNotes -= 1;
                       const scarcity = catalogShelfNote({
-                        key: card.key,
-                        lead,
                         inStock: inStock && !isBac,
-                        units,
+                        units: Number(p.inventoryCount),
                         lang,
                       });
                       return <div className="card-scarcity">{scarcity}</div>;
@@ -5861,8 +5846,6 @@ export default function CatalogPage() {
                   : `Agrega ${unlockNeed} ${unlockNeed === 1 ? 'vial' : 'viales'} más para ${unlockPct}% de descuento`)
                 : '';
               const shelf = catalogShelfNote({
-                key: compoundKey,
-                lead: true,
                 inStock: inStock && !isBacWater(selectedProduct.product),
                 units,
                 lang,
