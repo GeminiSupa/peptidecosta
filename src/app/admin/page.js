@@ -2732,7 +2732,20 @@ Core Rules:
     }
     setLoadingProducts(false);
 
+    // Everything from here down used to run strictly one table after another,
+    // so the page waited for the SUM of every fetch before it showed anything —
+    // on live data that is the best part of a minute. They are all independent
+    // of each other bar one real dependency (the abandoned-cart screen needs
+    // the orders list to tell which carts already converted), so each one now
+    // starts straight away and clears its own spinner as its answer lands. The
+    // wait becomes the slowest single table instead of all of them added up.
+    //
+    // Each task keeps its own try/catch, exactly as before, so one table
+    // failing still cannot stop the others — and because they are started here
+    // and only awaited at the bottom, nothing is left unhandled in between.
+
     // 2. Fetch Orders
+    const ordersTask = (async () => {
     if (isSupabaseConfigured && supabase) {
       try {
         const data = await fetchAllRows('orders', 'created_at', false);
@@ -2746,9 +2759,15 @@ Core Rules:
       }
     }
     setLoadingOrders(false);
+    })();
 
     // 3. Fetch Abandoned Carts
+    const cartsTask = (async () => {
+    // Flag the spinner before the wait, not after, so a reload cannot show the
+    // previous visit's cart list as though it were current.
     setLoadingAbandonedCarts(true);
+    // Waits on the orders task only — not on reviews, leads or anything else.
+    await ordersTask;
     if (isSupabaseConfigured && supabase) {
       try {
         const data = await fetchAllRows('abandoned_carts', 'last_updated', false, { col: 'status', val: 'active' });
@@ -2784,8 +2803,10 @@ Core Rules:
       }
     }
     setLoadingAbandonedCarts(false);
+    })();
 
     // 4. Fetch Reviews
+    const reviewsTask = (async () => {
     setLoadingReviews(true);
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2799,8 +2820,10 @@ Core Rules:
       }
     }
     setLoadingReviews(false);
+    })();
 
     // 5. Fetch Leads
+    const leadsTask = (async () => {
     setLoadingLeads(true);
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2820,7 +2843,10 @@ Core Rules:
       }
     }
     setLoadingLeads(false);
+    })();
 
+    // The two unread badges in the sidebar (new inquiries, unread team chat).
+    const badgeCountsTask = (async () => {
     if (isAuthenticated) {
       try {
         const res = await adminFetch('/api/admin/inquiries');
@@ -2848,8 +2874,10 @@ Core Rules:
         }
       }
     }
+    })();
 
     // 5. Fetch Blogs
+    const blogsTask = (async () => {
     setLoadingBlogs(true);
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2858,8 +2886,10 @@ Core Rules:
       } catch (err) { console.error("Failed to load blogs:", err); }
     }
     setLoadingBlogs(false);
+    })();
 
     // 6. Fetch Site Settings
+    const settingsTask = (async () => {
     setLoadingSettings(true);
     if (isSupabaseConfigured && supabase) {
       try {
@@ -2910,16 +2940,30 @@ Core Rules:
       }
     }
     setLoadingSettings(false);
+    })();
 
     // 7. Fetch Product Views
-    if (isSupabaseConfigured && supabase) {
+    //
+    // This was the single slowest thing on the page: 20,000-odd rows, which
+    // Supabase only hands over 1000 at a time, so the browser made twenty-one
+    // round trips before the portal would show. The endpoint does that paging
+    // server-side next to the database and answers in one request, sending only
+    // the three fields the leads screen actually reads (contact_value,
+    // product_name, created_at) and dropping the views with no contact_value,
+    // which can never be matched to a lead anyway.
+    const productViewsTask = (async () => {
+    if (isAuthenticated) {
       try {
-        const data = await fetchAllRows('product_views', 'created_at', false);
-        if (data) setProductViews(data);
+        const res = await adminFetch('/api/admin/leads/product-views');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load product views');
+        setProductViews(data.views || []);
       } catch (err) { console.error("Failed to load product views:", err); }
     }
+    })();
 
     // 8. Fetch Facebook Notifications
+    const facebookTask = (async () => {
     setLoadingFbNotifications(true);
     if (!resolveTabAccess('facebook', adminProfile)) {
       setFacebookNotifications([]);
@@ -2934,9 +2978,11 @@ Core Rules:
       }
     }
     setLoadingFbNotifications(false);
+    })();
 
     // 9. Fetch WhatsApp conversations and visible message log through the
     // admin API so assignment filtering is enforced server-side.
+    const whatsappTask = (async () => {
     setLoadingWhatsappMessages(true);
     const canLoadSalesWhatsApp = resolveTabAccess('whatsapp_ai', adminProfile);
     const canLoadWhatsAppDevice = resolveTabAccess('wa_session', adminProfile);
@@ -2979,6 +3025,23 @@ Core Rules:
       setWhatsappChannels([]);
     }
     setLoadingWhatsappMessages(false);
+    })();
+
+    // Only to keep loadAdminData's promise meaning "everything has landed" for
+    // its callers; each panel already un-spinnered itself above. Every task
+    // swallows its own errors, so this cannot reject.
+    await Promise.all([
+      ordersTask,
+      cartsTask,
+      reviewsTask,
+      leadsTask,
+      badgeCountsTask,
+      blogsTask,
+      settingsTask,
+      productViewsTask,
+      facebookTask,
+      whatsappTask,
+    ]);
   };
 
   useEffect(() => {
