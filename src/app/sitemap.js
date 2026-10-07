@@ -7,11 +7,21 @@ export default async function sitemap() {
   // catalog's own sitemap asked Google to index pages that live elsewhere.
   const baseUrl = LIVE_SITE_URL;
 
+  // `supabase` is null when the Supabase environment variables are absent, and
+  // this runs at BUILD time, while /sitemap.xml is prerendered. Calling .from()
+  // on null threw and took the whole build down with it — which is what failed
+  // the first branch preview of this project, where those variables are not
+  // set. The product and blog URLs are the only part that needs the database,
+  // so without one we still publish the static pages rather than nothing.
+  const databaseReady = Boolean(supabase);
+
   // Fetch blog posts for dynamic routes
-  const { data: posts } = await supabase
-    .from('blog_posts')
-    .select('slug, updated_at, created_at')
-    .eq('published', true);
+  const { data: posts } = databaseReady
+    ? await supabase
+        .from('blog_posts')
+        .select('slug, updated_at, created_at')
+        .eq('published', true)
+    : { data: [] };
 
   const blogUrls = (posts || []).map((post) => ({
     url: `${baseUrl}/blog/${post.slug}`,
@@ -46,10 +56,12 @@ export default async function sitemap() {
     priority: route === '' ? 1 : route === '/catalog' ? 0.9 : 0.8,
   }));
 
-  const [{ data: productRows }, { data: hiddenRow }] = await Promise.all([
-    supabase.from('products').select('product'),
-    supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle(),
-  ]);
+  const [{ data: productRows }, { data: hiddenRow }] = databaseReady
+    ? await Promise.all([
+        supabase.from('products').select('product'),
+        supabase.from('site_settings').select('value').eq('id', 'hidden_products').maybeSingle(),
+      ])
+    : [{ data: [] }, { data: null }];
   const hidden = new Set(Array.isArray(hiddenRow?.value?.names) ? hiddenRow.value.names : []);
   const seenSlugs = new Set();
   const productUrls = [];
