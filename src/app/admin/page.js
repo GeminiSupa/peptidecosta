@@ -2554,22 +2554,83 @@ Core Rules:
       return;
     }
 
-    // Helper to bypass Supabase 1000 row limit
+    // Helper to bypass Supabase 1000 row limit.
+    //
+    // This used to walk the table a page at a time, each request waiting for
+    // the one before it. On live data catalog_leads is seven pages and orders is
+    // two, and every one of those waits costs the full round trip between the
+    // admin's browser and the database — which from outside Costa Rica is most
+    // of the time spent. So: ask for the first page and the row count together,
+    // and if there is more, ask for every remaining page at once.
+    //
+    // It deliberately keeps using the browser's own Supabase client rather than
+    // moving behind an admin endpoint. Routes under /api/admin are gated per
+    // tab, and several active staff do not have the leads or orders tab, so
+    // moving these reads server-side would quietly empty screens they can see
+    // today. Same client, same row-level security, same rows — only the waiting
+    // changes.
+    const step = 1000;
     const fetchAllRows = async (table, orderCol, ascending = false, matchEq = null) => {
-      let allData = [];
-      let from = 0;
-      const step = 1000;
-      while (true) {
-        let q = supabase.from(table).select('*').order(orderCol, { ascending }).range(from, from + step - 1);
-        if (matchEq) q = q.eq(matchEq.col, matchEq.val);
-        const { data, error } = await q;
-        if (error) { console.error(`Error fetching ${table}:`, error); break; }
-        if (!data || data.length === 0) break;
-        allData = [...allData, ...data];
-        if (data.length < step) break;
-        from += step;
+      const pageQuery = (from) => {
+        const q = supabase.from(table).select('*').order(orderCol, { ascending }).range(from, from + step - 1);
+        return matchEq ? q.eq(matchEq.col, matchEq.val) : q;
+      };
+
+      // The first page and the row count go out together, so a table that fits
+      // in one page — most of them — costs the same single wait it always did,
+      // while a big one already knows how many more pages to ask for.
+      const countQuery = () => {
+        const q = supabase.from(table).select('*', { count: 'exact', head: true });
+        return matchEq ? q.eq(matchEq.col, matchEq.val) : q;
+      };
+
+      const [first, counted] = await Promise.all([pageQuery(0), countQuery()]);
+
+      if (first.error) { console.error(`Error fetching ${table}:`, first.error); return []; }
+
+      const allData = [...(first.data || [])];
+
+      // Short page means that was the lot. Nothing more to ask for, whatever the
+      // count said.
+      if (allData.length >= step) {
+        const total = (!counted.error && typeof counted.count === 'number') ? counted.count : null;
+
+        if (total === null) {
+          // No usable count — walk the rest a page at a time rather than guess.
+          let from = step;
+          while (true) {
+            const { data, error } = await pageQuery(from);
+            if (error) { console.error(`Error fetching ${table}:`, error); break; }
+            if (!data || data.length === 0) break;
+            allData.push(...data);
+            if (data.length < step) break;
+            from += step;
+          }
+        } else {
+          const pages = Math.ceil(total / step);
+          const rest = await Promise.all(
+            Array.from({ length: Math.max(0, pages - 1) }, (_, i) => pageQuery((i + 1) * step))
+          );
+          for (const { data, error } of rest) {
+            // One page failing is reported and skipped, as it was before — a
+            // partly filled table beats an empty one.
+            if (error) { console.error(`Error fetching ${table}:`, error); continue; }
+            if (data) allData.push(...data);
+          }
+        }
       }
-      return allData;
+
+      // A row inserted while the pages were in flight shifts the ordering under
+      // us and can land the same row in two pages. The sequential walk had the
+      // same race over a longer window and simply kept the duplicate; dedupe it
+      // instead, so the counts and totals built from this list stay honest.
+      const seen = new Set();
+      return allData.filter((row) => {
+        if (!row || row.id === undefined || row.id === null) return true;
+        if (seen.has(row.id)) return false;
+        seen.add(row.id);
+        return true;
+      });
     };
 
     setLoadingProducts(true);
@@ -8206,7 +8267,13 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(56, 189, 248, 0.05)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
                           <span style={{ fontSize: '0.85rem', color: '#38bdf8', fontWeight: 'bold' }}>{v.product_name}</span>
                           <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
-                            {v.viewed_at ? new Date(v.viewed_at).toLocaleTimeString() : 'Viewed'}
+                            {/* product_views has no viewed_at column, so this
+                                always read "Viewed" and never showed a time.
+                                created_at is the column that exists, and it is
+                                shown in Costa Rica time like every other
+                                business timestamp — toLocaleTimeString() would
+                                have used the reader's own clock. */}
+                            {formatCrDate(v.created_at, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) || 'Viewed'}
                           </span>
                         </div>
                       ))}
