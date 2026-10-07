@@ -623,6 +623,35 @@ export default function LeadsManager({
     });
   };
 
+  // Browsing history, grouped by the contact it belongs to, built once per
+  // change instead of re-scanned per lead.
+  //
+  // Both the pipeline cards and the table's "Browsing History" column used to
+  // run productViews.filter(...) for every row they drew. The pipeline draws
+  // every lead there is, so on live data that was 6,300 leads each scanning
+  // 15,300 view rows — around 96 million comparisons, redone on every redraw,
+  // including every drag of a card. One pass to build the map costs 15,300,
+  // and each lead then does a single lookup.
+  const viewsByContact = useMemo(() => {
+    const map = new Map();
+    for (const view of productViews || []) {
+      const key = view?.contact_value;
+      if (key === undefined || key === null) continue;
+      const bucket = map.get(key);
+      if (bucket) bucket.push(view);
+      else map.set(key, [view]);
+    }
+    return map;
+  }, [productViews]);
+
+  // Same array identity for every lead with no views, so a card that renders it
+  // does not see a new empty array on each pass.
+  const NO_VIEWS = useMemo(() => [], []);
+  const viewsForLead = useCallback(
+    (lead) => viewsByContact.get(lead?.contact_value) || NO_VIEWS,
+    [viewsByContact, NO_VIEWS]
+  );
+
   const pipelineColumns = useMemo(() => {
     const columns = [
       { id: 'New', label: 'New', color: '#38bdf8', helper: 'Fresh leads waiting for first touch' },
@@ -1209,7 +1238,7 @@ export default function LeadsManager({
                   <div className="leads-kanban-empty">Drop leads here</div>
                 ) : column.leads.map(lead => {
                   const conversion = getLeadConversion(lead);
-                  const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                  const views = viewsForLead(lead);
                   const contactValue = lead.contact_value || lead.phone || lead.email || 'Lead';
                   const currentStage = normalizeLeadStage(lead, conversion);
                   return (
@@ -1618,7 +1647,7 @@ export default function LeadsManager({
 
                     <td data-label="Browsing History" style={{ padding: '10px 12px' }}>
                       {(() => {
-                        const views = productViews.filter(v => v.contact_value === lead.contact_value);
+                        const views = viewsForLead(lead);
                         if (views.length === 0) return <span style={{ color: '#64748b', fontSize: '0.8rem' }}>No views</span>;
                         return (
                           <button 
