@@ -16,7 +16,10 @@ export const GOOGLE_REVIEW_URL = 'https://g.page/r/CfFdfEu7WZOHEBM/review';
 // Public profiles. Tracking params stripped. Footer, Facebook badges, and
 // Organization sameAs all use these. The old /reviews page is retired below.
 export const INSTAGRAM_PROFILE_URL = 'https://www.instagram.com/researchpeptidescr';
-export const FACEBOOK_PROFILE_URL = 'https://www.facebook.com/share/1JQPdcc89z/';
+// Updated by Omer on 2026-10-07. The ?mibextid= share token he sent with it is
+// stripped, same as every other profile here: it identifies the share, not the
+// page, and it does not belong in a link we hand to every visitor.
+export const FACEBOOK_PROFILE_URL = 'https://www.facebook.com/share/1829iRmTLy/';
 export const LINKEDIN_PROFILE_URL = 'https://www.linkedin.com/company/peptides-costa-rica/';
 
 export const FACEBOOK_REVIEW_URL = FACEBOOK_PROFILE_URL;
@@ -35,6 +38,8 @@ const LEGACY_FACEBOOK_REVIEW_URLS = new Set([
   'https://www.facebook.com/Peptidescostaricaresearch/reviews',
   'https://www.facebook.com/Peptidescostaricaresearch',
   'https://www.facebook.com/costaricapeptides/reviews',
+  // Retired 2026-10-07 when the share link changed.
+  'https://www.facebook.com/share/1JQPdcc89z/',
 ]);
 
 export const TRUSTPILOT_REVIEW_URLS = {
