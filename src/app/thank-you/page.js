@@ -2,11 +2,20 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, ArrowLeft, ShieldAlert, Sparkles, Send, Calendar } from 'lucide-react';
+import {
+  CheckCircle2, ArrowLeft, ShieldAlert, Sparkles, Send, Calendar,
+  Smartphone, ShoppingCart, CreditCard, Package, ShieldCheck, ChevronRight,
+} from 'lucide-react';
 import { safeLocalStorage as localStorage } from '@/lib/storage';
 import { useBusinessLinks } from '@/hooks/useBusinessLinks';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
 import GoogleCustomerReviews from '@/components/GoogleCustomerReviews';
+
+// Web app at app.peptidescostarica.net — same destination the launch email
+// and QR point at. UTM keeps thank-you traffic countable in analytics.
+const APP_URL = 'https://app.peptidescostarica.net';
+
+const APP_FEATURE_ICONS = [ShoppingCart, CreditCard, Package, ShieldCheck];
 
 function ThankYouContent() {
   const { links } = useBusinessLinks();
@@ -20,6 +29,9 @@ function ThankYouContent() {
   const [paidByCard, setPaidByCard] = useState(false);
   const [reviewClicked, setReviewClicked] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
+
+  const appHref = `${APP_URL}/?utm_source=thank_you&utm_medium=web&utm_campaign=app_launch&lang=${lang}`;
+  const appImageSrc = lang === 'en' ? '/email-app-launch-en.jpg' : '/email-app-launch-es.jpg';
 
   useEffect(() => {
     setMounted(true);
@@ -59,6 +71,13 @@ function ThankYouContent() {
       referralCopy: "Copy Referral Link",
       referralCopied: "Copied!",
       referralWhatsapp: "Share on WhatsApp",
+      appEyebrow: "New app",
+      appTitle: "Take Peptides CR with you",
+      appBody: "Products, protocols, tracking, and lab verification — open it on your phone in one tap.",
+      appFeatures: ["Shop", "Pay", "Track", "Verify"],
+      appButton: "Open the app",
+      appUrlLabel: "app.peptidescostarica.net",
+      appHint: "On a computer? Scan the QR in the image with your phone.",
       accountTitle: "📦 Track this order",
       accountBody: "Create your account with the same email you just used, and this order — along with every order you have placed before — appears in it automatically. Track shipments and reorder in one tap.",
       accountButton: "Set up my account",
@@ -85,6 +104,13 @@ function ThankYouContent() {
       referralCopy: "Copiar Enlace de Referido",
       referralCopied: "¡Copiado!",
       referralWhatsapp: "Compartir por WhatsApp",
+      appEyebrow: "Nueva app",
+      appTitle: "Lleva Peptides CR en el bolsillo",
+      appBody: "Productos, protocolos, seguimiento y verificación de laboratorio — ábrela en tu teléfono con un toque.",
+      appFeatures: ["Compra", "Paga", "Rastrea", "Verifica"],
+      appButton: "Abrir la app",
+      appUrlLabel: "app.peptidescostarica.net",
+      appHint: "¿Estás en computadora? Escanea el QR de la imagen con tu teléfono.",
       accountTitle: "📦 Dé seguimiento a este pedido",
       accountBody: "Cree su cuenta con el mismo correo que acaba de usar y este pedido — junto con todos los que ha hecho antes — aparecerá automáticamente. Siga sus envíos y vuelva a pedir con un solo toque.",
       accountButton: "Crear mi cuenta",
@@ -201,6 +227,137 @@ function ThankYouContent() {
           box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.3);
           border-color: rgba(56, 189, 248, 0.5) !important;
           background: rgba(56, 189, 248, 0.15) !important;
+        }
+        .thankyou-app-card {
+          position: relative;
+          overflow: hidden;
+          background:
+            radial-gradient(120% 80% at 100% 0%, rgba(56, 189, 248, 0.22) 0%, transparent 55%),
+            linear-gradient(165deg, rgba(8, 47, 73, 0.95) 0%, rgba(15, 23, 42, 0.98) 55%, rgba(2, 32, 71, 0.92) 100%);
+          border: 1px solid rgba(56, 189, 248, 0.4);
+          border-radius: 18px;
+          padding: 20px;
+          margin-bottom: 28px;
+          text-align: left;
+          box-shadow: 0 18px 40px -18px rgba(14, 165, 233, 0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+          animation: subtleUp 1s 0.15s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+        .thankyou-app-card::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(115deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%);
+          pointer-events: none;
+        }
+        .thankyou-app-features {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 6px;
+          margin: 0 0 16px;
+        }
+        .thankyou-app-feature {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          padding: 10px 4px;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          text-align: center;
+        }
+        .thankyou-app-feature span {
+          font-size: 0.65rem;
+          font-weight: 800;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #cbd5e1;
+          line-height: 1.2;
+        }
+        .thankyou-app-feature svg {
+          color: #38bdf8;
+        }
+        .thankyou-app-media {
+          display: block;
+          margin: 0 0 16px;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: #0b1220;
+          transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.35s ease;
+        }
+        .thankyou-app-media:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 28px -12px rgba(56, 189, 248, 0.45);
+        }
+        .thankyou-app-media img {
+          display: block;
+          width: 100%;
+          height: 168px;
+          object-fit: cover;
+          object-position: 78% center;
+        }
+        @media (min-width: 480px) {
+          .thankyou-app-media img {
+            height: 210px;
+            object-position: center center;
+          }
+        }
+        .thankyou-app-cta {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          width: 100%;
+          padding: 15px 22px;
+          border: 0;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #7dd3fc 0%, #38bdf8 45%, #0ea5e9 100%);
+          color: #04121f;
+          font-weight: 900;
+          font-size: 1rem;
+          letter-spacing: -0.01em;
+          text-decoration: none;
+          cursor: pointer;
+          box-shadow: 0 10px 24px -8px rgba(14, 165, 233, 0.65);
+          transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s ease, filter 0.25s ease;
+        }
+        .thankyou-app-cta:hover {
+          transform: translateY(-2px);
+          filter: brightness(1.05);
+          box-shadow: 0 16px 32px -10px rgba(14, 165, 233, 0.75);
+        }
+        .thankyou-app-cta:active {
+          transform: translateY(0);
+        }
+        .thankyou-app-meta {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 4px;
+          margin-top: 12px;
+        }
+        .thankyou-app-url {
+          font-size: 0.78rem;
+          font-weight: 700;
+          color: #7dd3fc;
+          letter-spacing: 0.02em;
+        }
+        .thankyou-app-hint {
+          display: none;
+          margin: 0;
+          font-size: 0.7rem;
+          color: #64748b;
+          text-align: center;
+          line-height: 1.4;
+        }
+        @media (min-width: 640px) {
+          .thankyou-app-hint { display: block; }
+        }
+        @media (max-width: 380px) {
+          .thankyou-app-features { gap: 4px; }
+          .thankyou-app-feature { padding: 8px 2px; }
+          .thankyou-app-feature span { font-size: 0.58rem; }
         }
       `}} />
 
@@ -334,6 +491,86 @@ function ThankYouContent() {
           };
           return null; // Value Exchange Section Removed as requested
         })()}
+
+        {/* App upsell — first growth CTA after confirmation.
+            Same destination as the launch email / QR (app.peptidescostarica.net). */}
+        <div className="thankyou-app-card">
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginBottom: '10px',
+            fontSize: '0.7rem',
+            fontWeight: '800',
+            color: '#7dd3fc',
+            textTransform: 'uppercase',
+            letterSpacing: '1.2px'
+          }}>
+            <Smartphone size={13} strokeWidth={2.4} /> {t.appEyebrow}
+          </div>
+          <h2 style={{
+            margin: '0 0 8px',
+            fontFamily: 'var(--font-montserrat), sans-serif',
+            fontSize: '1.35rem',
+            fontWeight: '900',
+            color: '#f8fafc',
+            letterSpacing: '-0.4px',
+            lineHeight: 1.2
+          }}>
+            {t.appTitle}
+          </h2>
+          <p style={{
+            margin: '0 0 16px',
+            fontSize: '0.9rem',
+            lineHeight: 1.55,
+            color: '#94a3b8'
+          }}>
+            {t.appBody}
+          </p>
+
+          <div className="thankyou-app-features" aria-hidden="true">
+            {t.appFeatures.map((label, i) => {
+              const Icon = APP_FEATURE_ICONS[i];
+              return (
+                <div key={label} className="thankyou-app-feature">
+                  <Icon size={18} strokeWidth={2.2} />
+                  <span>{label}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          <a
+            href={appHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="thankyou-app-media"
+            aria-label={t.appButton}
+          >
+            <img
+              src={appImageSrc}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+          </a>
+
+          <a
+            href={appHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="thankyou-app-cta"
+          >
+            <Smartphone size={18} strokeWidth={2.4} />
+            <span>{t.appButton}</span>
+            <ChevronRight size={18} strokeWidth={2.6} />
+          </a>
+
+          <div className="thankyou-app-meta">
+            <span className="thankyou-app-url">{t.appUrlLabel}</span>
+            <p className="thankyou-app-hint">{t.appHint}</p>
+          </div>
+        </div>
 
         {/* Create an account: the order was just placed with a verified email
             address, so signing up with that same address pulls this order and
