@@ -5,6 +5,13 @@
 Omer (`omerforce@gmail.com`, pushes as `GeminiSupa`) is the developer here. Joe
 Webster holds money authority — never ask Omer to approve payouts.
 
+- **SHORT. He has told you twice that long answers are unacceptable.**
+  Under 10 lines, total. No tables of file paths, no section headings, no
+  "what could be affected" essay unless something genuinely breaks. Lead with
+  the one-line answer, then at most three short numbered points. If you think
+  the full picture needs more, give the short version and offer the rest — do
+  not dump it pre-emptively. Five lines he reads beats forty he resents.
+
 - **Plain language, numbered steps, one topic at a time.** He is in Pakistan,
   11 hours ahead of Costa Rica. Business timestamps are Costa Rica time; use
   `formatCrDate` / `formatCrInstant`, never the reader's clock.
