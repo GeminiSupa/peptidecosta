@@ -15,8 +15,10 @@ async function run() {
   if (current && current.value) {
     const newVal = {
       ...current.value,
-      googleMapsUrl: 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8',
-      googleReviewUrl: 'https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8',
+      // The two Google fields were set here and are deliberately left alone now:
+      // the storefront badges are meant to be unlinked, and running this script
+      // used to put both links straight back. Whatever is saved in the row wins,
+      // so Google is controlled from the admin and nowhere else.
       trustpilotUrl: 'https://www.trustpilot.com/review/peptidescostarica.net',
       trustpilotUrlEn: 'https://www.trustpilot.com/review/peptidescostarica.net',
       trustpilotUrlEs: 'https://es.trustpilot.com/review/peptidescostarica.net'

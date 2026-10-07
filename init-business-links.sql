@@ -7,13 +7,13 @@ VALUES (
   '{
     "whatsappNumber": "50684046973",
     "whatsappDisplay": "+506 8404-6973",
-    "googleMapsUrl": "https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8",
+    "googleMapsUrl": "",
     "facebookUrl": "",
     "instagramUrl": "",
     "trustpilotUrl": "https://www.trustpilot.com/review/peptidescostarica.net",
     "trustpilotUrlEn": "https://www.trustpilot.com/review/peptidescostarica.net",
     "trustpilotUrlEs": "https://es.trustpilot.com/review/peptidescostarica.net",
-    "googleReviewUrl": "https://maps.app.goo.gl/b9YaeUXyuvBuj8vo8",
+    "googleReviewUrl": "",
     "supportEmail": "support@peptidescostarica.net"
   }'::jsonb
 )
