@@ -7,7 +7,7 @@ import { useBulkWholesaleCampaign } from '@/hooks/useBulkWholesaleCampaign';
 import { dealCountdownParts } from '@/lib/bulkWholesaleCampaign.mjs';
 import { STANDARD_FIVE_PLUS_PCT, tenPlusDiscountPct } from '@/lib/bulkDeal.mjs';
 import { DEFAULT_LANDING_PAGE_SETTINGS } from '@/lib/landingContent';
-import { FACEBOOK_REVIEW_URL, GOOGLE_REVIEW_URL, TRUSTPILOT_RATING, getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
+import { FACEBOOK_REVIEW_URL, TRUSTPILOT_RATING, getFacebookReviewUrl, getTrustpilotReviewUrl } from '@/lib/businessLinks';
 import styles from './CatalogCroDesktop.module.css';
 
 function GoogleMark() {
@@ -115,7 +115,10 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {} 
     : (pressItems.find((item) => /tico times/i.test(item.outlet || '')) || pressItems[0]);
   const quote = en ? '"Serving Quality peptide products"' : '"Productos de péptidos de calidad"';
   const score = rating ? String(rating) : TRUSTPILOT_RATING;
-  const googleHref = links.googleReviewUrl || links.googleMapsUrl || GOOGLE_REVIEW_URL;
+  // No GOOGLE_REVIEW_URL fallback: it meant an emptied admin field still linked
+  // out from this badge alone. Empty renders the badge without an href, which is
+  // not a link but keeps every .scores style.
+  const googleHref = links.googleReviewUrl || links.googleMapsUrl;
   const trustpilotHref = getTrustpilotReviewUrl(lang, links);
   const facebookHref = getFacebookReviewUrl(links) || FACEBOOK_REVIEW_URL;
 
@@ -137,7 +140,11 @@ export function CatalogCroHero({ lang = 'es', rating = '', settings, links = {} 
           </li>
         </ul>
         <div className={styles.scores} aria-label={en ? 'Review scores' : 'Puntajes'}>
-          <a href={googleHref} target="_blank" rel="noopener noreferrer">
+          <a
+            href={googleHref || undefined}
+            target={googleHref ? '_blank' : undefined}
+            rel={googleHref ? 'noopener noreferrer' : undefined}
+          >
             <GoogleMark />
             <span>5.0</span>
           </a>

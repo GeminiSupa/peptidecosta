@@ -596,7 +596,7 @@ export default function LeadGenerationLandingPage() {
             <div className="lead-section-heading"><span className="lead-eyebrow">{c.trustEyebrow}</span><h2>{c.trustTitle}</h2></div>
             <div className="lead-ratings">
               {ratingCards.map((card) => (
-                <a key={card.name} href={card.href} target="_blank" rel="noopener noreferrer" style={{ '--rating': card.color }} aria-label={`${card.name} ${card.rating} out of 5`}>
+                <a key={card.name} href={card.href || undefined} target={card.href ? '_blank' : undefined} rel={card.href ? 'noopener noreferrer' : undefined} style={{ '--rating': card.color }} aria-label={`${card.name} ${card.rating} out of 5`}>
                   <div><strong>{card.name}</strong><span>{card.detail}</span></div>
                   <b>{card.rating}</b>
                   <div className="lead-stars">{[0,1,2,3,4].map((star) => <Star key={star} size={15} fill="currentColor" />)}</div>

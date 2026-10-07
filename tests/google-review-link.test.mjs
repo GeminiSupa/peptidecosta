@@ -11,12 +11,19 @@ import { reviewDestinations } from '../src/lib/reviewRequestEmail.mjs';
 test('the review link is the rating form, not the map listing', () => {
   assert.match(GOOGLE_REVIEW_URL, /\/review$/);
   assert.notEqual(GOOGLE_REVIEW_URL, GOOGLE_LOCAL_LISTING_URL);
-  assert.equal(DEFAULT_BUSINESS_LINKS.googleReviewUrl, GOOGLE_REVIEW_URL);
+  // Where it still has to be the rating form is the review email, which is the
+  // only thing that asks a customer for a review.
+  assert.equal(reviewDestinations({}, {}).google, GOOGLE_REVIEW_URL);
 });
 
-test('the map link is left alone, it is a different job', () => {
-  assert.equal(DEFAULT_BUSINESS_LINKS.googleMapsUrl, GOOGLE_LOCAL_LISTING_URL);
-  assert.equal(normalizeBusinessLinks({}).googleMapsUrl, GOOGLE_LOCAL_LISTING_URL);
+test('neither Google field is defaulted to a URL any more', () => {
+  // These used to hold the real URLs, which is what the badges rendered before
+  // the CMS fetch returned and whenever it failed, so clearing the admin field
+  // could not remove the link. Nothing invents a Google link now.
+  assert.equal(DEFAULT_BUSINESS_LINKS.googleReviewUrl, '');
+  assert.equal(DEFAULT_BUSINESS_LINKS.googleMapsUrl, '');
+  assert.equal(normalizeBusinessLinks({}).googleReviewUrl, '');
+  assert.equal(normalizeBusinessLinks({}).googleMapsUrl, '');
 });
 
 test('a listing url saved as the review link is upgraded', () => {
@@ -28,8 +35,33 @@ test('a listing url saved as the review link is upgraded', () => {
   const legacy = normalizeBusinessLinks({ googleReviewUrl: 'https://maps.app.goo.gl/AgpzEd8NNRKYNbJj9' });
   assert.equal(legacy.googleReviewUrl, GOOGLE_REVIEW_URL);
 
-  const empty = normalizeBusinessLinks({ googleReviewUrl: '' });
-  assert.equal(empty.googleReviewUrl, GOOGLE_REVIEW_URL);
+});
+
+test('an emptied field stays empty, so the admin can unlink Google', () => {
+  // Both fields used to be refilled with the default when blank, which meant
+  // clearing them in the admin saved the URL straight back and the badges kept
+  // linking out. Blank now means "show the badge, do not link it".
+  const cleared = normalizeBusinessLinks({ googleReviewUrl: '', googleMapsUrl: '' });
+  assert.equal(cleared.googleReviewUrl, '');
+  assert.equal(cleared.googleMapsUrl, '');
+
+  // Whitespace is the same as blank: the admin box is a text input.
+  const spaces = normalizeBusinessLinks({ googleReviewUrl: '  ', googleMapsUrl: ' ' });
+  assert.equal(spaces.googleReviewUrl, '');
+  assert.equal(spaces.googleMapsUrl, '');
+
+  // A URL typed back into either box still wins, so this is reversible from the
+  // admin without a deploy.
+  const back = normalizeBusinessLinks({ googleReviewUrl: GOOGLE_REVIEW_URL, googleMapsUrl: GOOGLE_LOCAL_LISTING_URL });
+  assert.equal(back.googleReviewUrl, GOOGLE_REVIEW_URL);
+  assert.equal(back.googleMapsUrl, GOOGLE_LOCAL_LISTING_URL);
+});
+
+test('clearing the site fields does not stop the review emails linking Google', () => {
+  // The emails are an ask for a review, not a badge on a page. They keep their
+  // own fallback so unlinking the storefront does not silently kill them.
+  const cleared = normalizeBusinessLinks({ googleReviewUrl: '', googleMapsUrl: '' });
+  assert.equal(reviewDestinations(cleared, {}).google, GOOGLE_REVIEW_URL);
 });
 
 test('the retired direct review link is upgraded too', () => {

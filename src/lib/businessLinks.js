@@ -76,13 +76,21 @@ export const DEFAULT_BUSINESS_LINKS = {
   whatsappDisplay: '+506 8404-6973',
   apiWhatsAppNumber: '18314715559',
   apiWhatsAppDisplay: '+1 (831) 471-5559',
-  googleMapsUrl: GOOGLE_LOCAL_LISTING_URL,
+  // Empty, not GOOGLE_LOCAL_LISTING_URL. A hardcoded URL here is what the
+  // badges actually render from before the CMS fetch returns, and whenever that
+  // fetch fails or the row is missing the key, so clearing the admin field could
+  // never remove the link on its own. The constant above is kept for the legacy
+  // upgrade in normalizeBusinessLinks.
+  googleMapsUrl: '',
   facebookUrl: '',
   instagramUrl: '',
   trustpilotUrl: TRUSTPILOT_REVIEW_URLS.en,
   trustpilotUrlEn: TRUSTPILOT_REVIEW_URLS.en,
   trustpilotUrlEs: TRUSTPILOT_REVIEW_URLS.es,
-  googleReviewUrl: GOOGLE_REVIEW_URL,
+  // Empty for the same reason as googleMapsUrl above. The review EMAILS keep
+  // their own GOOGLE_REVIEW_URL fallback in reviewRequestEmail.mjs, so asking a
+  // customer for a review is unaffected by unlinking the storefront badges.
+  googleReviewUrl: '',
   // Empty on purpose. A non-empty default here outranked facebookUrl in every
   // `facebookReviewUrl || facebookUrl` chain, so setting the profile field in
   // the CMS could never take effect — the default silently won. The canonical
@@ -97,7 +105,16 @@ export function normalizeBusinessLinks(value) {
     ...(value && typeof value === 'object' ? value : {}),
   };
 
-  if (!merged.googleMapsUrl || LEGACY_GOOGLE_LISTING_URLS.has(merged.googleMapsUrl)) {
+  // An emptied box means "stop linking Google", and is kept empty. It used to
+  // be refilled with the default here, so clearing either field in the admin
+  // could never take effect: the save runs through this function, which wrote
+  // the URL straight back into the row. A row with the key missing entirely
+  // still gets the default from the spread above, so an unconfigured install
+  // is unchanged.
+  merged.googleMapsUrl = String(merged.googleMapsUrl || '').trim();
+  merged.googleReviewUrl = String(merged.googleReviewUrl || '').trim();
+
+  if (LEGACY_GOOGLE_LISTING_URLS.has(merged.googleMapsUrl)) {
     merged.googleMapsUrl = GOOGLE_LOCAL_LISTING_URL;
   }
 
@@ -106,7 +123,6 @@ export function normalizeBusinessLinks(value) {
   // until 2026-09-05, so it is sitting in saved rows meaning "review link"
   // while only ever opening the map card.
   if (
-    !merged.googleReviewUrl ||
     LISTING_URLS_USED_AS_REVIEW_LINKS.has(merged.googleReviewUrl) ||
     LEGACY_GOOGLE_REVIEW_URLS.has(merged.googleReviewUrl)
   ) {
