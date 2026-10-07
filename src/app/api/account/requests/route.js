@@ -7,8 +7,16 @@ import {
 } from '@/lib/customerOrderOwnership.mjs';
 import { helpTopicSubject, stockAlertSubject } from '@/lib/accountExtras.mjs';
 import { rateLimit } from '@/lib/rateLimit.mjs';
+import {
+  consumeDurableRateLimit,
+  isTrustedStorefrontBrowserRequest,
+  rateLimitHeaders,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 
 const MESSAGE_LIMIT = 2000;
+const JSON_LIMIT = 4 * 1024;
 
 export async function GET(request) {
   const admin = getSupabaseAdmin();
@@ -37,10 +45,16 @@ export async function GET(request) {
     return NextResponse.json({ requests: [] });
   }
 
-  return NextResponse.json({ requests: data || [] });
+  return NextResponse.json({ requests: data || [] }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
 export async function POST(request) {
+  if (!isTrustedStorefrontBrowserRequest(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const admin = getSupabaseAdmin();
   let customer;
   try {
@@ -59,11 +73,34 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Please wait a few minutes and try again.' }, { status: 429 });
   }
 
+  const durableLimit = await consumeDurableRateLimit(admin, {
+    bucket: 'account-customer-request',
+    key: customer.id,
+    limit: 8,
+    windowSeconds: 10 * 60,
+  });
+  if (!durableLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: durableLimit.unavailable
+          ? 'This service is temporarily unavailable.'
+          : 'Please wait a few minutes and try again.',
+      },
+      {
+        status: durableLimit.unavailable ? 503 : 429,
+        headers: rateLimitHeaders(durableLimit),
+      },
+    );
+  }
+
   let body;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Malformed request' }, { status: 400 });
+    ({ body } = await readLimitedJson(request, JSON_LIMIT));
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Malformed request' },
+      { status: error instanceof RequestBodyError ? error.status : 400 },
+    );
   }
 
   const kind = body?.kind === 'stock' ? 'stock' : 'help';

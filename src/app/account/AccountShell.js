@@ -10,6 +10,12 @@ import { useAccountAccess } from '@/hooks/useAccountAccess';
 import ComingSoon from './ComingSoon';
 import './account.css';
 
+// Route transitions remount the shell. Keep one claim pass per customer in the
+// browser runtime so navigating around the account does not repeatedly invoke
+// a service-role mutation. A hard refresh intentionally retries the idempotent
+// pass, which picks up guest orders made in a different browser or device.
+const claimAttempts = new Set();
+
 const TABS = [
   { href: '/account', es: 'Inicio', en: 'Home', icon: 'home' },
   { href: '/account/orders', es: 'Pedidos', en: 'Orders', icon: 'box' },
@@ -76,13 +82,15 @@ function TabIcon({ name }) {
 export default function AccountShell({ children, title }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [lang] = useStorefrontLang();
+  const [lang, setLang] = useStorefrontLang();
   const { user, loading, configured, signOut } = useCustomerSession();
   const { allowed, checking } = useAccountAccess();
   const isEn = lang === 'en';
+  const pageTitle = title ? (isEn ? title.en : title.es) : (isEn ? 'Account' : 'Cuenta');
 
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user || claimAttempts.has(user.id)) return undefined;
+    claimAttempts.add(user.id);
     let active = true;
     getCustomerAccessToken().then((token) => {
       if (!active || !token) return null;
@@ -93,8 +101,10 @@ export default function AccountShell({ children, title }) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ lang }),
+      }).then((response) => {
+        if (response && !response.ok) claimAttempts.delete(user.id);
       });
-    }).catch(() => {});
+    }).catch(() => { claimAttempts.delete(user.id); });
     return () => { active = false; };
   }, [user, lang]);
 
@@ -105,7 +115,14 @@ export default function AccountShell({ children, title }) {
     router.replace(`/account/login?next=${next}`);
   }, [checking, allowed, loading, user, pathname, router]);
 
-  if (checking) return null;
+  if (checking) {
+    return (
+      <div className="account-gate" role="status" aria-live="polite">
+        <span className="account-spinner" aria-hidden="true" />
+        <span>{isEn ? 'Opening your account…' : 'Abriendo su cuenta…'}</span>
+      </div>
+    );
+  }
   if (!allowed) return <ComingSoon />;
 
   if (!configured) {
@@ -120,41 +137,83 @@ export default function AccountShell({ children, title }) {
 
   if (loading || !user) {
     return (
-      <div className="account-page">
-        <div className="account-card account-empty">{isEn ? 'Loading…' : 'Cargando…'}</div>
+      <div className="account-gate" role="status" aria-live="polite">
+        <span className="account-spinner" aria-hidden="true" />
+        <span>{isEn ? 'Loading your account…' : 'Cargando su cuenta…'}</span>
       </div>
     );
   }
 
   return (
     <div className="account-page">
+      <a className="account-skip-link" href="#account-main">
+        {isEn ? 'Skip to content' : 'Ir al contenido'}
+      </a>
       <header className="account-header">
-        <Link href={`/catalog?lang=${lang}`} className="account-header-shop">
-          {isEn ? 'Catalog' : 'Catálogo'}
+        <Link href={`/catalog?lang=${lang}`} className="account-header-brand" aria-label="Peptides Costa Rica">
+          <span aria-hidden="true">PC</span>
+          <strong>Peptides Costa Rica</strong>
         </Link>
-        <h1>{title ? (isEn ? title.en : title.es) : (isEn ? 'Shop' : 'Tienda')}</h1>
-        <button
-          type="button"
-          className="account-header-out"
-          onClick={async () => { await signOut(); router.replace('/account/login'); }}
-        >
-          {isEn ? 'Out' : 'Salir'}
-        </button>
+        <h1>{pageTitle}</h1>
+        <div className="account-header-actions">
+          <div className="account-language-toggle" role="group" aria-label={isEn ? 'Language' : 'Idioma'}>
+            <button type="button" onClick={() => setLang('es')} aria-pressed={!isEn}>ES</button>
+            <button type="button" onClick={() => setLang('en')} aria-pressed={isEn}>EN</button>
+          </div>
+          <button
+            type="button"
+            className="account-header-out"
+            onClick={async () => {
+              claimAttempts.delete(user.id);
+              await signOut();
+              router.replace(`/account/login?lang=${lang}`);
+            }}
+          >
+            {isEn ? 'Sign out' : 'Salir'}
+          </button>
+        </div>
       </header>
 
-      {children}
+      <div className="account-shell-body">
+        <aside className="account-sidebar">
+          <p>{isEn ? 'Your account' : 'Su cuenta'}</p>
+          <nav aria-label={isEn ? 'Account sections' : 'Secciones de la cuenta'}>
+            {TABS.map((tab) => {
+              const active = tabActive(pathname, tab.href);
+              return (
+                <Link key={tab.href} href={tab.href} className={active ? 'is-active' : ''} aria-current={active ? 'page' : undefined}>
+                  <TabIcon name={tab.icon} />
+                  <span>{isEn ? tab.en : tab.es}</span>
+                </Link>
+              );
+            })}
+          </nav>
+          <Link href={`/catalog?lang=${lang}`} className="account-sidebar-shop">
+            <span aria-hidden="true">←</span>
+            {isEn ? 'Back to catalog' : 'Volver al catálogo'}
+          </Link>
+        </aside>
+
+        <main id="account-main" className="account-content">
+          {children}
+        </main>
+      </div>
 
       <nav className="account-tabbar" aria-label={isEn ? 'Account' : 'Cuenta'}>
-        {TABS.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className={tabActive(pathname, tab.href) ? 'is-active' : ''}
-          >
-            <TabIcon name={tab.icon} />
-            <span>{isEn ? tab.en : tab.es}</span>
-          </Link>
-        ))}
+        {TABS.map((tab) => {
+          const active = tabActive(pathname, tab.href);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={active ? 'is-active' : ''}
+              aria-current={active ? 'page' : undefined}
+            >
+              <TabIcon name={tab.icon} />
+              <span>{isEn ? tab.en : tab.es}</span>
+            </Link>
+          );
+        })}
       </nav>
     </div>
   );

@@ -16,15 +16,6 @@ import {
 } from '@/lib/accountExtras.mjs';
 import ProductFace from './ProductFace';
 
-function EmptyRow({ label, value }) {
-  return (
-    <p className="account-empty-row">
-      <span>{label}</span>
-      <b>{value || ''}</b>
-    </p>
-  );
-}
-
 function favoriteKey(userId) {
   return `account-favorites:${userId || 'signed-out'}`;
 }
@@ -104,11 +95,16 @@ export function RewardsSection() {
 
   return (
     <>
-      <div className="shop-order">
-        <EmptyRow label={isEn ? 'Points' : 'Puntos'} value="" />
-        <EmptyRow label={isEn ? 'Until the next reward' : 'Para la siguiente recompensa'} value="" />
-        <EmptyRow label={isEn ? 'Tier' : 'Nivel'} value="" />
-        <EmptyRow label={isEn ? 'Offers' : 'Ofertas'} value="" />
+      <div className="account-feature-intro">
+        <span className="account-feature-icon" aria-hidden="true">%</span>
+        <div>
+          <h2>{isEn ? 'Your savings' : 'Sus ahorros'}</h2>
+          <p>
+            {isEn
+              ? 'Discounts, weekly deals and volume savings from your recent orders appear here.'
+              : 'Aquí aparecen los descuentos, ofertas semanales y ahorros por volumen de sus pedidos recientes.'}
+          </p>
+        </div>
       </div>
       {lines.length > 0 ? (
         <>
@@ -117,7 +113,15 @@ export function RewardsSection() {
             {lines.map((line) => <li key={line}>{line}</li>)}
           </ul>
         </>
-      ) : null}
+      ) : (
+        <div className="account-empty-state">
+          <strong>{isEn ? 'No savings to show yet' : 'Aún no hay ahorros para mostrar'}</strong>
+          <span>{isEn ? 'Eligible savings are applied automatically at checkout.' : 'Los ahorros elegibles se aplican automáticamente en el checkout.'}</span>
+          <Link href={`/catalog?lang=${lang}`} className="account-btn-secondary">
+            {isEn ? 'Browse current offers' : 'Ver ofertas actuales'}
+          </Link>
+        </div>
+      )}
     </>
   );
 }
@@ -145,7 +149,9 @@ export function FavoritesSection() {
     <>
       <h2 className="shop-section-title">{isEn ? 'Saved' : 'Guardados'}</h2>
       {saved.length === 0 ? (
-        <p className="account-muted" />
+        <p className="account-muted">
+          {isEn ? 'Products you save will appear here.' : 'Los productos que guarde aparecerán aquí.'}
+        </p>
       ) : (
         <ul className="account-plain-list">
           {saved.map((name) => (
@@ -187,7 +193,14 @@ export function NotificationsSection() {
   const notes = orderNotifications(orders, lang);
 
   if (loading) return <p className="account-muted">{isEn ? 'Loading…' : 'Cargando…'}</p>;
-  if (notes.length === 0) return <p className="account-muted" />;
+  if (notes.length === 0) {
+    return (
+      <div className="account-empty-state">
+        <strong>{isEn ? 'You are all caught up' : 'Está al día'}</strong>
+        <span>{isEn ? 'Order updates will appear here.' : 'Las novedades de sus pedidos aparecerán aquí.'}</span>
+      </div>
+    );
+  }
 
   return (
     <ul className="account-plain-list">
@@ -236,12 +249,11 @@ export function HelpSection() {
         <a className="account-btn-primary" href={whatsapp} target="_blank" rel="noopener noreferrer">
           {isEn ? 'WhatsApp us' : 'WhatsApp'}
         </a>
-        <a className="account-btn-secondary" href={whatsapp} target="_blank" rel="noopener noreferrer">
-          {isEn ? 'Start chat' : 'Iniciar chat'}
-        </a>
       </div>
       <h2 className="shop-section-title">{isEn ? 'Previous conversations' : 'Conversaciones anteriores'}</h2>
-      {helpRows.length === 0 ? <p className="account-muted" /> : (
+      {helpRows.length === 0 ? (
+        <p className="account-muted">{isEn ? 'No previous requests.' : 'No hay solicitudes anteriores.'}</p>
+      ) : (
         <ul className="account-plain-list">
           {helpRows.map((row) => (
             <li key={row.id}>
@@ -275,11 +287,13 @@ export function ReferralSection() {
   const [lang] = useStorefrontLang();
   const isEn = lang === 'en';
   return (
-    <div className="shop-order">
-      <EmptyRow label={isEn ? 'Your link' : 'Su enlace'} value="" />
-      <EmptyRow label={isEn ? 'People referred' : 'Personas referidas'} value="" />
-      <EmptyRow label={isEn ? 'Rewards earned' : 'Recompensas ganadas'} value="" />
-      <EmptyRow label={isEn ? 'Pending rewards' : 'Recompensas pendientes'} value="" />
+    <div className="account-empty-state">
+      <strong>{isEn ? 'Referrals are coming soon' : 'Los referidos estarán disponibles pronto'}</strong>
+      <span>
+        {isEn
+          ? 'We are preparing a simple way to share the research catalog and track rewards.'
+          : 'Estamos preparando una forma sencilla de compartir el catálogo de investigación y consultar recompensas.'}
+      </span>
     </div>
   );
 }
@@ -320,7 +334,9 @@ export function StockSection() {
   return (
     <>
       <h2 className="shop-section-title">{isEn ? 'Out of stock' : 'Agotados'}</h2>
-      {products.length === 0 ? <p className="account-muted" /> : (
+      {products.length === 0 ? (
+        <p className="account-muted">{isEn ? 'Everything is currently available.' : 'Actualmente todo está disponible.'}</p>
+      ) : (
         <ul className="account-plain-list">
           {products.map((row) => (
             <li key={row.product}>
@@ -334,7 +350,9 @@ export function StockSection() {
         </ul>
       )}
       <h2 className="shop-section-title">{isEn ? 'Your alerts' : 'Sus avisos'}</h2>
-      {watched.length === 0 ? <p className="account-muted" /> : (
+      {watched.length === 0 ? (
+        <p className="account-muted">{isEn ? 'You are not watching any products.' : 'No está siguiendo ningún producto.'}</p>
+      ) : (
         <ul className="account-plain-list">
           {watched.map((row) => <li key={row.id}>{row.subject.replace('Back in stock: ', '')}</li>)}
         </ul>
@@ -366,21 +384,22 @@ export function AppSection() {
   const [lang] = useStorefrontLang();
   const isEn = lang === 'en';
   return (
-    <div className="shop-order">
-      <EmptyRow label="App Store" value="" />
-      <EmptyRow label="Google Play" value="" />
-      <EmptyRow label={isEn ? 'Signed-in app' : 'Aplicación con su cuenta'} value="" />
+    <div className="account-empty-state">
+      <strong>{isEn ? 'The mobile app is coming soon' : 'La aplicación móvil estará disponible pronto'}</strong>
+      <span>
+        {isEn
+          ? 'For now, this account is designed to work like an app in your phone browser.'
+          : 'Por ahora, esta cuenta está diseñada para funcionar como una aplicación en el navegador de su teléfono.'}
+      </span>
     </div>
   );
 }
 
 export const ACCOUNT_LINKS = [
-  { href: '/account/rewards', en: 'Rewards', es: 'Recompensas' },
+  { href: '/account/rewards', en: 'Savings', es: 'Ahorros' },
   { href: '/account/favorites', en: 'Favorites', es: 'Favoritos' },
   { href: '/account/notifications', en: 'Notifications', es: 'Avisos' },
   { href: '/account/help', en: 'Help', es: 'Ayuda' },
-  { href: '/account/referral', en: 'Referrals', es: 'Referidos' },
   { href: '/account/stock', en: 'Back in stock', es: 'Cuando haya stock' },
   { href: '/account/learn', en: 'Learn', es: 'Aprender' },
-  { href: '/account/app', en: 'App', es: 'Aplicación' },
 ];

@@ -151,6 +151,26 @@ const nextConfig = {
           { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
         ],
       },
+      // Customer account screens can contain names, delivery addresses and
+      // order history after hydration. Keep them out of shared caches, search
+      // indexes and frames even if an upstream cache or browser extension
+      // ignores the route metadata.
+      {
+        source: '/account',
+        headers: [
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+        ],
+      },
+      {
+        source: '/account/:path*',
+        headers: [
+          { key: 'Cache-Control', value: 'private, no-store, max-age=0' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+        ],
+      },
       // Same reasoning for the GLP-1 variant's confirmation page.
       {
         source: '/glp-1/thank-you',

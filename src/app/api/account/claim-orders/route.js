@@ -17,6 +17,11 @@ import { buildAccountWelcomeEmail } from '@/lib/accountSignInCode.mjs';
 import { getOrderMailSettings } from '@/lib/transactionalSmtp';
 import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import nodemailer from 'nodemailer';
+import {
+  isTrustedStorefrontBrowserRequest,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 
 // Step two of customer login: attach the account to its history.
 //
@@ -124,6 +129,10 @@ async function rememberOwnedAddresses(admin, userId) {
 }
 
 export async function POST(request) {
+  if (!isTrustedStorefrontBrowserRequest(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
   const admin = getSupabaseAdmin();
 
   let customer;
@@ -147,9 +156,12 @@ export async function POST(request) {
 
   let locale = 'es';
   try {
-    const body = await request.json();
+    const { body } = await readLimitedJson(request, 1024);
     if (String(body?.lang || '').toLowerCase().startsWith('en')) locale = 'en';
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestBodyError && error.status === 413) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     locale = 'es';
   }
 

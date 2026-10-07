@@ -15,6 +15,15 @@ import {
 } from '@/lib/accountSignInCode.mjs';
 import { getOrderEmailLogoAttachment } from '@/lib/orderEmailBranding.mjs';
 import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
+import { isExpectedAccountTurnstileResult } from '@/lib/accountLogin.mjs';
+import {
+  consumeDurableRateLimit,
+  getRequestIp,
+  isTrustedStorefrontBrowserRequest,
+  rateLimitHeaders,
+  readLimitedJson,
+  RequestBodyError,
+} from '@/lib/publicApiSecurity.mjs';
 
 // Step one of customer login: email a six-digit code.
 //
@@ -37,17 +46,29 @@ import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
 // lands in the customer client's own storage.
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const JSON_LIMIT = 4 * 1024;
 
 function message(isEn, en, es) {
   return { error: isEn ? en : es, errorEn: en, errorEs: es };
 }
 
 export async function POST(request) {
+  if (!isTrustedStorefrontBrowserRequest(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, {
+      status: 403,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
   let body;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: 'Malformed request' }, { status: 400 });
+    ({ body } = await readLimitedJson(request, JSON_LIMIT));
+  } catch (error) {
+    const status = error instanceof RequestBodyError ? error.status : 400;
+    return NextResponse.json({ error: 'Malformed request' }, {
+      status,
+      headers: { 'Cache-Control': 'no-store' },
+    });
   }
 
   const isEn = String(body?.lang || '').toLowerCase().startsWith('en');
@@ -85,7 +106,7 @@ export async function POST(request) {
     cfFormData.append('secret', turnstileSecret);
     cfFormData.append('response', turnstileToken);
     
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+    const ip = getRequestIp(request);
     if (ip) {
       cfFormData.append('remoteip', ip);
     }
@@ -96,7 +117,7 @@ export async function POST(request) {
     });
     
     const cfData = await cfRes.json();
-    if (!cfData.success) {
+    if (!isExpectedAccountTurnstileResult(cfData, request.url)) {
       return NextResponse.json(
         message(
           isEn,
@@ -122,7 +143,7 @@ export async function POST(request) {
   // catches bursts that land on one warm instance and nothing more. The real
   // throttle is Supabase Auth's own per-address cooldown, which is enforced
   // centrally and cannot be sidestepped by spreading requests across instances.
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const ip = getRequestIp(request);
   if (!rateLimit(`account-code-ip:${ip}`, 10) || !rateLimit(`account-code-email:${email}`, 5)) {
     return NextResponse.json(
       message(
@@ -130,12 +151,62 @@ export async function POST(request) {
         'Too many attempts. Please wait a few minutes and try again.',
         'Demasiados intentos. Espere unos minutos e inténtelo de nuevo.',
       ),
-      { status: 429 },
+      { status: 429, headers: { 'Retry-After': '600', 'Cache-Control': 'no-store' } },
+    );
+  }
+
+  let admin;
+  try {
+    admin = getSupabaseAdmin();
+    const [ipLimit, emailLimit] = await Promise.all([
+      consumeDurableRateLimit(admin, {
+        bucket: 'account-code-ip',
+        key: ip,
+        limit: 12,
+        windowSeconds: 15 * 60,
+      }),
+      consumeDurableRateLimit(admin, {
+        bucket: 'account-code-email',
+        key: email,
+        limit: 5,
+        windowSeconds: 15 * 60,
+      }),
+    ]);
+
+    const refused = !ipLimit.allowed ? ipLimit : (!emailLimit.allowed ? emailLimit : null);
+    if (refused) {
+      const unavailable = refused.unavailable;
+      return NextResponse.json(
+        unavailable
+          ? message(
+            isEn,
+            'Sign-in is temporarily unavailable. Please try again shortly.',
+            'El acceso no está disponible temporalmente. Inténtelo de nuevo en unos minutos.',
+          )
+          : message(
+            isEn,
+            'Too many attempts. Please wait a few minutes and try again.',
+            'Demasiados intentos. Espere unos minutos e inténtelo de nuevo.',
+          ),
+        {
+          status: unavailable ? 503 : 429,
+          headers: rateLimitHeaders(refused),
+        },
+      );
+    }
+  } catch (error) {
+    console.error('[account/request-code] rate limiter failed:', error);
+    return NextResponse.json(
+      message(
+        isEn,
+        'Sign-in is temporarily unavailable. Please try again shortly.',
+        'El acceso no está disponible temporalmente. Inténtelo de nuevo en unos minutos.',
+      ),
+      { status: 503, headers: { 'Cache-Control': 'no-store' } },
     );
   }
 
   try {
-    const admin = getSupabaseAdmin();
     const { data: blocked } = await admin
       .from('order_claim_blocklist')
       .select('email')
@@ -167,7 +238,6 @@ export async function POST(request) {
 
   let link;
   try {
-    const admin = getSupabaseAdmin();
     link = await admin.auth.admin.generateLink({ type: 'magiclink', email });
     if (link.error && isMissingAuthUser(link.error)) {
       // First visit. A signup code creates the login. The password is never
@@ -264,5 +334,7 @@ export async function POST(request) {
     );
   }
 
-  return NextResponse.json({ ok: true, email, verifyType });
+  return NextResponse.json({ ok: true, email, verifyType }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }

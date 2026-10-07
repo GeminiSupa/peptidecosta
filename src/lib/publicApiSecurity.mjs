@@ -93,6 +93,22 @@ export function isTrustedStorefrontRequest(request) {
   return false;
 }
 
+/**
+ * Stricter variant for endpoints that are only called by our own browser UI.
+ *
+ * `isTrustedStorefrontRequest` also supports trusted server-to-server callers
+ * that legitimately omit browser headers. Account mutations have no such
+ * callers, so absence of Origin/Referer/Sec-Fetch-Site is not enough evidence.
+ */
+export function isTrustedStorefrontBrowserRequest(request) {
+  const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  if (origin || referer) return isTrustedStorefrontRequest(request);
+
+  const secFetchSite = request.headers.get('sec-fetch-site');
+  return secFetchSite === 'same-origin' || secFetchSite === 'same-site';
+}
+
 function rateLimitHash(value) {
   const salt = process.env.API_RATE_LIMIT_SALT
     || process.env.INTERNAL_API_SECRET

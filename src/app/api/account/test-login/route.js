@@ -7,6 +7,7 @@ import {
   isAccountTestEmail,
   isAccountTestLoginEnabled,
 } from '@/lib/accountTestLogin.mjs';
+import { isTrustedStorefrontBrowserRequest } from '@/lib/publicApiSecurity.mjs';
 
 const TEST_PROFILE = {
   display_name: 'Cuenta de prueba',
@@ -31,7 +32,10 @@ function closed() {
 }
 
 function enabled() {
-  return isAccountTestLoginEnabled(process.env.ACCOUNT_TEST_LOGIN);
+  return isAccountTestLoginEnabled(process.env.ACCOUNT_TEST_LOGIN, {
+    nodeEnv: process.env.NODE_ENV,
+    vercelEnv: process.env.VERCEL_ENV,
+  });
 }
 
 async function ensureTestUser(admin) {
@@ -112,11 +116,14 @@ async function openTestSession(admin) {
 
 export async function GET() {
   if (!enabled()) return closed();
-  return NextResponse.json({ enabled: true });
+  return NextResponse.json({ enabled: true }, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }
 
-export async function POST() {
+export async function POST(request) {
   if (!enabled()) return closed();
+  if (!isTrustedStorefrontBrowserRequest(request)) return closed();
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
@@ -145,12 +152,15 @@ export async function POST() {
     await ensureTestProfile(admin, userId);
     await ensureTestAddress(admin, userId);
 
-    return NextResponse.json({
-      ok: true,
-      email: ACCOUNT_TEST_EMAIL,
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    });
+    return NextResponse.json(
+      {
+        ok: true,
+        email: ACCOUNT_TEST_EMAIL,
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error) {
     console.error('[account/test-login] failed:', error?.message || error);
     return NextResponse.json(

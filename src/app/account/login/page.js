@@ -9,6 +9,7 @@ import { Turnstile } from '@marsidev/react-turnstile';
 import { getCustomerSupabase } from '@/lib/customerSupabase';
 import { useCustomerSession, useStorefrontLang } from '@/hooks/useCustomerSession';
 import { useAccountAccess } from '@/hooks/useAccountAccess';
+import { ACCOUNT_TURNSTILE_ACTION, safeAccountNext } from '@/lib/accountLogin.mjs';
 import { isDummyTurnstileKey } from '@/lib/turnstileKey.mjs';
 import ComingSoon from '../ComingSoon';
 import '../account.css';
@@ -36,12 +37,12 @@ function LoginForm() {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [testLoginEnabled, setTestLoginEnabled] = useState(false);
   const codeInputRef = useRef(null);
+  const turnstileRef = useRef(null);
 
   // Where to land after signing in. Only same-site paths are honoured, so a
   // crafted ?next=https://elsewhere cannot turn the login form into an open
   // redirect.
-  const rawNext = searchParams.get('next') || '/account';
-  const next = rawNext.startsWith('/') && !rawNext.startsWith('//') ? rawNext : '/account';
+  const next = safeAccountNext(searchParams.get('next'));
 
   useEffect(() => {
     if (checking || !allowed) return;
@@ -124,24 +125,31 @@ function LoginForm() {
     event?.preventDefault();
     setError('');
     setBusy(true);
+    const normalizedEmail = email.trim().toLowerCase();
 
     try {
       const res = await fetch('/api/account/request-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, lang, turnstileToken }),
+        body: JSON.stringify({ email: normalizedEmail, lang, turnstileToken }),
       });
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         const serverError = isEn ? data?.errorEn : data?.errorEs;
         setError(serverError || data?.error || (isEn ? 'Could not send the code.' : 'No se pudo enviar el código.'));
+        if (showTurnstile) {
+          setTurnstileToken('');
+          turnstileRef.current?.reset?.();
+        }
         return;
       }
 
+      setEmail(normalizedEmail);
       setStep('code');
       setVerifyType(data?.verifyType === 'signup' ? 'signup' : 'magiclink');
       setCooldown(RESEND_SECONDS);
+      setTurnstileToken('');
     } catch {
       setError(isEn
         ? 'Connection problem. Please try again.'
@@ -206,17 +214,48 @@ function LoginForm() {
 
   // Render nothing until the launch gate has decided, so the sign-in form never
   // flashes up before the coming-soon notice replaces it.
-  if (checking) return null;
+  if (checking) {
+    return (
+      <div className="account-auth account-auth-loading" role="status" aria-live="polite">
+        <span className="account-spinner" aria-hidden="true" />
+        <span>{isEn ? 'Opening your account…' : 'Abriendo su cuenta…'}</span>
+      </div>
+    );
+  }
   if (!allowed) return <ComingSoon />;
+
+  const securityCheck = showTurnstile ? (
+    <div className="account-turnstile">
+      <Turnstile
+        ref={turnstileRef}
+        siteKey={turnstileSiteKey}
+        onSuccess={(token) => setTurnstileToken(token)}
+        onExpire={() => setTurnstileToken('')}
+        onError={() => setTurnstileToken('')}
+        options={{
+          action: ACCOUNT_TURNSTILE_ACTION,
+          theme: 'auto',
+          appearance: 'interaction-only',
+          refreshExpired: 'auto',
+        }}
+      />
+    </div>
+  ) : null;
 
   return (
     <div className="account-auth">
       <div className="account-auth-card">
-        <div className="account-auth-langs">
+        <div className="account-auth-topline">
+          <Link href={`/catalog?lang=${lang}`} className="account-auth-brand" aria-label="Peptides Costa Rica">
+            <span aria-hidden="true">PC</span>
+            <strong>Peptides Costa Rica</strong>
+          </Link>
+          <div className="account-auth-langs" role="group" aria-label={isEn ? 'Language' : 'Idioma'}>
           <button
             type="button"
             className={lang === 'es' ? 'is-active' : ''}
             onClick={() => setLang('es')}
+            aria-pressed={lang === 'es'}
           >
             ES
           </button>
@@ -224,20 +263,30 @@ function LoginForm() {
             type="button"
             className={lang === 'en' ? 'is-active' : ''}
             onClick={() => setLang('en')}
+            aria-pressed={lang === 'en'}
           >
             EN
           </button>
+          </div>
         </div>
 
+        <p className="account-auth-eyebrow">{isEn ? 'Private customer access' : 'Acceso privado de clientes'}</p>
         <h1>{isEn ? 'My Account' : 'Mi Cuenta'}</h1>
+
+        <div className="account-auth-progress" aria-label={isEn ? 'Sign-in progress' : 'Progreso de acceso'}>
+          <span className="is-active" aria-hidden="true">1</span>
+          <i aria-hidden="true" />
+          <span className={step === 'code' ? 'is-active' : ''} aria-hidden="true">2</span>
+          <small>{step === 'email' ? (isEn ? 'Your email' : 'Su correo') : (isEn ? 'Check your inbox' : 'Revise su correo')}</small>
+        </div>
 
         {step === 'email' ? (
           <>
-              <p className="account-auth-lead">
-                {isEn
-                  ? 'Enter your email and we will send you a sign-in code. No password needed.'
-                  : 'Ingrese su correo y le enviaremos un código para entrar. No necesita contraseña.'}
-              </p>
+            <p className="account-auth-lead">
+              {isEn
+                ? 'Enter the email used for your orders. We will send a one-time code—no password to remember.'
+                : 'Ingrese el correo usado en sus pedidos. Le enviaremos un código de un solo uso; no necesita recordar una contraseña.'}
+            </p>
 
             <form onSubmit={requestCode}>
               <label htmlFor="account-email">
@@ -248,37 +297,39 @@ function LoginForm() {
                 type="email"
                 autoComplete="email"
                 inputMode="email"
+                name="email"
                 required
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => { setEmail(event.target.value); setError(''); }}
                 placeholder={isEn ? 'you@example.com' : 'usted@ejemplo.com'}
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'account-auth-error' : 'account-auth-privacy'}
               />
 
-              {error ? <p className="account-auth-error">{error}</p> : null}
+              {error ? <p id="account-auth-error" className="account-auth-error" role="alert">{error}</p> : null}
 
-              {showTurnstile ? (
-                <div className="account-turnstile">
-                  <Turnstile
-                    siteKey={turnstileSiteKey}
-                    onSuccess={(token) => setTurnstileToken(token)}
-                    options={{ theme: 'light', appearance: 'interaction-only' }}
-                  />
-                </div>
-              ) : null}
+              {securityCheck}
 
               <button type="submit" className="account-btn-primary" disabled={busy || !email || (showTurnstile && !turnstileToken)}>
+                <span>{busy ? null : (isEn ? 'Continue securely' : 'Continuar de forma segura')}</span>
                 {busy
                   ? (isEn ? 'Sending…' : 'Enviando…')
-                  : (isEn ? 'Send me a code' : 'Enviarme un código')}
+                  : <span aria-hidden="true">→</span>}
               </button>
+              <p id="account-auth-privacy" className="account-auth-privacy">
+                <span aria-hidden="true">✓</span>
+                {isEn
+                  ? 'We only use this to verify your account and match your own orders.'
+                  : 'Solo usamos este correo para verificar su cuenta y vincular sus propios pedidos.'}
+              </p>
             </form>
           </>
         ) : (
           <>
             <p className="account-auth-lead">
               {isEn
-                ? <>We sent a code to <strong>{email}</strong>. It expires in a few minutes.</>
-                : <>Enviamos un código a <strong>{email}</strong>. Vence en unos minutos.</>}
+                ? <>Enter the code sent to <strong>{email}</strong>. It expires in a few minutes.</>
+                : <>Ingrese el código enviado a <strong>{email}</strong>. Vence en unos minutos.</>}
             </p>
 
             <form onSubmit={verifyCode}>
@@ -295,29 +346,34 @@ function LoginForm() {
                 maxLength={10}
                 required
                 value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 10))}
+                onChange={(event) => { setCode(event.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
                 className="account-code-input"
-                placeholder="00000000"
+                placeholder="000000"
+                aria-invalid={Boolean(error)}
+                aria-describedby={error ? 'account-auth-error' : undefined}
               />
 
-              {error ? <p className="account-auth-error">{error}</p> : null}
+              {error ? <p id="account-auth-error" className="account-auth-error" role="alert">{error}</p> : null}
 
               <button
                 type="submit"
                 className="account-btn-primary"
                 disabled={busy || code.length < 6}
               >
+                <span>{busy ? null : (isEn ? 'Open my account' : 'Abrir mi cuenta')}</span>
                 {busy
                   ? (isEn ? 'Checking…' : 'Verificando…')
-                  : (isEn ? 'Sign in' : 'Entrar')}
+                  : <span aria-hidden="true">→</span>}
               </button>
             </form>
+
+            {securityCheck}
 
             <div className="account-auth-actions">
               <button
                 type="button"
                 className="account-btn-link"
-                disabled={cooldown > 0 || busy}
+                disabled={cooldown > 0 || busy || (showTurnstile && !turnstileToken)}
                 onClick={requestCode}
               >
                 {cooldown > 0
@@ -327,7 +383,12 @@ function LoginForm() {
               <button
                 type="button"
                 className="account-btn-link"
-                onClick={() => { setStep('email'); setCode(''); setError(''); }}
+                onClick={() => {
+                  setStep('email');
+                  setCode('');
+                  setError('');
+                  setTurnstileToken('');
+                }}
               >
                 {isEn ? 'Use a different email' : 'Usar otro correo'}
               </button>
@@ -336,11 +397,10 @@ function LoginForm() {
         )}
 
         {testLoginEnabled ? (
-          <div style={{ marginTop: 16 }}>
+          <div className="account-test-login">
             <button
               type="button"
               className="account-btn-secondary"
-              style={{ width: '100%' }}
               disabled={busy}
               onClick={signInAsTestAccount}
             >
@@ -348,7 +408,7 @@ function LoginForm() {
                 ? (isEn ? 'Opening…' : 'Abriendo…')
                 : (isEn ? 'Sign in to the test account' : 'Entrar a la cuenta de prueba')}
             </button>
-            <p className="account-muted" style={{ marginTop: 8, textAlign: 'center' }}>
+            <p className="account-muted">
               {isEn
                 ? 'No email code. This button is only here while the test switch is on.'
                 : 'Sin código de correo. Este botón solo aparece mientras el interruptor de prueba está activo.'}
@@ -368,7 +428,11 @@ function LoginForm() {
 
 export default function AccountLoginPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={(
+      <div className="account-auth account-auth-loading" role="status">
+        <span className="account-spinner" aria-hidden="true" />
+      </div>
+    )}>
       <LoginForm />
     </Suspense>
   );
