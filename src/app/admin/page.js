@@ -1926,7 +1926,7 @@ Core Rules:
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
-    { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'my_qr', 'my_team'] },
+    { title: 'Growth', tabs: ['share', 'reviews', 'marketing', 'affiliates', 'deals', 'broadcasts', 'twilio', 'my_qr', 'my_team'] },
     { title: 'Operations', tabs: ['spreadsheet', 'analytics', 'cms', 'wa_session', 'team', 'requests', 'recycle_bin', 'team_chat', 'payment_test', 'activity_log'] },
   ].map((group) => ({
     ...group,
