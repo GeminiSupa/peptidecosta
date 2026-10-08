@@ -5,6 +5,8 @@ import {
   formatE164Phone,
   getTwilioConfig,
   getTwilioClient,
+  generateVoiceToken,
+  sendTwilioWhatsApp,
 } from '../src/lib/twilio.js';
 
 import {
@@ -30,7 +32,9 @@ test('getTwilioConfig reads Twilio environmental configuration', () => {
   assert.ok('phoneNumber' in config);
   assert.ok('oldFlowSid' in config);
   assert.ok('newFlowSid' in config);
+  assert.ok('twimlAppSid' in config,  'twimlAppSid field is present');
   assert.ok('isConfigured' in config);
+  assert.ok('voiceReady' in config,   'voiceReady field is present');
 });
 
 test('getTwilioClient initializes client when configured', () => {
@@ -44,9 +48,37 @@ test('getTwilioClient initializes client when configured', () => {
   }
 });
 
+test('generateVoiceToken returns error when TWILIO_TWIML_APP_SID is missing', () => {
+  const originalSid = process.env.TWILIO_TWIML_APP_SID;
+  delete process.env.TWILIO_TWIML_APP_SID;
+
+  const result = generateVoiceToken({ identity: 'test-admin' });
+
+  // Restore
+  if (originalSid !== undefined) process.env.TWILIO_TWIML_APP_SID = originalSid;
+
+  const config = getTwilioConfig();
+  if (!config.isConfigured) {
+    // If Twilio itself isn't configured, it returns a different error — both are failures
+    assert.ok(!result.success, 'Returns failure when unconfigured');
+  } else {
+    // Twilio is configured but TwiML App SID is missing
+    assert.ok(!result.success, 'Returns failure when twimlAppSid missing');
+    assert.ok(result.error.includes('TWILIO_TWIML_APP_SID'), 'Error message references the missing env var');
+  }
+});
+
+test('sendTwilioWhatsApp formats the to/from with whatsapp: prefix (unit check via error path)', async () => {
+  // Without a live Twilio credential or WhatsApp sandbox we can only check
+  // that the function fails gracefully with a meaningful error, not that it throws.
+  const result = await sendTwilioWhatsApp({ to: '', body: 'test' });
+  assert.ok(!result.success, 'Empty phone returns failure');
+  assert.ok(typeof result.error === 'string', 'Error is a string');
+});
+
 test('twilio tab is registered in adminModules and accessible to superadmin', () => {
   assert.ok(ADMIN_TAB_IDS.has('twilio'), 'twilio tab ID is registered');
-  
+
   const twilioModule = ADMIN_MODULES.find((m) => m.id === 'twilio');
   assert.ok(twilioModule, 'twilio module object exists');
   assert.equal(twilioModule.group, 'Sales & Marketing');

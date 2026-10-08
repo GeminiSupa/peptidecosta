@@ -5,6 +5,7 @@ import {
   getTwilioConfig,
   getTwilioMessages,
   sendTwilioSms,
+  sendTwilioWhatsApp,
   triggerStudioFlow,
 } from '@/lib/twilio';
 
@@ -12,7 +13,8 @@ export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/admin/twilio
- * Returns Twilio status, configuration metadata, and recent SMS messages log.
+ * Returns Twilio status, configuration metadata, recent SMS/WA messages log,
+ * and voice readiness flag.
  */
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -23,9 +25,11 @@ export async function GET(request) {
   if (!config.isConfigured) {
     return NextResponse.json({
       configured: false,
+      voiceReady: false,
       phoneNumber: null,
       oldFlowSid: null,
       newFlowSid: null,
+      twimlAppSid: null,
       messages: [],
       error: 'Twilio is not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to environment.',
     });
@@ -38,10 +42,12 @@ export async function GET(request) {
 
   return NextResponse.json({
     configured: true,
+    voiceReady: config.voiceReady,
     phoneNumber: config.phoneNumber,
     accountSidSnippet: config.accountSid ? `${config.accountSid.slice(0, 6)}...${config.accountSid.slice(-4)}` : null,
     oldFlowSid: config.oldFlowSid,
     newFlowSid: config.newFlowSid,
+    twimlAppSid: config.twimlAppSid || null,
     messages: messagesResult.messages || [],
     error: messagesResult.error || null,
   });
@@ -49,8 +55,8 @@ export async function GET(request) {
 
 /**
  * POST /api/admin/twilio
- * Dispatches outbound SMS messages or triggers Studio Flows.
- * Body: { action: 'send_sms' | 'trigger_flow', to, message, flowSid, parameters }
+ * Dispatches outbound SMS, WhatsApp messages, or triggers Studio Flows.
+ * Body: { action: 'send_sms' | 'send_whatsapp' | 'trigger_flow', to, message, flowSid, parameters }
  */
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
@@ -70,6 +76,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Destination phone number (to) is required.' }, { status: 400 });
   }
 
+  // --- TRIGGER STUDIO FLOW ---
   if (action === 'trigger_flow') {
     const flowSid = String(body?.flowSid || '').trim();
     const parameters = body?.parameters && typeof body.parameters === 'object' ? body.parameters : {};
@@ -88,7 +95,29 @@ export async function POST(request) {
     });
   }
 
-  // Default action: send_sms
+  // --- SEND WHATSAPP ---
+  if (action === 'send_whatsapp') {
+    const messageBody = String(body?.message || body?.body || '').trim();
+    if (!messageBody) {
+      return NextResponse.json({ error: 'WhatsApp message body is required.' }, { status: 400 });
+    }
+
+    const result = await sendTwilioWhatsApp({ to, body: messageBody });
+    if (!result.success) {
+      return NextResponse.json({ error: result.error || 'Failed to send WhatsApp message.' }, { status: 422 });
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'WhatsApp message sent successfully.',
+      sid: result.sid,
+      status: result.status,
+      to: result.to,
+      from: result.from,
+    });
+  }
+
+  // --- DEFAULT: SEND SMS ---
   const messageBody = String(body?.message || body?.body || '').trim();
   if (!messageBody) {
     return NextResponse.json({ error: 'SMS text message body is required.' }, { status: 400 });

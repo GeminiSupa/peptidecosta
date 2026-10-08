@@ -1,4 +1,6 @@
 import twilio from 'twilio';
+const { AccessToken } = twilio.jwt;
+const { VoiceGrant } = AccessToken;
 
 /**
  * Reads Twilio configuration from environment variables.
@@ -9,8 +11,10 @@ export function getTwilioConfig() {
   const phoneNumber = process.env.TWILIO_PHONE_NUMBER || '';
   const oldFlowSid = process.env.TWILIO_OLD_FLOW_SID || '';
   const newFlowSid = process.env.TWILIO_NEW_FLOW_SID || '';
+  const twimlAppSid = process.env.TWILIO_TWIML_APP_SID || '';
 
   const isConfigured = Boolean(accountSid && authToken && phoneNumber);
+  const voiceReady = Boolean(isConfigured && twimlAppSid);
 
   return {
     accountSid,
@@ -18,7 +22,9 @@ export function getTwilioConfig() {
     phoneNumber,
     oldFlowSid,
     newFlowSid,
+    twimlAppSid,
     isConfigured,
+    voiceReady,
   };
 }
 
@@ -63,6 +69,56 @@ export function formatE164Phone(phone) {
 }
 
 /**
+ * Generates a short-lived Twilio Access Token with a VoiceGrant.
+ * Used by the browser Twilio Voice SDK to authenticate outbound calls.
+ */
+export function generateVoiceToken({ identity = 'admin-dashboard' } = {}) {
+  const config = getTwilioConfig();
+
+  if (!config.isConfigured) {
+    return { success: false, error: 'Twilio is not configured on this server.' };
+  }
+  if (!config.twimlAppSid) {
+    return {
+      success: false,
+      error: 'TWILIO_TWIML_APP_SID is not set. Create a TwiML App in the Twilio Console first.',
+    };
+  }
+
+  try {
+    const token = new AccessToken(
+      config.accountSid,
+      // AccessToken needs the API Key SID and API Key Secret for production.
+      // During development / simple setups, accountSid + authToken work as the
+      // signing credentials when passed as the key/secret pair.
+      config.accountSid,
+      config.authToken,
+      { identity, ttl: 3600 } // 1-hour token
+    );
+
+    const voiceGrant = new VoiceGrant({
+      outgoingApplicationSid: config.twimlAppSid,
+      incomingAllow: false, // dashboard only makes outbound calls
+    });
+
+    token.addGrant(voiceGrant);
+
+    return {
+      success: true,
+      token: token.toJwt(),
+      identity,
+      ttl: 3600,
+    };
+  } catch (err) {
+    console.error('[twilio] generateVoiceToken error:', err);
+    return {
+      success: false,
+      error: err.message || 'Failed to generate Twilio Voice Access Token.',
+    };
+  }
+}
+
+/**
  * Sends an outbound SMS message via Twilio.
  */
 export async function sendTwilioSms({ to, body }) {
@@ -101,6 +157,50 @@ export async function sendTwilioSms({ to, body }) {
     return {
       success: false,
       error: err.message || 'Failed to send SMS message via Twilio.',
+    };
+  }
+}
+
+/**
+ * Sends an outbound WhatsApp message via Twilio's WhatsApp Business API.
+ * Requires the Twilio number to be WhatsApp-enabled in the Twilio Console.
+ */
+export async function sendTwilioWhatsApp({ to, body }) {
+  const config = getTwilioConfig();
+  if (!config.isConfigured) {
+    return { success: false, error: 'Twilio is not configured on this server.' };
+  }
+
+  const formattedTo = formatE164Phone(to);
+  if (!formattedTo) {
+    return { success: false, error: 'Invalid destination phone number.' };
+  }
+
+  const client = getTwilioClient();
+  if (!client) {
+    return { success: false, error: 'Could not connect to Twilio client.' };
+  }
+
+  try {
+    const message = await client.messages.create({
+      from: `whatsapp:${config.phoneNumber}`,
+      to: `whatsapp:${formattedTo}`,
+      body: String(body || '').trim(),
+    });
+
+    return {
+      success: true,
+      sid: message.sid,
+      status: message.status,
+      to: message.to,
+      from: message.from,
+      dateCreated: message.dateCreated,
+    };
+  } catch (err) {
+    console.error('[twilio] sendWhatsApp error:', err);
+    return {
+      success: false,
+      error: err.message || 'Failed to send WhatsApp message via Twilio.',
     };
   }
 }
@@ -155,7 +255,7 @@ export async function triggerStudioFlow({ flowSid, to, parameters = {} }) {
 }
 
 /**
- * Fetches recent SMS messages from Twilio.
+ * Fetches recent SMS and WhatsApp messages from Twilio.
  */
 export async function getTwilioMessages({ limit = 25 } = {}) {
   const config = getTwilioConfig();
@@ -194,6 +294,47 @@ export async function getTwilioMessages({ limit = 25 } = {}) {
       success: false,
       error: err.message || 'Failed to fetch Twilio message log.',
       messages: [],
+    };
+  }
+}
+
+/**
+ * Fetches recent call logs from Twilio.
+ */
+export async function getTwilioCallLogs({ limit = 20 } = {}) {
+  const config = getTwilioConfig();
+  if (!config.isConfigured) {
+    return { success: false, error: 'Twilio is not configured on this server.', calls: [] };
+  }
+
+  const client = getTwilioClient();
+  if (!client) {
+    return { success: false, error: 'Could not connect to Twilio client.', calls: [] };
+  }
+
+  try {
+    const callList = await client.calls.list({ limit: Math.min(limit, 50) });
+
+    const calls = callList.map((c) => ({
+      sid: c.sid,
+      from: c.from,
+      to: c.to,
+      status: c.status,
+      direction: c.direction,
+      duration: c.duration, // seconds string
+      startTime: c.startTime,
+      endTime: c.endTime,
+      price: c.price,
+      priceUnit: c.priceUnit,
+    }));
+
+    return { success: true, calls, count: calls.length };
+  } catch (err) {
+    console.error('[twilio] getCallLogs error:', err);
+    return {
+      success: false,
+      error: err.message || 'Failed to fetch Twilio call logs.',
+      calls: [],
     };
   }
 }
