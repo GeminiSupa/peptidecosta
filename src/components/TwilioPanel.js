@@ -18,6 +18,8 @@ export default function TwilioPanel() {
   });
 
   const [activeTab, setActiveTab] = useState('sms'); // 'sms' | 'flow' | 'logs'
+  const smsFeedbackTimerRef = React.useRef(null);
+  const flowFeedbackTimerRef = React.useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Send SMS Form State
@@ -53,6 +55,11 @@ export default function TwilioPanel() {
 
   useEffect(() => {
     fetchTwilioData();
+    return () => {
+      clearTimeout(smsFeedbackTimerRef.current);
+      clearTimeout(flowFeedbackTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSendSms = async (e) => {
@@ -83,6 +90,8 @@ export default function TwilioPanel() {
         });
         setSmsBody('');
         fetchTwilioData();
+        clearTimeout(smsFeedbackTimerRef.current);
+        smsFeedbackTimerRef.current = setTimeout(() => setSmsFeedback(null), 6000);
       }
     } catch (err) {
       setSmsFeedback({ type: 'error', text: err.message || 'Network error occurred.' });
@@ -130,6 +139,8 @@ export default function TwilioPanel() {
           text: `Studio Flow execution started! Execution SID: ${data.executionSid}`,
         });
         fetchTwilioData();
+        clearTimeout(flowFeedbackTimerRef.current);
+        flowFeedbackTimerRef.current = setTimeout(() => setFlowFeedback(null), 6000);
       }
     } catch (err) {
       setFlowFeedback({ type: 'error', text: err.message || 'Network error occurred.' });
@@ -184,8 +195,8 @@ export default function TwilioPanel() {
             disabled={loading}
             title="Refresh Status & Logs"
           >
-            <RefreshCw size={14} className={loading ? 'sync-spin' : ''} />
-            <span className="hide-mobile">Refresh</span>
+            <RefreshCw size={14} className={loading ? 'sync-spinner twilio-spin-icon' : ''} />
+            <span className="twilio-hide-mobile">Refresh</span>
           </button>
         </div>
       </div>
@@ -358,7 +369,7 @@ export default function TwilioPanel() {
               >
                 {sendingSms ? (
                   <>
-                    <RefreshCw size={16} className="sync-spin" /> Sending SMS...
+                    <RefreshCw size={16} className="sync-spinner twilio-spin-icon" /> Sending SMS...
                   </>
                 ) : (
                   <>
@@ -397,6 +408,9 @@ export default function TwilioPanel() {
                 onChange={(e) => setSelectedFlowSid(e.target.value)}
                 required
               >
+                {!twilioData.newFlowSid && !twilioData.oldFlowSid && (
+                  <option value="" disabled>— No Studio Flows configured —</option>
+                )}
                 {twilioData.newFlowSid && (
                   <option value={twilioData.newFlowSid}>
                     ⚡ New Studio Flow ({twilioData.newFlowSid})
@@ -442,7 +456,7 @@ export default function TwilioPanel() {
               >
                 {triggeringFlow ? (
                   <>
-                    <RefreshCw size={16} className="sync-spin" /> Triggering Flow...
+                    <RefreshCw size={16} className="sync-spinner twilio-spin-icon" /> Triggering Flow...
                   </>
                 ) : (
                   <>
