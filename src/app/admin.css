@@ -12111,3 +12111,401 @@
     line-height: 1.45;
     color: #94a3b8;
 }
+
+
+/* ==========================================
+   TWILIO DASHBOARD PANEL (MOBILE-FIRST)
+   ========================================== */
+.twilio-panel-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+.twilio-header-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: linear-gradient(135deg, rgba(14, 26, 51, 0.95) 0%, rgba(8, 15, 30, 0.98) 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 16px;
+    padding: 20px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+@media (min-width: 768px) {
+    .twilio-header-banner {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.twilio-header-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.twilio-icon-badge {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: rgba(0, 212, 255, 0.12);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #00D4FF;
+    flex-shrink: 0;
+}
+
+.twilio-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0;
+}
+
+.twilio-subtitle {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+.twilio-status-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.twilio-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.twilio-status-pill.success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+}
+
+.twilio-status-pill.danger {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
+
+.twilio-subtabs-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+}
+.twilio-subtabs-row::-webkit-scrollbar { display: none; }
+
+.twilio-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.twilio-subtab-btn:hover {
+    background: rgba(30, 41, 59, 0.8);
+    color: #f8fafc;
+}
+
+.twilio-subtab-btn.active {
+    background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 114, 255, 0.1) 100%);
+    border-color: #00D4FF;
+    color: #00D4FF;
+    box-shadow: 0 4px 14px rgba(0, 212, 255, 0.15);
+}
+
+.twilio-form-card,
+.twilio-logs-card {
+    padding: 24px;
+    border-radius: 16px;
+}
+
+.twilio-card-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #f8fafc;
+    margin: 0 0 4px;
+}
+
+.twilio-card-subtitle {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin-bottom: 20px;
+}
+
+.twilio-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.twilio-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.twilio-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #cbd5e1;
+}
+
+.twilio-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+}
+
+.twilio-textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    line-height: 1.5;
+}
+
+.twilio-field-hint,
+.twilio-char-count {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.twilio-preset-chips {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+}
+
+.twilio-preset-label {
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.twilio-chip {
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.twilio-chip:hover {
+    background: rgba(0, 212, 255, 0.12);
+    border-color: #00D4FF;
+    color: #00D4FF;
+}
+
+.twilio-actions-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+.twilio-submit-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 0.9rem;
+}
+
+@media (min-width: 640px) {
+    .twilio-submit-btn {
+        width: auto;
+        min-width: 220px;
+    }
+}
+
+.twilio-alert {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+}
+
+.twilio-alert.success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+}
+
+.twilio-alert.error {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
+
+/* Twilio Activity Logs */
+.twilio-logs-header {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+@media (min-width: 768px) {
+    .twilio-logs-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}
+
+.twilio-search-box {
+    position: relative;
+    width: 100%;
+    max-width: 360px;
+}
+
+.twilio-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #64748b;
+}
+
+.twilio-search-input {
+    padding-left: 36px !important;
+}
+
+.twilio-empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.twilio-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.twilio-badge.success {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+}
+
+.twilio-badge.danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+}
+
+.twilio-badge.warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+}
+
+.twilio-msg-body {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Light Theme Theme Overrides for Twilio Components */
+[data-theme="light"] .twilio-header-banner {
+    background: #ffffff;
+    border: 1px solid rgba(0, 39, 102, 0.12);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .twilio-title {
+    color: #0f172a;
+}
+
+[data-theme="light"] .twilio-subtitle {
+    color: #475569;
+}
+
+[data-theme="light"] .twilio-subtab-btn {
+    background: #ffffff;
+    border-color: rgba(15, 23, 42, 0.12);
+    color: #475569;
+}
+
+[data-theme="light"] .twilio-subtab-btn:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+[data-theme="light"] .twilio-subtab-btn.active {
+    background: #eef6ff;
+    border-color: #0072FF;
+    color: #0072FF;
+}
+
+[data-theme="light"] .twilio-card-title {
+    color: #0f172a;
+}
+
+[data-theme="light"] .twilio-card-subtitle {
+    color: #475569;
+}
+
+[data-theme="light"] .twilio-label {
+    color: #1e293b;
+}
+
+[data-theme="light"] .twilio-chip {
+    background: #f8fafc;
+    border-color: rgba(15, 23, 42, 0.12);
+    color: #334155;
+}
+
+[data-theme="light"] .twilio-chip:hover {
+    background: #eef6ff;
+    border-color: #0072FF;
+    color: #0072FF;
+}

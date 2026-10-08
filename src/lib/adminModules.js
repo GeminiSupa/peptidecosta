@@ -59,6 +59,7 @@ export const ADMIN_MODULES = [
   // still cannot reach My Team and still has no invite button.
   { id: 'my_team', label: 'My Team (Sub-Users)', title: 'My Team', group: 'Sales & Marketing', alwaysAvailable: true },
   { id: 'broadcasts', label: 'Announcements', title: 'Announcements', group: 'Sales & Marketing' },
+  { id: 'twilio', label: 'Twilio SMS', title: 'Twilio SMS & Studio Flows', group: 'Sales & Marketing' },
   { id: 'analytics', label: 'Analytics', title: 'Analytics & Attribution', group: 'Analytics & Content' },
   { id: 'cms', label: 'CMS', title: 'CMS Drafts & Preview', group: 'Analytics & Content' },
   // The marketing site at peptidescostarica.net, rebuilt in the separate

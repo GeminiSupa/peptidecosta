@@ -66,6 +66,7 @@ import BroadcastsPanel from '@/components/admin/BroadcastsPanel';
 import WebsitePanel from '@/components/admin/WebsitePanel';
 import AdminHelpBot from '@/components/admin/AdminHelpBot';
 import ActivityLogPanel from '@/components/admin/ActivityLogPanel';
+import TwilioPanel from '@/components/TwilioPanel';
 import { productBaseline as buildProductBaseline } from '@/lib/productSaveGuard.mjs';
 import { catalogCompoundAndSize, composeStoredProductName, splitStoredProductForAdmin } from '@/lib/catalogCategories.mjs';
 import DealOfWeekPanel from '@/components/admin/DealOfWeekPanel';
@@ -1851,6 +1852,10 @@ Core Rules:
     broadcasts: {
       label: 'Announcements',
       icon: <Megaphone size={iconSize} />,
+    },
+    twilio: {
+      label: 'Twilio SMS',
+      icon: <Send size={iconSize} style={{ color: activeTab === 'twilio' ? 'inherit' : '#38bdf8' }} />,
     },
     analytics: {
       label: 'Analytics',
@@ -7430,6 +7435,14 @@ Te contacto respecto a tu orden #${recipient.orderNumber} de ${itemsStr}. Querí
           <div className="admin-orders-tab admin-tab-panel">
             <ErrorBoundary>
             <EmailMarketingStudio />
+            </ErrorBoundary>
+          </div>
+        )}
+
+        {activeTab === 'twilio' && (
+          <div className="admin-orders-tab admin-tab-panel" style={{ padding: '20px' }}>
+            <ErrorBoundary>
+              <TwilioPanel />
             </ErrorBoundary>
           </div>
         )}
