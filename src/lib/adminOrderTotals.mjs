@@ -1,5 +1,5 @@
 import { isBacWater, splitCartUnits } from './bacWater.mjs';
-import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT } from './bulkDeal.mjs';
+import { tenPlusDiscountPct, STANDARD_FIVE_PLUS_PCT, STANDARD_TEN_PLUS_PCT } from './bulkDeal.mjs';
 import { FALLBACK_USD_CRC_RATE } from './fallbackExchangeRate.mjs';
 
 // Same emergency rate as everywhere else — see fallbackExchangeRate.mjs.
@@ -122,6 +122,28 @@ export function storedOrderVolumePct(order) {
   if (raw === null || raw === undefined || raw === '') return null;
   const pct = Number(raw);
   return Number.isFinite(pct) && pct >= 0 ? pct : null;
+}
+
+/**
+ * Volume % to charge when an order's items change.
+ *
+ * Vial count still picks the tier (0 / 15% / 10+). The recorded rate only
+ * pins the 10+ percentage — so a deal-week order that was charged 35% keeps
+ * 35% while it still has 10+ vials, but dropping to 8 vials steps down to
+ * 15% instead of freezing the old 20%/35% forever.
+ */
+export function resolveOrderVolumePct(items = [], storedPct = null) {
+  const fromCount = getAdminVolumeDiscountPct(items);
+  if (fromCount === 0) return 0;
+  if (fromCount === STANDARD_FIVE_PLUS_PCT) return STANDARD_FIVE_PLUS_PCT;
+
+  const recorded = storedPct === null || storedPct === undefined || storedPct === ''
+    ? null
+    : Number(storedPct);
+  if (Number.isFinite(recorded) && recorded >= STANDARD_TEN_PLUS_PCT) {
+    return recorded;
+  }
+  return fromCount;
 }
 
 export function calculateAdminOrderTotals(items = [], shipping = 0, discounts = {}) {

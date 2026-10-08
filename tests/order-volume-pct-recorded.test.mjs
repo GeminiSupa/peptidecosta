@@ -18,6 +18,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateAdminOrderTotals,
+  resolveOrderVolumePct,
   storedOrderVolumePct,
 } from '../src/lib/adminOrderTotals.mjs';
 import { authoritativeCheckout } from '../src/lib/authoritativeCheckout.mjs';
@@ -116,4 +117,23 @@ test('a brand new order with no recorded rate uses the tier in force', () => {
     const totals = calculateAdminOrderTotals(ITEMS, 0, { volumeDiscountPct: null });
     assert.equal(totals.discountPct, 20);
   });
+});
+
+test('editing vials down from 10+ to 8 steps the volume discount to 15%', () => {
+  // Order was priced at 20% with 10 vials; staff cut it to 8. The recorded
+  // rate must not freeze 20% forever — 8 vials earn the 15% tier.
+  const eight = [{ product: 'BPC-157', qty: 8, price: 60 }];
+  assert.equal(resolveOrderVolumePct(eight, 20), 15);
+  assert.equal(resolveOrderVolumePct(eight, 35), 15);
+
+  const totals = calculateAdminOrderTotals(eight, 0, {
+    volumeDiscountPct: resolveOrderVolumePct(eight, 20),
+  });
+  assert.equal(totals.discountPct, 15);
+  assert.equal(totals.discountAmount, 480 * 0.15);
+
+  // Still at 10+: keep the deal-week rate that was recorded.
+  assert.equal(resolveOrderVolumePct(ITEMS, 35), 35);
+  // Below 5: no volume discount.
+  assert.equal(resolveOrderVolumePct([{ product: 'BPC-157', qty: 3, price: 60 }], 20), 0);
 });

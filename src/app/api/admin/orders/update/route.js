@@ -11,7 +11,7 @@ import { isRefundStatus } from '@/lib/orderRefund.mjs';
 import { markActiveAbandonedCartsConvertedForOrder } from '@/lib/abandonedCartRecovery.mjs';
 import { orderVisibleToAgent } from '@/lib/agentOrders';
 import { cleanReason, decideOwnerChange, sameOwner } from '@/lib/orderOwnership.mjs';
-import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_FULFILLMENT_COLUMNS, ORDER_INVENTORY_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
+import { missingColumnFrom, ORDER_ATTRIBUTION_COLUMNS, ORDER_FULFILLMENT_COLUMNS, ORDER_INVENTORY_COLUMNS, ORDER_VOLUME_DISCOUNT_PCT_COLUMNS, writeDroppingMissingColumns } from '@/lib/optionalColumns.mjs';
 import { recordReadyToPrepareNotification, sendAffiliateOrderWhatsApp, sendFulfillmentReadyWhatsApp } from '@/lib/orderWhatsAppAlerts';
 import { isFirstPaidTransition, shouldSendPaidConfirmation } from '@/lib/orderStatusEmails.mjs';
 import { shouldRestoreForStatus } from '@/lib/inventoryRestore.mjs';
@@ -24,6 +24,7 @@ import {
   manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
+  resolveOrderVolumePct,
   storedOrderVolumePct,
 } from '@/lib/adminOrderTotals.mjs';
 import {
@@ -223,17 +224,19 @@ export async function PATCH(request) {
         ? manualDiscountReplacesVolume(currentOrder.source, nextManualType, nextManualValue)
         : currentOrder.apply_volume_discount === false;
 
+      // Vial count picks the tier; the recorded rate only pins the 10+ % so a
+      // deal-week order keeps its elevated rate while it still qualifies.
+      const resolvedVolumePct = replaceVolumeDiscount
+        ? 0
+        : resolveOrderVolumePct(items, storedOrderVolumePct(currentOrder));
+
       const authoritative = authoritativeCheckout({
         postedOrder: { ...currentOrder, items, currency },
         products: productsAvailableToThisOrder,
         promo,
         exchangeRate: rateResult.rate,
         suppressVolumeDiscount: replaceVolumeDiscount,
-        // Same principle as apply_volume_discount above: the rate recorded when
-        // this order was priced wins, so editing an item cannot move a deal-week
-        // order onto the standing tier. Absent on older rows, which reprice as
-        // they always did.
-        volumeDiscountPctOverride: storedOrderVolumePct(currentOrder),
+        volumeDiscountPctOverride: resolvedVolumePct,
         // A free vial a deal gave this order stays on it through an edit.
         keepPostedGifts: true,
       });
@@ -248,13 +251,14 @@ export async function PATCH(request) {
       const promoDiscountPair = getAdminCurrencyPair(authoritative.promoDiscount, currency, rateResult.rate);
       patch.discount_amount_crc = promoDiscountPair.crc;
       patch.discount_amount_usd = promoDiscountPair.usd;
+      patch.volume_discount_pct = authoritative.volumeDiscountPct ?? 0;
 
       const totals = calculateAdminOrderTotals(authoritative.items, shipping, {
         promoDiscountAmount: authoritative.promoDiscount,
         manualDiscountType: nextManualType,
         manualDiscountValue: nextManualValue,
         replaceVolumeDiscount,
-        volumeDiscountPct: storedOrderVolumePct(currentOrder),
+        volumeDiscountPct: authoritative.volumeDiscountPct ?? 0,
       });
       const primaryTotal = currency === 'CRC' ? Math.round(totals.total) : Number(totals.total.toFixed(2));
       const totalPair = getAdminCurrencyPair(primaryTotal, currency, rateResult.rate);
@@ -433,7 +437,7 @@ export async function PATCH(request) {
 
     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
       patch,
-      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS],
+      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS, ...ORDER_VOLUME_DISCOUNT_PCT_COLUMNS],
       (row) => supabase
         .from('orders')
         .update(row)
