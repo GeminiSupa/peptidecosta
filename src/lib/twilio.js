@@ -121,7 +121,7 @@ export function generateVoiceToken({ identity = 'admin-dashboard' } = {}) {
 /**
  * Sends an outbound SMS message via Twilio.
  */
-export async function sendTwilioSms({ to, body }) {
+export async function sendTwilioSms({ to, body, from }) {
   const config = getTwilioConfig();
   if (!config.isConfigured) {
     return { success: false, error: 'Twilio is not configured on this server.' };
@@ -132,6 +132,8 @@ export async function sendTwilioSms({ to, body }) {
     return { success: false, error: 'Invalid destination phone number.' };
   }
 
+  const senderNumber = formatE164Phone(from) || config.phoneNumber;
+
   const client = getTwilioClient();
   if (!client) {
     return { success: false, error: 'Could not connect to Twilio client.' };
@@ -139,7 +141,7 @@ export async function sendTwilioSms({ to, body }) {
 
   try {
     const message = await client.messages.create({
-      from: config.phoneNumber,
+      from: senderNumber,
       to: formattedTo,
       body: String(body || '').trim(),
     });
@@ -158,6 +160,29 @@ export async function sendTwilioSms({ to, body }) {
       success: false,
       error: err.message || 'Failed to send SMS message via Twilio.',
     };
+  }
+}
+
+/**
+ * Fetches all incoming phone numbers purchased under the Twilio account.
+ */
+export async function getTwilioPhoneNumbers() {
+  const config = getTwilioConfig();
+  if (!config.isConfigured) return { success: false, error: 'Twilio not configured', numbers: [] };
+  const client = getTwilioClient();
+  if (!client) return { success: false, error: 'Client unavailable', numbers: [] };
+
+  try {
+    const list = await client.incomingPhoneNumbers.list({ limit: 50 });
+    const numbers = list.map((item) => ({
+      sid: item.sid,
+      phoneNumber: item.phoneNumber,
+      friendlyName: item.friendlyName,
+    }));
+    return { success: true, numbers };
+  } catch (err) {
+    console.error('[twilio] getPhoneNumbers error:', err);
+    return { success: false, error: err.message, numbers: [] };
   }
 }
 

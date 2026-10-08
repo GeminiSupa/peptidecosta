@@ -4,6 +4,7 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import {
   getTwilioConfig,
   getTwilioMessages,
+  getTwilioPhoneNumbers,
   sendTwilioSms,
   sendTwilioWhatsApp,
   triggerStudioFlow,
@@ -14,7 +15,7 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/admin/twilio
  * Returns Twilio status, configuration metadata, recent SMS/WA messages log,
- * and voice readiness flag.
+ * phone numbers pool, and voice readiness flag.
  */
 export async function GET(request) {
   const auth = await verifyAdminSession(request);
@@ -27,6 +28,7 @@ export async function GET(request) {
       configured: false,
       voiceReady: false,
       phoneNumber: null,
+      phoneNumbers: [],
       oldFlowSid: null,
       newFlowSid: null,
       twimlAppSid: null,
@@ -38,12 +40,16 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get('limit') || '30', 10), 50);
 
-  const messagesResult = await getTwilioMessages({ limit });
+  const [messagesResult, numbersResult] = await Promise.all([
+    getTwilioMessages({ limit }),
+    getTwilioPhoneNumbers(),
+  ]);
 
   return NextResponse.json({
     configured: true,
     voiceReady: config.voiceReady,
     phoneNumber: config.phoneNumber,
+    phoneNumbers: numbersResult.numbers || [],
     accountSidSnippet: config.accountSid ? `${config.accountSid.slice(0, 6)}...${config.accountSid.slice(-4)}` : null,
     oldFlowSid: config.oldFlowSid,
     newFlowSid: config.newFlowSid,
@@ -56,7 +62,7 @@ export async function GET(request) {
 /**
  * POST /api/admin/twilio
  * Dispatches outbound SMS, WhatsApp messages, or triggers Studio Flows.
- * Body: { action: 'send_sms' | 'send_whatsapp' | 'trigger_flow', to, message, flowSid, parameters }
+ * Body: { action: 'send_sms' | 'send_whatsapp' | 'trigger_flow', to, from, message, flowSid, parameters }
  */
 export async function POST(request) {
   const auth = await verifyAdminSession(request);
@@ -71,6 +77,7 @@ export async function POST(request) {
 
   const action = String(body?.action || 'send_sms').trim();
   const to = String(body?.to || '').trim();
+  const from = String(body?.from || '').trim();
 
   if (!to) {
     return NextResponse.json({ error: 'Destination phone number (to) is required.' }, { status: 400 });
@@ -123,7 +130,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'SMS text message body is required.' }, { status: 400 });
   }
 
-  const result = await sendTwilioSms({ to, body: messageBody });
+  const result = await sendTwilioSms({ to, body: messageBody, from });
   if (!result.success) {
     return NextResponse.json({ error: result.error || 'Failed to send SMS.' }, { status: 422 });
   }

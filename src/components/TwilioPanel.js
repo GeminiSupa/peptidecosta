@@ -5,7 +5,7 @@ import {
   MessageSquare, Send, Zap, RefreshCw, PhoneCall, CheckCircle2,
   AlertCircle, ShieldCheck, Clock, Search, Smartphone, Layers,
   Phone, PhoneOff, PhoneMissed, Mic, MicOff, Wifi, WifiOff,
-  MessageCircle, Settings, Info,
+  MessageCircle, Settings, Info, Play, Square, Users, Repeat,
 } from 'lucide-react';
 
 /* ─── Call status helpers ─── */
@@ -63,6 +63,7 @@ export default function TwilioPanel() {
     configured: false,
     voiceReady: false,
     phoneNumber: '',
+    phoneNumbers: [],
     oldFlowSid: '',
     newFlowSid: '',
     twimlAppSid: '',
@@ -70,7 +71,7 @@ export default function TwilioPanel() {
     error: null,
   });
 
-  const [activeTab, setActiveTab] = useState('sms'); // 'sms' | 'flow' | 'calls' | 'whatsapp' | 'logs'
+  const [activeTab, setActiveTab] = useState('sms'); // 'sms' | 'bulk' | 'flow' | 'calls' | 'whatsapp' | 'logs'
   const [searchTerm, setSearchTerm] = useState('');
 
   /* ── SMS tab ── */
@@ -78,6 +79,16 @@ export default function TwilioPanel() {
   const [smsBody, setSmsBody] = useState('');
   const [sendingSms, setSendingSms] = useState(false);
   const [smsFeedback, showSmsFeedback] = useFeedback();
+
+  /* ── Bulk SMS Campaign tab ── */
+  const [bulkRecipients, setBulkRecipients] = useState('');
+  const [bulkMessage, setBulkMessage] = useState('');
+  const [bulkCustomPool, setBulkCustomPool] = useState('');
+  const [bulkDelay, setBulkDelay] = useState(1500);
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, sent: 0, failed: 0, logs: [] });
+  const [bulkFeedback, showBulkFeedback] = useFeedback();
+  const stopBulkRef = useRef(false);
 
   /* ── Flow tab ── */
   const [flowTo, setFlowTo] = useState('');
@@ -307,6 +318,136 @@ export default function TwilioPanel() {
     }
   };
 
+  /* ─── Bulk Campaign submit ─── */
+  const handleStartBulkCampaign = async (e) => {
+    e.preventDefault();
+    if (bulkSending) return;
+
+    const rawList = bulkRecipients
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (rawList.length === 0) {
+      showBulkFeedback('error', 'Please enter at least one recipient phone number.');
+      return;
+    }
+
+    if (!bulkMessage.trim()) {
+      showBulkFeedback('error', 'Please enter the SMS message content.');
+      return;
+    }
+
+    // Determine sender pool numbers
+    let pool = [];
+    if (bulkCustomPool.trim()) {
+      pool = bulkCustomPool
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    } else if (twilioData.phoneNumbers && twilioData.phoneNumbers.length > 0) {
+      pool = twilioData.phoneNumbers.map((n) => n.phoneNumber);
+    }
+
+    if (pool.length === 0 && twilioData.phoneNumber) {
+      pool = [twilioData.phoneNumber];
+    }
+
+    stopBulkRef.current = false;
+    setBulkSending(true);
+    setBulkProgress({
+      current: 0,
+      total: rawList.length,
+      sent: 0,
+      failed: 0,
+      logs: [],
+    });
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const campaignLogs = [];
+
+    for (let i = 0; i < rawList.length; i++) {
+      if (stopBulkRef.current) {
+        showBulkFeedback('warning', `Campaign stopped after ${i} messages.`);
+        break;
+      }
+
+      const toNum = rawList[i];
+      const fromNum = pool.length > 0 ? pool[i % pool.length] : null;
+
+      try {
+        const res = await fetch('/api/admin/twilio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send_sms',
+            to: toNum,
+            from: fromNum,
+            message: bulkMessage,
+          }),
+        });
+
+        const data = await res.json();
+        const timestamp = new Date().toLocaleTimeString();
+
+        if (res.ok && data.success) {
+          sentCount++;
+          campaignLogs.unshift({
+            id: i,
+            timestamp,
+            to: toNum,
+            from: data.from || fromNum || 'Default',
+            status: 'success',
+            sid: data.sid,
+          });
+        } else {
+          failedCount++;
+          campaignLogs.unshift({
+            id: i,
+            timestamp,
+            to: toNum,
+            from: fromNum || 'Default',
+            status: 'error',
+            error: data.error || 'Failed',
+          });
+        }
+      } catch (err) {
+        failedCount++;
+        campaignLogs.unshift({
+          id: i,
+          timestamp: new Date().toLocaleTimeString(),
+          to: toNum,
+          from: fromNum || 'Default',
+          status: 'error',
+          error: err.message,
+        });
+      }
+
+      setBulkProgress({
+        current: i + 1,
+        total: rawList.length,
+        sent: sentCount,
+        failed: failedCount,
+        logs: [...campaignLogs],
+      });
+
+      if (i < rawList.length - 1 && !stopBulkRef.current) {
+        await new Promise((r) => setTimeout(r, parseInt(bulkDelay, 10)));
+      }
+    }
+
+    setBulkSending(false);
+    if (!stopBulkRef.current) {
+      showBulkFeedback('success', `Bulk campaign completed! ${sentCount} sent successfully, ${failedCount} failed.`);
+      fetchTwilioData();
+    }
+  };
+
+  const handleStopBulkCampaign = () => {
+    stopBulkRef.current = true;
+  };
+
   /* ─── Flow submit ─── */
   const handleTriggerFlow = async (e) => {
     e.preventDefault();
@@ -465,6 +606,7 @@ export default function TwilioPanel() {
       <div className="twilio-subtabs-row">
         {[
           { id: 'sms',      icon: <Send size={15} />,           label: 'Direct SMS' },
+          { id: 'bulk',     icon: <Layers size={15} />,         label: '🚀 Bulk Campaign' },
           { id: 'whatsapp', icon: <MessageCircle size={15} />,  label: 'WhatsApp' },
           { id: 'calls',    icon: <Phone size={15} />,          label: 'Browser Call' },
           { id: 'flow',     icon: <Zap size={15} />,            label: 'Studio Flow' },
@@ -481,6 +623,183 @@ export default function TwilioPanel() {
           </button>
         ))}
       </div>
+
+      {/* ══ TAB: BULK SMS CAMPAIGN & SENDER POOL ══ */}
+      {activeTab === 'bulk' && (
+        <div className="admin-card twilio-form-card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+            <h3 className="twilio-card-title" style={{ margin: 0 }}>
+              <Layers size={18} /> Bulk Dispatch & Sender Pool (Throwaway Numbers)
+            </h3>
+            <span style={{ fontSize: '0.78rem', background: '#0284c71a', color: '#38bdf8', padding: '4px 10px', borderRadius: '12px', border: '1px solid #0284c733', fontWeight: 600 }}>
+              Anti-Spam Rotation Active
+            </span>
+          </div>
+          <p className="twilio-card-subtitle">
+            Send bulk SMS campaigns while automatically rotating sender numbers across your pool (or custom throwaway numbers) to maximize deliverability and avoid carrier throttling.
+          </p>
+
+          {bulkFeedback && (
+            <div className={`twilio-alert ${bulkFeedback.type}`}>
+              {bulkFeedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
+              <span>{bulkFeedback.text}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleStartBulkCampaign} className="twilio-form">
+            {/* Recipient Numbers */}
+            <div className="twilio-field-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="twilio-label">Recipients List (Line-separated or comma-separated)</label>
+                <button
+                  type="button"
+                  onClick={() => setBulkRecipients('+50688888888\n+50677777777\n+18579714228')}
+                  style={{ background: 'none', border: 'none', color: '#38bdf8', fontSize: '0.76rem', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  Fill Demo Numbers
+                </button>
+              </div>
+              <textarea
+                value={bulkRecipients}
+                onChange={(e) => setBulkRecipients(e.target.value)}
+                placeholder="+50688888888&#10;+50677777777&#10;+18579714228"
+                className="twilio-textarea"
+                rows={4}
+                disabled={bulkSending}
+              />
+              <span className="twilio-field-hint">
+                {bulkRecipients.split(/[\n,]+/).filter(s => s.trim()).length} recipient(s) entered.
+              </span>
+            </div>
+
+            {/* Sender Pool (Throwaway numbers) */}
+            <div className="twilio-field-group">
+              <label className="twilio-label">
+                <Repeat size={13} style={{ display: 'inline', marginRight: '4px' }} />
+                Sender Number Pool (Throwaway / Multi-Number Rotation)
+              </label>
+              <textarea
+                value={bulkCustomPool}
+                onChange={(e) => setBulkCustomPool(e.target.value)}
+                placeholder={
+                  twilioData.phoneNumbers && twilioData.phoneNumbers.length > 0
+                    ? `Auto-detected ${twilioData.phoneNumbers.length} numbers in your account. Leave blank to use all account numbers, or type custom numbers line by line.`
+                    : `Enter throwaway/secondary sender numbers (e.g. +18579714228), line by line. Leave blank to use default number (${twilioData.phoneNumber || '+18579714228'}).`
+                }
+                className="twilio-textarea"
+                rows={2}
+                disabled={bulkSending}
+              />
+              <div style={{ marginTop: '4px', fontSize: '0.76rem', color: '#94a3b8' }}>
+                {twilioData.phoneNumbers && twilioData.phoneNumbers.length > 0 ? (
+                  <span>
+                    ✓ Account sender pool: {twilioData.phoneNumbers.map(n => n.phoneNumber).join(', ')}
+                  </span>
+                ) : (
+                  <span>
+                    Default sender: {twilioData.phoneNumber || '+18579714228'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Message Content */}
+            <div className="twilio-field-group">
+              <label className="twilio-label">Campaign Message Body</label>
+              <textarea
+                value={bulkMessage}
+                onChange={(e) => setBulkMessage(e.target.value)}
+                placeholder="Type your bulk promo or announcement message here..."
+                className="twilio-textarea"
+                rows={3}
+                disabled={bulkSending}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: '#64748b' }}>
+                <span>Supports plain SMS text</span>
+                <span className="twilio-char-count">{bulkMessage.length} characters</span>
+              </div>
+            </div>
+
+            {/* Rate Limiting / Delay Selection */}
+            <div className="twilio-field-group">
+              <label className="twilio-label">Anti-Spam Delay Between Dispatches</label>
+              <select
+                value={bulkDelay}
+                onChange={(e) => setBulkDelay(Number(e.target.value))}
+                className="twilio-input"
+                disabled={bulkSending}
+                style={{ background: '#0f172a', border: '1px solid #334155', color: '#f8fafc', padding: '8px 12px', borderRadius: '8px' }}
+              >
+                <option value={1000}>1.0 second per message (Fast)</option>
+                <option value={1500}>1.5 seconds per message (Recommended)</option>
+                <option value={2500}>2.5 seconds per message (Conservative)</option>
+                <option value={5000}>5.0 seconds per message (High Deliverability)</option>
+              </select>
+            </div>
+
+            {/* Action buttons */}
+            <div className="twilio-actions-row">
+              {!bulkSending ? (
+                <button type="submit" className="admin-btn admin-btn-primary twilio-submit-btn">
+                  <Play size={16} /> Start Bulk Campaign
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleStopBulkCampaign}
+                  className="admin-btn admin-btn-danger twilio-submit-btn"
+                  style={{ background: '#ef4444', color: '#fff' }}
+                >
+                  <Square size={16} /> Stop Campaign
+                </button>
+              )}
+            </div>
+          </form>
+
+          {/* Live Progress Bar */}
+          {bulkSending || bulkProgress.total > 0 ? (
+            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #334155' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.86rem', fontWeight: 600 }}>
+                <span>
+                  Campaign Status: {bulkSending ? 'Running…' : 'Finished'}
+                </span>
+                <span>
+                  {bulkProgress.current} / {bulkProgress.total} ({Math.round((bulkProgress.current / (bulkProgress.total || 1)) * 100)}%)
+                </span>
+              </div>
+
+              {/* Progress bar fill */}
+              <div style={{ width: '100%', height: '8px', background: '#1e293b', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
+                <div
+                  style={{
+                    width: `${Math.round((bulkProgress.current / (bulkProgress.total || 1)) * 100)}%`,
+                    height: '100%',
+                    background: 'linear-[#0284c7, #38bdf8]',
+                    backgroundColor: '#38bdf8',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', fontSize: '0.82rem' }}>
+                <span style={{ color: '#34d399', fontWeight: 600 }}>✓ Sent: {bulkProgress.sent}</span>
+                <span style={{ color: '#f87171', fontWeight: 600 }}>✕ Failed: {bulkProgress.failed}</span>
+              </div>
+
+              {/* Live Log Stream */}
+              {bulkProgress.logs && bulkProgress.logs.length > 0 && (
+                <div style={{ maxHeight: '200px', overflowY: 'auto', background: '#020617', padding: '12px', borderRadius: '8px', border: '1px solid #1e293b', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+                  {bulkProgress.logs.map((log) => (
+                    <div key={log.id} style={{ marginBottom: '6px', color: log.status === 'success' ? '#34d399' : '#f87171' }}>
+                      [{log.timestamp}] To: {log.to} | From: {log.from} | {log.status === 'success' ? `✅ Sent (SID: ${log.sid})` : `❌ ${log.error}`}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* ══ TAB: SEND DIRECT SMS ══ */}
       {activeTab === 'sms' && (
