@@ -1854,7 +1854,7 @@ Core Rules:
       icon: <Megaphone size={iconSize} />,
     },
     twilio: {
-      label: 'Twilio SMS',
+      label: 'Twilio Hub',
       icon: <Send size={iconSize} style={{ color: activeTab === 'twilio' ? 'inherit' : '#38bdf8' }} />,
     },
     analytics: {
@@ -1922,7 +1922,7 @@ Core Rules:
       // tab missing from both is invisible on a desktop no matter what the
       // permission rules say. That is exactly what happened to Requests, which
       // now sits down in Operations with the other owner-only screens.
-      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'leads', 'customers', 'carts']
+      : ['home', 'orders', 'fulfillment', 'whatsapp_ai', 'chatwoot', 'twilio', 'leads', 'customers', 'carts']
   ).filter((tabId) => hasAccess(tabId));
   const desktopSecondaryGroups = [
     { title: 'Sales & Customers', tabs: ['customers', 'inquiries', 'prospects'] },
