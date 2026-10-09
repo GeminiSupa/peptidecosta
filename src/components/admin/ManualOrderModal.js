@@ -1,15 +1,20 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BadgePercent, Plus, Trash2, UserRoundSearch } from 'lucide-react';
+import { BadgePercent, CheckCircle2, Plus, Sparkles, Trash2, UserRoundSearch } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 import {
   ADMIN_FALLBACK_EXCHANGE_RATE,
   calculateAdminOrderTotals,
   getAdminCurrencyPair,
-  getAdminVolumeDiscountPct,
 } from '@/lib/adminOrderTotals.mjs';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
+import {
+  DISCOUNT_MODE_AUTO,
+  DISCOUNT_MODE_CUSTOM,
+  DISCOUNT_MODE_NONE,
+  previewAutomaticDiscount,
+} from '@/lib/manualOrderDiscount.mjs';
 import {
   buildManualOrderCustomerOptions,
   resolveManualOrderCustomerPrefill,
@@ -28,6 +33,9 @@ const emptyForm = () => ({
   shipping_address: '', currency: 'CRC', payment_method: 'whatsapp', status: 'Pending', promo_code: '',
   shipping_cost_crc: 0, shipping_cost_usd: 0, items: [{ ...EMPTY_ITEM }],
   manual_discount_type: 'none', manual_discount_value: '', manual_discount_reason: '',
+  // The automatic discount is the default on every manual order. The agent can
+  // step out of it, but never by accident.
+  discount_mode: DISCOUNT_MODE_AUTO,
   internal_notes: '', sales_agent: '', notify_customer: true,
   affiliate_id: '', commission_mode: 'default', commission_override_pct: 20,
   apply_volume_discount: true,
@@ -50,7 +58,12 @@ export default function ManualOrderModal({
   const [error, setError] = useState('');
   const [form, setForm] = useState(emptyForm);
   const [customerSearch, setCustomerSearch] = useState('');
+  // The running promotion, read from the same endpoint the storefront reads so
+  // the form cannot describe a different sale than the one being charged.
+  const [liveDeal, setLiveDeal] = useState(null);
+  const [removePromptOpen, setRemovePromptOpen] = useState(false);
   const wasOpen = useRef(false);
+  const customDiscountValueRef = useRef(null);
   const customerOptions = useMemo(() => buildManualOrderCustomerOptions(orders), [orders]);
   const liveExchangeRate = Number.isFinite(Number(exchangeRate)) && Number(exchangeRate) > 0
     ? Number(exchangeRate)
@@ -80,6 +93,25 @@ export default function ManualOrderModal({
     }
     wasOpen.current = open;
   }, [open, initialCustomer, orders]);
+
+  // Re-read on every open, not once per session: a flash sale can start, end or
+  // be stopped by hand while this screen is sitting in a browser tab all day.
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/deals/current', { cache: 'no-store' });
+        const data = await res.json();
+        if (!cancelled) setLiveDeal(res.ok ? (data.deal || null) : null);
+      } catch {
+        // No deal information is better than a blocked order form. The server
+        // still prices the live offer when the order is saved.
+        if (!cancelled) setLiveDeal(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open]);
 
   if (!open) return null;
 
@@ -134,23 +166,38 @@ export default function ManualOrderModal({
   const giftShortfall = bacGiftShortfall(form.items);
 
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
-  const manualDiscountType = isSuperadmin && form.manual_discount_type !== 'none'
+  const discountMode = form.discount_mode;
+  const manualDiscountType = discountMode === DISCOUNT_MODE_CUSTOM && form.manual_discount_type !== 'none'
     ? form.manual_discount_type
     : null;
+
+  // Recomputed on every keystroke and every product change, which is the whole
+  // ask: the agent should never have to remember that a sale is running.
+  const autoDiscount = previewAutomaticDiscount({
+    items: form.items,
+    deal: liveDeal,
+    products,
+    currency: form.currency,
+  });
+  const autoApplies = discountMode === DISCOUNT_MODE_AUTO
+    && (autoDiscount.offerDiscount > 0 || autoDiscount.freeLines.length > 0);
+
   const {
     itemsSubtotal,
-    discountPct,
-    discountAmount,
+    promoDiscountAmount: autoOfferAmount,
     manualDiscountAmount,
     total,
   } = calculateAdminOrderTotals(form.items, shipping, {
     manualDiscountType,
     manualDiscountValue: form.manual_discount_value,
-    // The operator's own choice, not a rule inferred behind their back. It
-    // starts off the moment a negotiated discount is typed — 25% agreed on the
-    // phone means 25% off the list price — but they can put it back for a
-    // customer who has earned both.
-    replaceVolumeDiscount: !form.apply_volume_discount,
+    // previewAutomaticDiscount has already picked between the running offers
+    // and the volume tier and rounded the winner the way the server rounds it,
+    // so the tier is never applied a second time here.
+    volumeDiscountPct: 0,
+    replaceVolumeDiscount: true,
+    // The automatic discount rides in the promo slot: the same position in the
+    // arithmetic the server uses - after the catalog, before the typed figure.
+    promoDiscountAmount: discountMode === DISCOUNT_MODE_AUTO ? autoDiscount.offerDiscount : 0,
   });
 
   // The preview and the receipt must agree to the cent, so it is worth being
@@ -158,14 +205,45 @@ export default function ManualOrderModal({
   // single total and hoping. The promo code's own discount is deliberately
   // absent: it is resolved and priced by the server against the live promo
   // table, so the browser has no honest figure for it until the order saves.
-  const qualifyingVolumePct = getAdminVolumeDiscountPct(form.items);
-  const volumeTierLabel = qualifyingVolumePct > 0
-    ? `${qualifyingVolumePct}% on this cart`
-    : 'this cart does not reach the 5-vial tier';
 
   const salesAgentAffiliateOptions = affiliates.filter(isSalesAgentAffiliate);
   const externalAffiliateOptions = affiliates.filter((affiliate) => !isSalesAgentAffiliate(affiliate));
   const selectedAffiliate = affiliates.find((affiliate) => affiliate.id === form.affiliate_id) || null;
+
+  // The three ways out of the automatic discount, each one a single click.
+  const useAutomaticDiscount = () => {
+    setRemovePromptOpen(false);
+    setForm((current) => ({
+      ...current,
+      discount_mode: DISCOUNT_MODE_AUTO,
+      apply_volume_discount: true,
+      manual_discount_type: 'none',
+      manual_discount_value: '',
+      manual_discount_reason: '',
+    }));
+  };
+  const useCustomDiscount = () => {
+    setRemovePromptOpen(false);
+    setForm((current) => ({
+      ...current,
+      discount_mode: DISCOUNT_MODE_CUSTOM,
+      apply_volume_discount: false,
+      manual_discount_type: current.manual_discount_type === 'none' ? 'percentage' : current.manual_discount_type,
+    }));
+    // Land the cursor in the box they came here to fill in.
+    setTimeout(() => customDiscountValueRef.current?.focus(), 0);
+  };
+  const useNoDiscount = () => {
+    setRemovePromptOpen(false);
+    setForm((current) => ({
+      ...current,
+      discount_mode: DISCOUNT_MODE_NONE,
+      apply_volume_discount: false,
+      manual_discount_type: 'none',
+      manual_discount_value: '',
+      manual_discount_reason: '',
+    }));
+  };
 
   const money = (amount) => form.currency === 'USD'
     ? `$${Number(amount).toFixed(2)}`
@@ -187,14 +265,21 @@ export default function ManualOrderModal({
     }
 
     const discountValue = Number(form.manual_discount_value || 0);
-    if (manualDiscountType) {
+    if (discountMode === DISCOUNT_MODE_CUSTOM) {
       if (!Number.isFinite(discountValue) || discountValue <= 0) {
-        setError('Enter a discount greater than zero, or set the discount back to "No manual discount".');
+        setError('Enter a custom discount greater than zero, or go back to the automatic discount.');
         setSaving(false);
         return;
       }
       if (manualDiscountType === 'percentage' && discountValue > 100) {
         setError('Percentage discount cannot exceed 100%.');
+        setSaving(false);
+        return;
+      }
+      // The owner reads this reason when a total looks wrong. A superadmin
+      // setting their own price does not have to explain it to themselves.
+      if (!isSuperadmin && !form.manual_discount_reason.trim()) {
+        setError('Give a reason for the custom discount - it is shown on the receipt.');
         setSaving(false);
         return;
       }
@@ -219,7 +304,9 @@ export default function ManualOrderModal({
     if (form.notify_customer && form.payment_method !== 'card' && form.customer_email.trim()) {
       if (!confirmCustomerEmail('order receipt', form.customer_email.trim(), [
         `Total: ${money(total)}`,
-        manualDiscountType ? `Includes your ${form.manual_discount_value}${manualDiscountType === 'percentage' ? '%' : ` ${form.currency}`} order discount.` : '',
+        manualDiscountType
+          ? `Includes your ${form.manual_discount_value}${manualDiscountType === 'percentage' ? '%' : ` ${form.currency}`} custom discount.`
+          : (autoApplies ? `Includes the automatic discount: ${autoDiscount.label}.` : ''),
         'Untick "Email the customer their receipt" to save the order without sending anything.',
       ])) {
         setSaving(false);
@@ -253,12 +340,15 @@ export default function ManualOrderModal({
             internal_notes: form.internal_notes.trim() || null,
             notify_customer: form.notify_customer,
             apply_volume_discount: form.apply_volume_discount,
+            // Which of the three discounts this order asked for. The server
+            // re-prices the automatic one against the live deal either way.
+            discount_mode: discountMode,
+            manual_discount_type: manualDiscountType,
+            manual_discount_value: manualDiscountType ? discountValue : 0,
+            manual_discount_reason: manualDiscountType
+              ? (form.manual_discount_reason.trim() || null)
+              : null,
             ...(isSuperadmin ? {
-              manual_discount_type: manualDiscountType,
-              manual_discount_value: manualDiscountType ? discountValue : 0,
-              manual_discount_reason: manualDiscountType
-                ? (form.manual_discount_reason.trim() || null)
-                : null,
               ...(form.sales_agent.trim() && form.sales_agent !== HOUSE_SALE ? { sales_agent: form.sales_agent.trim() } : {}),
               house_sale: form.sales_agent === HOUSE_SALE,
               affiliate_id: form.affiliate_id || null,
@@ -429,100 +519,149 @@ export default function ManualOrderModal({
             })}
           />
 
-          {/* The negotiated discount, entered before the order is saved rather
-              than after it. Bulk buyers agree their price on the phone; when
-              the only place to record it was the order detail panel, the
-              customer's confirmation went out at the undiscounted price and
-              their receipt was wrong from the moment it arrived. */}
-          {isSuperadmin ? (
-            <div style={{
-              marginTop: '12px',
-              padding: '14px',
-              borderRadius: '10px',
-              border: '1px solid rgba(56, 189, 248, 0.22)',
-              background: 'rgba(56, 189, 248, 0.06)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
-                <BadgePercent size={16} /> Order discount
-              </div>
-              {/* Two columns, with the reason on its own row underneath. The
-                  order panel's three-across layout has the width for it; this
-                  modal does not, and it clipped every one of the three labels. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
-                <select
-                  className="admin-select"
-                  value={form.manual_discount_type}
-                  onChange={(e) => setForm({
-                    ...form,
-                    manual_discount_type: e.target.value,
-                    // Follows the discount by default; the checkbox below still
-                    // has the last word.
-                    apply_volume_discount: e.target.value === 'none',
-                  })}
-                >
-                  <option value="none">No manual discount</option>
-                  <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed amount</option>
-                </select>
-                <input
-                  className="admin-input"
-                  type="number"
-                  min="0"
-                  max={form.manual_discount_type === 'percentage' ? '100' : undefined}
-                  step={form.manual_discount_type === 'percentage' ? '0.1' : (form.currency === 'USD' ? '0.01' : '1')}
-                  value={form.manual_discount_value}
-                  onChange={(e) => setForm({ ...form, manual_discount_value: e.target.value })}
-                  disabled={!manualDiscountType}
-                  placeholder={form.manual_discount_type === 'percentage' ? 'Percent' : `Amount ${form.currency}`}
-                />
-                <input
-                  className="admin-input"
-                  style={{ gridColumn: '1 / -1' }}
-                  value={form.manual_discount_reason}
-                  maxLength={200}
-                  onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
-                  disabled={!manualDiscountType}
-                  placeholder="Reason shown on receipt (optional)"
-                />
-              </div>
-              <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
-                The order discount is applied after volume and promo discounts, before shipping. The reason appears on the customer&apos;s receipt.
-              </p>
+          {/* One card for every discount on a manual order, because the agent
+              taking the call should not have to know which of three screens a
+              discount lives on. The automatic one is the default and is applied
+              without being asked for; stepping out of it is deliberate. */}
+          <div style={{
+            marginTop: '14px',
+            padding: '14px',
+            borderRadius: '10px',
+            border: `1px solid ${autoApplies ? 'rgba(22, 163, 74, 0.45)' : 'rgba(148, 163, 184, 0.25)'}`,
+            background: autoApplies ? 'rgba(22, 163, 74, 0.08)' : 'rgba(148, 163, 184, 0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '10px', color: '#e2e8f0', fontWeight: 800, fontSize: '0.85rem' }}>
+              <BadgePercent size={16} /> Discount
             </div>
-          ) : null}
 
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '12px', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={form.apply_volume_discount}
-              onChange={(e) => setForm({ ...form, apply_volume_discount: e.target.checked })}
-              style={{ marginTop: '2px' }}
-            />
-            <span style={{ fontSize: '0.75rem', color: '#cbd5e1', lineHeight: 1.4 }}>
-              Also apply the automatic volume discount ({volumeTierLabel})
-              <span style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px' }}>
-                {form.apply_volume_discount
-                  ? (manualDiscountType
-                    ? 'Both discounts come off — the customer pays less than the figure you typed above.'
-                    : 'The usual bulk pricing applies.')
-                  : (manualDiscountType
-                    ? 'Off, so the discount you typed above is the whole discount.'
-                    : 'Off. This order is charged the list price, with no automatic volume discount.')}
-              </span>
-            </span>
-          </label>
+            {discountMode === DISCOUNT_MODE_AUTO && autoApplies && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <CheckCircle2 size={18} style={{ color: '#22c55e', flexShrink: 0, marginTop: '1px' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ color: '#22c55e', fontWeight: 800, fontSize: '0.82rem' }}>
+                      Automatic discount applied
+                    </div>
+                    <div style={{ color: '#e2e8f0', fontSize: '0.8rem', marginTop: '3px' }}>
+                      {autoDiscount.label}
+                    </div>
+                    {autoOfferAmount > 0 && (
+                      <div style={{ color: '#22c55e', fontWeight: 800, fontSize: '0.95rem', marginTop: '4px' }}>
+                        -{money(autoOfferAmount)}
+                      </div>
+                    )}
+                    {autoDiscount.freeLines.length > 0 && (
+                      <div style={{ color: '#7dd3fc', fontSize: '0.75rem', marginTop: '4px' }}>
+                        The free vials are added to the order when it saves.
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={() => setRemovePromptOpen(true)}
+                  style={{ marginTop: '10px' }}
+                >
+                  Remove discount
+                </button>
+              </>
+            )}
+
+            {discountMode === DISCOUNT_MODE_AUTO && !autoApplies && (
+              <>
+                <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                  No automatic discount applies to these items yet.
+                  {autoDiscount.nudge ? ` ${autoDiscount.nudge}` : ''}
+                </div>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary"
+                  onClick={useCustomDiscount}
+                  style={{ marginTop: '10px' }}
+                >
+                  Add a custom discount
+                </button>
+              </>
+            )}
+
+            {discountMode === DISCOUNT_MODE_NONE && (
+              <>
+                <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                  <strong>No discount.</strong> This order is charged list price, even while a sale is running.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                  <button type="button" className="admin-btn admin-btn-secondary" onClick={useAutomaticDiscount}>
+                    <Sparkles size={14} /> Reapply automatic discount
+                  </button>
+                  <button type="button" className="admin-btn admin-btn-secondary" onClick={useCustomDiscount}>
+                    Set a custom discount
+                  </button>
+                </div>
+              </>
+            )}
+
+            {discountMode === DISCOUNT_MODE_CUSTOM && (
+              <>
+                {/* Two columns, with the reason on its own row underneath. The
+                    order panel's three-across layout has the width for it; this
+                    modal does not, and it clipped every one of the three labels. */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '8px' }}>
+                  <select
+                    className="admin-select"
+                    value={form.manual_discount_type === 'none' ? 'percentage' : form.manual_discount_type}
+                    onChange={(e) => setForm({ ...form, manual_discount_type: e.target.value })}
+                  >
+                    <option value="percentage">Percentage</option>
+                    <option value="fixed">Fixed amount</option>
+                  </select>
+                  <input
+                    ref={customDiscountValueRef}
+                    className="admin-input"
+                    type="number"
+                    min="0"
+                    max={form.manual_discount_type === 'percentage' ? '100' : undefined}
+                    step={form.manual_discount_type === 'percentage' ? '0.1' : (form.currency === 'USD' ? '0.01' : '1')}
+                    value={form.manual_discount_value}
+                    onChange={(e) => setForm({ ...form, manual_discount_value: e.target.value })}
+                    placeholder={form.manual_discount_type === 'percentage' ? 'Percent' : `Amount ${form.currency}`}
+                  />
+                  <input
+                    className="admin-input"
+                    style={{ gridColumn: '1 / -1' }}
+                    value={form.manual_discount_reason}
+                    maxLength={200}
+                    onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
+                    placeholder={isSuperadmin ? 'Reason shown on receipt (optional)' : 'Reason shown on receipt (required)'}
+                  />
+                </div>
+                <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
+                  Your figure replaces the automatic discount, so the customer gets this and nothing on top of it.
+                  The reason appears on their receipt.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                  <button type="button" className="admin-btn admin-btn-secondary" onClick={useAutomaticDiscount}>
+                    <Sparkles size={14} /> Use the automatic discount instead
+                  </button>
+                  <button type="button" className="admin-btn admin-btn-secondary" onClick={useNoDiscount}>
+                    No discount at all
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <div className="order-detail-totals" style={{ marginTop: '12px' }}>
             <div><span>Items subtotal</span><span>{money(itemsSubtotal)}</span></div>
-            {discountPct > 0 && (
+            {autoOfferAmount > 0 && (
               <div style={{ color: '#16a34a' }}>
-                <span>Volume discount ({discountPct}%)</span>
-                <span>-{money(discountAmount)}</span>
+                <span>{autoDiscount.label || 'Automatic discount'}</span>
+                <span>-{money(autoOfferAmount)}</span>
               </div>
             )}
             {manualDiscountAmount > 0 && (
               <div style={{ color: '#c084fc' }}>
-                <span>Order discount{form.manual_discount_reason.trim() ? ` (${form.manual_discount_reason.trim()})` : ''}</span>
+                <span>Custom discount{form.manual_discount_reason.trim() ? ` (${form.manual_discount_reason.trim()})` : ''}</span>
                 <span>-{money(manualDiscountAmount)}</span>
               </div>
             )}
@@ -673,6 +812,41 @@ export default function ManualOrderModal({
           </button>
         </form>
       </div>
+
+      {/* Removing the automatic discount is a decision, so it asks what should
+          happen instead rather than silently charging list price. */}
+      {removePromptOpen && (
+        <div
+          className="modal active"
+          style={{ zIndex: 240 }}
+          onClick={(e) => { e.stopPropagation(); setRemovePromptOpen(false); }}
+        >
+          <div
+            className="modal-content"
+            style={{ maxWidth: '440px' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 800 }}>Remove the automatic discount?</h3>
+            <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+              {autoDiscount.label
+                ? `This order currently gets ${autoDiscount.label}.`
+                : 'This order currently gets the automatic discount.'}
+              {' '}Do you want to put your own discount in its place?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button type="button" className="admin-btn admin-btn-primary" onClick={useCustomDiscount}>
+                Yes - set a custom discount
+              </button>
+              <button type="button" className="admin-btn admin-btn-secondary" onClick={useNoDiscount}>
+                No - charge list price, no discount at all
+              </button>
+              <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setRemovePromptOpen(false)}>
+                Cancel - keep the automatic discount
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

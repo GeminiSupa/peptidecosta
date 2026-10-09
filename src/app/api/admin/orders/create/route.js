@@ -10,10 +10,18 @@ import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import {
   calculateManualDiscountAmount,
   getAdminCurrencyPair,
-  manualDiscountReplacesVolume,
   normalizeAdminOrderCurrency,
   normalizeManualDiscountType,
 } from '@/lib/adminOrderTotals.mjs';
+import {
+  DISCOUNT_MODE_AUTO,
+  DISCOUNT_MODE_CUSTOM,
+  dealOffersForPricing,
+  resolveManualOrderDiscountMode,
+} from '@/lib/manualOrderDiscount.mjs';
+import { getLiveDeals } from '@/lib/dealsEngine';
+import { activeDealForOrder } from '@/lib/authoritativeCheckout.mjs';
+import { combineLiveDeals } from '@/lib/dealOfWeek.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { sendAdminOrderEmail } from '@/lib/adminOrderEmail.mjs';
 import { applyCustomerHistoryAttribution } from '@/lib/customerHistoryAttributionServer';
@@ -182,19 +190,27 @@ export async function POST(request) {
     // which meant the confirmation reached the customer carrying a price
     // nobody had agreed to. Same validation as /api/admin/orders/update so the
     // two entry points cannot disagree about what a valid discount is.
+    // Which of the three discounts this order asked for. A sales agent may now
+    // choose a custom figure instead of the automatic one - the whole point of
+    // the change, so the team stops hand-typing live offers - but a non-
+    // superadmin has to say why, because that reason is what the owner reads
+    // when a total looks wrong, and it prints on the customer's receipt.
+    const discountMode = resolveManualOrderDiscountMode(order);
     const requestedManualDiscountType = normalizeManualDiscountType(order.manual_discount_type);
     const requestedManualDiscountValue = Number(order.manual_discount_value || 0);
-    if (!auth.profile.is_superadmin && requestedManualDiscountType && requestedManualDiscountValue > 0) {
-      return NextResponse.json({
-        error: 'Only a superadmin can add a manual order discount. Use the automatic volume discount or a valid promo code.',
-      }, { status: 403 });
-    }
-
-    const manualDiscountType = auth.profile.is_superadmin ? requestedManualDiscountType : null;
-    const manualDiscountValue = auth.profile.is_superadmin ? requestedManualDiscountValue : 0;
-    const manualDiscountReason = auth.profile.is_superadmin
+    const wantsCustomDiscount = discountMode === DISCOUNT_MODE_CUSTOM
+      && requestedManualDiscountType
+      && requestedManualDiscountValue > 0;
+    const manualDiscountType = wantsCustomDiscount ? requestedManualDiscountType : null;
+    const manualDiscountValue = wantsCustomDiscount ? requestedManualDiscountValue : 0;
+    const manualDiscountReason = wantsCustomDiscount
       ? String(order.manual_discount_reason || '').trim()
       : '';
+    if (wantsCustomDiscount && !auth.profile.is_superadmin && !manualDiscountReason) {
+      return NextResponse.json({
+        error: 'Give a reason for the custom discount. It is shown on the receipt and in the order history.',
+      }, { status: 400 });
+    }
     if (!Number.isFinite(manualDiscountValue) || manualDiscountValue < 0) {
       return NextResponse.json({ error: 'Discount value must be zero or greater' }, { status: 400 });
     }
@@ -205,14 +221,31 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Discount reason cannot exceed 200 characters' }, { status: 400 });
     }
 
-    // Whether the automatic volume tier applies is the operator's own call,
-    // made on a checkbox next to the discount. It defaults to the rule the
-    // form follows — a negotiated discount replaces the tier — so an API
-    // caller that says nothing still gets sensible pricing, but an explicit
-    // choice is never overridden by an inference.
-    const replaceVolumeDiscount = order.apply_volume_discount === undefined
-      ? manualDiscountReplacesVolume('admin_manual', manualDiscountType, manualDiscountValue)
-      : order.apply_volume_discount === false;
+    // Only the automatic mode reaches for the running promotion and the volume
+    // tier. "Custom" and "No discount" both mean the agent has taken the
+    // pricing into their own hands, and an offer applied behind them is how a
+    // negotiated 25% quietly became 40%.
+    const useAutomaticDiscount = discountMode === DISCOUNT_MODE_AUTO;
+    const replaceVolumeDiscount = !useAutomaticDiscount;
+
+    // The live promotion, priced the same way the storefront prices it: the
+    // weekly deal and any flash sale pooled, then the single best offer. Until
+    // this was passed in, a manual order taken during a 50%-off flash sale
+    // charged the customer full price.
+    let liveDealOffers = null;
+    let matchedDealId = null;
+    if (useAutomaticDiscount) {
+      try {
+        const pooled = combineLiveDeals(await getLiveDeals(supabase));
+        const matched = activeDealForOrder(pooled ? [pooled] : [], order.items);
+        liveDealOffers = dealOffersForPricing(matched);
+        matchedDealId = matched?.id || null;
+      } catch (dealError) {
+        // A deal lookup that fails must not stop an order being written down.
+        // The order saves at list price and says so in its own activity log.
+        console.warn('[admin/orders/create] live deal lookup skipped:', dealError.message);
+      }
+    }
 
     const authoritative = authoritativeCheckout({
       postedOrder: { ...order, currency },
@@ -220,6 +253,7 @@ export async function POST(request) {
       promo,
       exchangeRate: liveExchangeRate,
       suppressVolumeDiscount: replaceVolumeDiscount,
+      dealOffers: liveDealOffers,
       // Staff may give a free vial by hand ("X (Free Gift)" at 0).
       keepPostedGifts: true,
     });
@@ -290,6 +324,12 @@ export async function POST(request) {
       internal_notes: String(order.internal_notes || '').trim() || null,
     };
 
+    // Credit the promotion whose offer actually discounted this order, exactly
+    // as the storefront does, so a flash sale's revenue report counts the
+    // orders the sales team took over the phone too.
+    const dealIdForOrder = authoritative.dealOfferDealId || (liveDealOffers ? matchedDealId : null);
+    if (dealIdForOrder) row.deal_id = dealIdForOrder;
+
     // Attribution decides what the business pays its own people, so only a
     // superadmin may set it. Staff creating their own orders are pinned to
     // themselves at the profile rate, exactly as before.
@@ -359,8 +399,12 @@ export async function POST(request) {
       row.agent_commission_source = requestedCommissionSource;
     }
     const discountNote = manualDiscountType
-      ? ` · order discount ${manualDiscountType === 'percentage' ? `${manualDiscountValue}%` : `${manualDiscountValue} ${currency}`}${manualDiscountReason ? ` — ${manualDiscountReason}` : ''}`
-      : '';
+      ? ` · custom discount ${manualDiscountType === 'percentage' ? `${manualDiscountValue}%` : `${manualDiscountValue} ${currency}`}${manualDiscountReason ? ` — ${manualDiscountReason}` : ''}`
+      : (useAutomaticDiscount
+        ? ` · automatic discount: ${authoritative.dealOffer && authoritative.dealOffer !== 'none'
+          ? authoritative.dealOffer
+          : (authoritative.volumeDiscountPct ? `volume ${authoritative.volumeDiscountPct}%` : 'none applicable')}`
+        : ' · no discount applied');
     row.activity_log = appendOrderActivity([], {
       type: 'manual_entry',
       message: `Manual order created by ${auth.user.email} · catalog pricing verified${discountNote} · FX $1 = ₡${liveExchangeRate} (${rateResult.source})`,
@@ -381,6 +425,9 @@ export async function POST(request) {
       ...ORDER_ATTRIBUTION_COLUMNS,
       ...ORDER_VOLUME_DISCOUNT_COLUMNS,
       ...ORDER_VOLUME_DISCOUNT_PCT_COLUMNS,
+      // Deal attribution arrives with the deals migrations; an order is worth
+      // more than the tag that says which promotion it came from.
+      'deal_id',
     ];
     let { data, error, droppedColumns } = await writeDroppingMissingColumns(
       row,
