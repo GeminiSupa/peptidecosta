@@ -12,6 +12,7 @@
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",
     "@supabase/supabase-js": "^2.105.4",
+    "@twilio/voice-sdk": "^2.18.5",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
     "@xyflow/react": "^12.11.2",
     "framer-motion": "^12.40.0",

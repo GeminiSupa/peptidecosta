@@ -194,30 +194,47 @@ export default function TwilioPanel() {
     if (!twilioData.voiceReady) return;
 
     try {
-      // Dynamically load the Twilio Voice SDK from CDN to avoid bundle bloat
-      if (!window.Twilio) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://sdk.twilio.com/js/voice/releases/2.11.0/twilio.min.js';
-          script.onload = resolve;
-          script.onerror = () => reject(new Error('Failed to load Twilio Voice SDK'));
-          document.head.appendChild(script);
-        });
-      }
+      // The SDK is imported here rather than at the top of the file so its
+      // ~300KB only downloads when someone actually opens this tab. It used to
+      // be pulled from sdk.twilio.com, which now answers 403 for every version
+      // — the script never loaded, so the dialpad could never become ready.
+      const { Device } = await import('@twilio/voice-sdk');
 
       const tokenRes = await adminFetch('/api/admin/twilio/token');
-      if (!tokenRes.ok) throw new Error('Failed to get Voice token');
+      if (!tokenRes.ok) {
+        const detail = await tokenRes.json().catch(() => ({}));
+        throw new Error(detail.error || 'Failed to get Voice token');
+      }
       const { token } = await tokenRes.json();
-
-      const Device = window.Twilio.Device;
       const device = new Device(token, {
         logLevel: 1,
         codecPreferences: ['opus', 'pcmu'],
       });
 
-      device.on('ready', () => {
+      // Voice SDK 2.x has no 'ready' event — that was 1.x, and waiting for it
+      // left the dialpad permanently answering "Voice device not ready".
+      // Outgoing calls need no registration at all, so the device can be used
+      // the moment it exists; 'registered' is kept because it is the signal
+      // that the connection to Twilio is actually up.
+      deviceReadyRef.current = true;
+      setCallStatus(CALL_STATUS.IDLE);
+
+      device.on('registered', () => {
         deviceReadyRef.current = true;
         setCallStatus(CALL_STATUS.IDLE);
+      });
+
+      // Tokens last an hour. Without this the tab quietly stops being able to
+      // dial for anyone who leaves the admin open all day.
+      device.on('tokenWillExpire', async () => {
+        try {
+          const res = await adminFetch('/api/admin/twilio/token');
+          if (!res.ok) return;
+          const refreshed = await res.json();
+          device.updateToken(refreshed.token);
+        } catch (err) {
+          console.error('[TwilioVoice] could not refresh the token:', err);
+        }
       });
 
       device.on('error', (err) => {
