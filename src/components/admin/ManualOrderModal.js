@@ -167,7 +167,9 @@ export default function ManualOrderModal({
 
   const shipping = form.currency === 'USD' ? Number(form.shipping_cost_usd) || 0 : Number(form.shipping_cost_crc) || 0;
   const discountMode = form.discount_mode;
-  const manualDiscountType = discountMode === DISCOUNT_MODE_CUSTOM && form.manual_discount_type !== 'none'
+  // A typed discount remains the superadmin's alone. An agent chooses between
+  // the automatic discount and none, which is the choice they always had.
+  const manualDiscountType = isSuperadmin && discountMode === DISCOUNT_MODE_CUSTOM && form.manual_discount_type !== 'none'
     ? form.manual_discount_type
     : null;
 
@@ -265,7 +267,7 @@ export default function ManualOrderModal({
     }
 
     const discountValue = Number(form.manual_discount_value || 0);
-    if (discountMode === DISCOUNT_MODE_CUSTOM) {
+    if (manualDiscountType) {
       if (!Number.isFinite(discountValue) || discountValue <= 0) {
         setError('Enter a custom discount greater than zero, or go back to the automatic discount.');
         setSaving(false);
@@ -273,13 +275,6 @@ export default function ManualOrderModal({
       }
       if (manualDiscountType === 'percentage' && discountValue > 100) {
         setError('Percentage discount cannot exceed 100%.');
-        setSaving(false);
-        return;
-      }
-      // The owner reads this reason when a total looks wrong. A superadmin
-      // setting their own price does not have to explain it to themselves.
-      if (!isSuperadmin && !form.manual_discount_reason.trim()) {
-        setError('Give a reason for the custom discount - it is shown on the receipt.');
         setSaving(false);
         return;
       }
@@ -343,12 +338,12 @@ export default function ManualOrderModal({
             // Which of the three discounts this order asked for. The server
             // re-prices the automatic one against the live deal either way.
             discount_mode: discountMode,
-            manual_discount_type: manualDiscountType,
-            manual_discount_value: manualDiscountType ? discountValue : 0,
-            manual_discount_reason: manualDiscountType
-              ? (form.manual_discount_reason.trim() || null)
-              : null,
             ...(isSuperadmin ? {
+              manual_discount_type: manualDiscountType,
+              manual_discount_value: manualDiscountType ? discountValue : 0,
+              manual_discount_reason: manualDiscountType
+                ? (form.manual_discount_reason.trim() || null)
+                : null,
               ...(form.sales_agent.trim() && form.sales_agent !== HOUSE_SALE ? { sales_agent: form.sales_agent.trim() } : {}),
               house_sale: form.sales_agent === HOUSE_SALE,
               affiliate_id: form.affiliate_id || null,
@@ -574,14 +569,16 @@ export default function ManualOrderModal({
                   No automatic discount applies to these items yet.
                   {autoDiscount.nudge ? ` ${autoDiscount.nudge}` : ''}
                 </div>
-                <button
-                  type="button"
-                  className="admin-btn admin-btn-secondary"
-                  onClick={useCustomDiscount}
-                  style={{ marginTop: '10px' }}
-                >
-                  Add a custom discount
-                </button>
+                {isSuperadmin && (
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-secondary"
+                    onClick={useCustomDiscount}
+                    style={{ marginTop: '10px' }}
+                  >
+                    Add a custom discount
+                  </button>
+                )}
               </>
             )}
 
@@ -594,14 +591,16 @@ export default function ManualOrderModal({
                   <button type="button" className="admin-btn admin-btn-secondary" onClick={useAutomaticDiscount}>
                     <Sparkles size={14} /> Reapply automatic discount
                   </button>
-                  <button type="button" className="admin-btn admin-btn-secondary" onClick={useCustomDiscount}>
-                    Set a custom discount
-                  </button>
+                  {isSuperadmin && (
+                    <button type="button" className="admin-btn admin-btn-secondary" onClick={useCustomDiscount}>
+                      Set a custom discount
+                    </button>
+                  )}
                 </div>
               </>
             )}
 
-            {discountMode === DISCOUNT_MODE_CUSTOM && (
+            {isSuperadmin && discountMode === DISCOUNT_MODE_CUSTOM && (
               <>
                 {/* Two columns, with the reason on its own row underneath. The
                     order panel's three-across layout has the width for it; this
@@ -632,7 +631,7 @@ export default function ManualOrderModal({
                     value={form.manual_discount_reason}
                     maxLength={200}
                     onChange={(e) => setForm({ ...form, manual_discount_reason: e.target.value })}
-                    placeholder={isSuperadmin ? 'Reason shown on receipt (optional)' : 'Reason shown on receipt (required)'}
+                    placeholder="Reason shown on receipt (optional)"
                   />
                 </div>
                 <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: '#94a3b8', lineHeight: 1.4 }}>
@@ -831,14 +830,18 @@ export default function ManualOrderModal({
               {autoDiscount.label
                 ? `This order currently gets ${autoDiscount.label}.`
                 : 'This order currently gets the automatic discount.'}
-              {' '}Do you want to put your own discount in its place?
+              {isSuperadmin
+                ? ' Do you want to put your own discount in its place?'
+                : ' Removing it charges the customer list price.'}
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <button type="button" className="admin-btn admin-btn-primary" onClick={useCustomDiscount}>
-                Yes - set a custom discount
-              </button>
+              {isSuperadmin && (
+                <button type="button" className="admin-btn admin-btn-primary" onClick={useCustomDiscount}>
+                  Yes - set a custom discount
+                </button>
+              )}
               <button type="button" className="admin-btn admin-btn-secondary" onClick={useNoDiscount}>
-                No - charge list price, no discount at all
+                {isSuperadmin ? 'No - charge list price, no discount at all' : 'Yes - charge list price, no discount'}
               </button>
               <button type="button" className="admin-btn admin-btn-secondary" onClick={() => setRemovePromptOpen(false)}>
                 Cancel - keep the automatic discount

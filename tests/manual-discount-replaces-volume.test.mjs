@@ -221,23 +221,23 @@ test('reopening an order honours the choice it was saved with', () => {
   assert.equal(resolveOnEdit({ source: 'website', apply_volume_discount: null }, 'percentage', 25), false);
 });
 
-test('a sales agent may set a custom discount, but must say why', () => {
-  // The owner asked for this deliberately: the sales team was hand-typing live
-  // offers and getting them wrong, so an agent now gets the automatic discount
-  // by default and may replace it with their own figure. The reason is what
-  // makes that auditable, so it is required of everyone but a superadmin.
-  assert.match(manualOrderRoute, /const discountMode = resolveManualOrderDiscountMode\(order\);/);
-  assert.match(manualOrderRoute, /wantsCustomDiscount && !auth\.profile\.is_superadmin && !manualDiscountReason/);
-  assert.match(manualOrderRoute, /Give a reason for the custom discount/);
-  assert.doesNotMatch(manualOrderRoute, /Only a superadmin can add a manual order discount/);
+test('manual order negotiated discounts are superadmin-only', () => {
+  assert.match(
+    manualOrderRoute,
+    /!auth\.profile\.is_superadmin && requestedManualDiscountType && requestedManualDiscountValue > 0/,
+  );
+  assert.match(manualOrderRoute, /Only a superadmin can add a manual order discount/);
+  assert.match(manualOrderRoute, /const wantsCustomDiscount = auth\.profile\.is_superadmin/);
 
-  // The typed figure only applies in custom mode, so an order that asked for
-  // the automatic discount can never also carry a hand-typed one.
-  assert.match(manualOrderRoute, /const wantsCustomDiscount = discountMode === DISCOUNT_MODE_CUSTOM/);
-
-  assert.match(manualOrderModal, /const manualDiscountType = discountMode === DISCOUNT_MODE_CUSTOM/);
+  assert.match(manualOrderModal, /const manualDiscountType = isSuperadmin && discountMode === DISCOUNT_MODE_CUSTOM/);
+  // Every agent can take the automatic discount off an order - the choice the
+  // volume-discount checkbox used to give them. The hand-typed figure stays in
+  // the superadmin-only payload below.
+  assert.match(manualOrderModal, /apply_volume_discount: form\.apply_volume_discount/);
   assert.match(manualOrderModal, /discount_mode: discountMode,/);
-  assert.match(manualOrderModal, /!isSuperadmin && !form\.manual_discount_reason\.trim\(\)/);
-  // Attribution and commission stay superadmin-only; only the discount moved.
-  assert.match(manualOrderModal, /\.\.\.\(isSuperadmin \? \{\s*\.\.\.\(form\.sales_agent\.trim\(\)/s);
+  assert.match(manualOrderModal, /\.\.\.\(isSuperadmin \? \{\s*manual_discount_type: manualDiscountType,/s);
+  // The custom-discount fields and both buttons that open them are gated too,
+  // so an agent is never shown a discount they cannot save.
+  assert.match(manualOrderModal, /\{isSuperadmin && discountMode === DISCOUNT_MODE_CUSTOM && \(/);
+  assert.doesNotMatch(manualOrderModal, /!isSuperadmin && !form\.manual_discount_reason/);
 });
