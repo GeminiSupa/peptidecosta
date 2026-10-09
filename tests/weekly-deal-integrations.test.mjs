@@ -101,6 +101,7 @@ test('bulk threshold controls live in Deal of the Week and checkout enforces exc
 test('flexible offer setup guides non-technical admins and derives its rules from saved settings', () => {
   const dealPanel = fs.readFileSync('src/components/admin/DealOfWeekPanel.js', 'utf8');
   const dealPage = fs.readFileSync('src/app/deal-of-the-week/page.js', 'utf8');
+  const dealStyles = fs.readFileSync('src/app/deal-of-the-week/deal-of-the-week.module.css', 'utf8');
 
   assert.match(dealPanel, /All available peptide products/);
   assert.match(dealPanel, /Same products as offer above/);
@@ -113,6 +114,7 @@ test('flexible offer setup guides non-technical admins and derives its rules fro
   assert.match(dealPanel, /Ready for final review/);
   assert.match(dealPanel, /dealOfferRuleSummaries\(offersPayload, 'en'\)/);
   assert.match(dealPage, /dealOfferRuleSummaries\(deal\.offers, lang\)/);
+  assert.match(dealStyles, /\.offerCard:only-child\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;[^}]*justify-self:\s*center;/s);
 });
 
 test('weekly deal pricing migration preserves legacy percent deals atomically', () => {
