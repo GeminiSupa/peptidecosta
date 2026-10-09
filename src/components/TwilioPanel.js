@@ -68,8 +68,10 @@ export default function TwilioPanel() {
     newFlowSid: '',
     twimlAppSid: '',
     messages: [],
+    callRecording: { enabled: true, changedBy: null, changedAt: null },
     error: null,
   });
+  const [savingRecording, setSavingRecording] = useState(false);
 
   const [activeTab, setActiveTab] = useState('sms'); // 'sms' | 'bulk' | 'flow' | 'calls' | 'whatsapp' | 'logs'
   const [searchTerm, setSearchTerm] = useState('');
@@ -111,6 +113,9 @@ export default function TwilioPanel() {
   const [callLogs, setCallLogs] = useState([]);
   const [callLogsLoading, setCallLogsLoading] = useState(false);
   const [callFeedback, showCallFeedback] = useFeedback();
+
+  // Only an explicit false is off, matching the server default.
+  const recordingEnabled = twilioData.callRecording?.enabled !== false;
   const twilioDeviceRef = useRef(null);
   const activeCallRef = useRef(null);
   const durationTimerRef = useRef(null);
@@ -131,6 +136,33 @@ export default function TwilioPanel() {
       setLoading(false);
     }
   }, []);
+
+  /**
+   * Flip call recording on or off. The server is the authority — we show what
+   * it saved, so a failed save never leaves the switch lying about the state.
+   */
+  const toggleCallRecording = useCallback(async (nextEnabled) => {
+    setSavingRecording(true);
+    try {
+      const res = await fetch('/api/admin/twilio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set_call_recording', enabled: nextEnabled }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showCallFeedback('error', data.error || 'Could not change the recording setting.');
+        return;
+      }
+      setTwilioData((prev) => ({ ...prev, callRecording: data.callRecording }));
+      showCallFeedback('success', data.message);
+    } catch (err) {
+      console.error('Failed to toggle call recording:', err);
+      showCallFeedback('error', 'Could not reach the server.');
+    } finally {
+      setSavingRecording(false);
+    }
+  }, [showCallFeedback]);
 
   const fetchCallLogs = useCallback(async () => {
     setCallLogsLoading(true);
@@ -936,11 +968,42 @@ export default function TwilioPanel() {
                   <li>Set <strong>Voice Request URL</strong> to:<br /><code className="twilio-code">https://your-domain.com/api/admin/twilio/voice</code></li>
                   <li>Copy the TwiML App SID (starts with <code className="twilio-code">AP…</code>)</li>
                   <li>Add to <code className="twilio-code">.env.local</code>: <code className="twilio-code">TWILIO_TWIML_APP_SID=APxxxx</code></li>
+                  <li>Go to <a href="https://console.twilio.com/us1/account/keys-credentials/api-keys" target="_blank" rel="noreferrer" className="twilio-link">Twilio Console → API keys</a> → <strong>Create API key</strong> (Standard)</li>
+                  <li>Add both to <code className="twilio-code">.env.local</code>: <code className="twilio-code">TWILIO_API_KEY=SKxxxx</code> and <code className="twilio-code">TWILIO_API_SECRET=…</code> — the auth token cannot sign a call token</li>
                   <li>Redeploy / restart the server</li>
                 </ol>
               </div>
             </div>
           )}
+
+          {/* Recording switch. Twilio bills per recorded minute, and some
+              calls should simply not be taped, so this is a live setting
+              rather than something only a deploy can change. */}
+          <div className="twilio-recording-row">
+            <label className="twilio-recording-label" htmlFor="twilio-record-calls">
+              <span className="twilio-recording-title">Record calls</span>
+              <span className="twilio-recording-hint">
+                {recordingEnabled
+                  ? 'Every call is recorded and kept in Twilio. Billed per minute.'
+                  : 'Calls are not being recorded.'}
+                {twilioData.callRecording?.changedBy
+                  ? ` Last changed by ${twilioData.callRecording.changedBy}.`
+                  : ''}
+              </span>
+            </label>
+            <button
+              type="button"
+              id="twilio-record-calls"
+              role="switch"
+              aria-checked={recordingEnabled}
+              className={`twilio-switch ${recordingEnabled ? 'is-on' : ''}`}
+              disabled={savingRecording}
+              onClick={() => toggleCallRecording(!recordingEnabled)}
+            >
+              <span className="twilio-switch-knob" />
+              <span className="twilio-switch-text">{recordingEnabled ? 'On' : 'Off'}</span>
+            </button>
+          </div>
 
           {callFeedback && (
             <div className={`twilio-alert ${callFeedback.type}`}>

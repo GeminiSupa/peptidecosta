@@ -1,6 +1,35 @@
 import { NextResponse } from 'next/server';
 
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { formatE164Phone, getTwilioConfig } from '@/lib/twilio';
+import {
+  CALL_RECORDING_DEFAULT_ENABLED,
+  CALL_RECORDING_SETTING_ID,
+  dialRecordAttribute,
+  readCallRecordingSetting,
+} from '@/lib/twilioCallRecording.mjs';
+
+/**
+ * Is recording switched on right now?
+ *
+ * A failed lookup must never cost us the call, so anything that goes wrong
+ * here falls back to the shipped default instead of throwing.
+ */
+async function callRecordingEnabled() {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return CALL_RECORDING_DEFAULT_ENABLED;
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', CALL_RECORDING_SETTING_ID)
+      .maybeSingle();
+    return readCallRecordingSetting(data?.value).enabled;
+  } catch (err) {
+    console.error('[twilio/voice] could not read the recording switch:', err);
+    return CALL_RECORDING_DEFAULT_ENABLED;
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -40,10 +69,12 @@ export async function POST(request) {
 
   const formattedTo = formatE164Phone(rawTo);
 
-  // Build TwiML: dial the number with a 30-second timeout, record the call
+  // Build TwiML: dial the number with a 30-second timeout. Recording is only
+  // taped when the Twilio tab's switch says so.
+  const record = dialRecordAttribute(await callRecordingEnabled());
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Dial callerId="${config.phoneNumber}" timeout="30" record="record-from-ringing">
+  <Dial callerId="${config.phoneNumber}" timeout="30"${record}>
     <Number>${formattedTo}</Number>
   </Dial>
 </Response>`;

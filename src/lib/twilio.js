@@ -12,9 +12,13 @@ export function getTwilioConfig() {
   const oldFlowSid = process.env.TWILIO_OLD_FLOW_SID || '';
   const newFlowSid = process.env.TWILIO_NEW_FLOW_SID || '';
   const twimlAppSid = process.env.TWILIO_TWIML_APP_SID || '';
+  // Voice Access Tokens are signed with an API Key pair, never the auth
+  // token. Twilio rejects a JWT signed with the account SID + auth token.
+  const apiKeySid = process.env.TWILIO_API_KEY || '';
+  const apiKeySecret = process.env.TWILIO_API_SECRET || '';
 
   const isConfigured = Boolean(accountSid && authToken && phoneNumber);
-  const voiceReady = Boolean(isConfigured && twimlAppSid);
+  const voiceReady = Boolean(isConfigured && twimlAppSid && apiKeySid && apiKeySecret);
 
   return {
     accountSid,
@@ -23,6 +27,8 @@ export function getTwilioConfig() {
     oldFlowSid,
     newFlowSid,
     twimlAppSid,
+    apiKeySid,
+    apiKeySecret,
     isConfigured,
     voiceReady,
   };
@@ -85,14 +91,21 @@ export function generateVoiceToken({ identity = 'admin-dashboard' } = {}) {
     };
   }
 
+  if (!config.apiKeySid || !config.apiKeySecret) {
+    return {
+      success: false,
+      error:
+        'TWILIO_API_KEY / TWILIO_API_SECRET are not set. Create a Standard API key in the Twilio Console; the auth token cannot sign a Voice token.',
+    };
+  }
+
   try {
     const token = new AccessToken(
       config.accountSid,
-      // AccessToken needs the API Key SID and API Key Secret for production.
-      // During development / simple setups, accountSid + authToken work as the
-      // signing credentials when passed as the key/secret pair.
-      config.accountSid,
-      config.authToken,
+      // Signing credentials: an API Key SID (SK…) and its secret. The account
+      // SID + auth token pair is NOT accepted here — Twilio rejects the JWT.
+      config.apiKeySid,
+      config.apiKeySecret,
       { identity, ttl: 3600 } // 1-hour token
     );
 

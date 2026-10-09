@@ -12828,3 +12828,91 @@
     color: #94a3b8;
 }
 [data-theme="light"] .twilio-section-label { color: #64748b; }
+
+/* ══ CALL RECORDING SWITCH ══ */
+.twilio-recording-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    background: rgba(148, 163, 184, 0.06);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+}
+.twilio-recording-label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    min-width: 0;
+}
+.twilio-recording-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+.twilio-recording-hint {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: #94a3b8;
+}
+.twilio-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    background: rgba(148, 163, 184, 0.18);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 999px;
+    padding: 5px 14px 5px 5px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.twilio-switch:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+.twilio-switch.is-on {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.45);
+}
+.twilio-switch-knob {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #94a3b8;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+.twilio-switch.is-on .twilio-switch-knob {
+    background: #22c55e;
+}
+.twilio-switch-text {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+.twilio-switch.is-on .twilio-switch-text {
+    color: #22c55e;
+}
+
+[data-theme="light"] .twilio-recording-row {
+    background: #f8fafc;
+    border-color: rgba(15, 23, 42, 0.1);
+}
+[data-theme="light"] .twilio-recording-title { color: #1e293b; }
+[data-theme="light"] .twilio-recording-hint { color: #64748b; }
+[data-theme="light"] .twilio-switch {
+    background: #e2e8f0;
+    border-color: rgba(15, 23, 42, 0.12);
+}
+[data-theme="light"] .twilio-switch.is-on {
+    background: #dcfce7;
+    border-color: rgba(22, 163, 74, 0.4);
+}
+[data-theme="light"] .twilio-switch-text { color: #64748b; }
+[data-theme="light"] .twilio-switch.is-on .twilio-switch-text { color: #15803d; }

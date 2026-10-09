@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { verifyAdminSession } from '@/lib/adminAuth';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import {
   getTwilioConfig,
   getTwilioMessages,
@@ -9,6 +10,31 @@ import {
   sendTwilioWhatsApp,
   triggerStudioFlow,
 } from '@/lib/twilio';
+import {
+  buildCallRecordingSetting,
+  CALL_RECORDING_SETTING_ID,
+  readCallRecordingSetting,
+} from '@/lib/twilioCallRecording.mjs';
+
+/**
+ * The recording switch as the Twilio tab should show it. A failed read shows
+ * the shipped default rather than breaking the whole tab.
+ */
+async function loadCallRecording() {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return readCallRecordingSetting(null);
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('id', CALL_RECORDING_SETTING_ID)
+      .maybeSingle();
+    return readCallRecordingSetting(data?.value);
+  } catch (err) {
+    console.error('[admin/twilio] could not read the recording switch:', err);
+    return readCallRecordingSetting(null);
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +59,7 @@ export async function GET(request) {
       newFlowSid: null,
       twimlAppSid: null,
       messages: [],
+      callRecording: readCallRecordingSetting(null),
       error: 'Twilio is not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to environment.',
     });
   }
@@ -40,9 +67,10 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const limit = Math.min(parseInt(searchParams.get('limit') || '30', 10), 50);
 
-  const [messagesResult, numbersResult] = await Promise.all([
+  const [messagesResult, numbersResult, callRecording] = await Promise.all([
     getTwilioMessages({ limit }),
     getTwilioPhoneNumbers(),
+    loadCallRecording(),
   ]);
 
   return NextResponse.json({
@@ -55,6 +83,7 @@ export async function GET(request) {
     newFlowSid: config.newFlowSid,
     twimlAppSid: config.twimlAppSid || null,
     messages: messagesResult.messages || [],
+    callRecording,
     error: messagesResult.error || null,
   });
 }
@@ -78,6 +107,38 @@ export async function POST(request) {
   const action = String(body?.action || 'send_sms').trim();
   const to = String(body?.to || '').trim();
   const from = String(body?.from || '').trim();
+
+  // --- TURN CALL RECORDING ON / OFF ---
+  // No destination number involved, so this answers before the 'to' check.
+  if (action === 'set_call_recording') {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Database is not reachable.' }, { status: 503 });
+    }
+
+    const value = buildCallRecordingSetting({
+      enabled: body?.enabled !== false,
+      changedBy: auth.profile?.name || null,
+    });
+
+    const { error } = await supabase
+      .from('site_settings')
+      .upsert({ id: CALL_RECORDING_SETTING_ID, value }, { onConflict: 'id' });
+
+    if (error) {
+      console.error('[admin/twilio] could not save the recording switch:', error);
+      return NextResponse.json({ error: 'Could not save the recording setting.' }, { status: 500 });
+    }
+
+    const callRecording = readCallRecordingSetting(value);
+    return NextResponse.json({
+      success: true,
+      callRecording,
+      message: callRecording.enabled
+        ? 'Calls will be recorded from now on.'
+        : 'Calls will no longer be recorded.',
+    });
+  }
 
   if (!to) {
     return NextResponse.json({ error: 'Destination phone number (to) is required.' }, { status: 400 });
