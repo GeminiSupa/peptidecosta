@@ -609,6 +609,34 @@ export default function CatalogPage() {
   // handler fires — repeated charge attempts are what trip the gateway's
   // "attempts allowed" limit and can double-charge the customer.
   const cardSubmitLockRef = useRef(false);
+  // Which wallet this device can actually use.
+  //
+  // Both buttons only redirect to the Chargex page — the wallet itself belongs
+  // to Chargex, and Apple Pay exists only on Apple devices. Shown
+  // unconditionally, an Android customer tapped "Apple Pay" and arrived at a
+  // page that could never offer it.
+  //
+  // Decided after mount, never during render: the server has no `window`, and a
+  // render that disagreed with the server's HTML would be a hydration error.
+  const [walletSupport, setWalletSupport] = useState({ apple: false, google: false });
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Apple's own test for "this device can pay". It is false on a Mac with no
+    // paired iPhone or Watch, which is exactly when the button should be gone.
+    let apple = false;
+    try {
+      apple = typeof window.ApplePaySession !== 'undefined'
+        && window.ApplePaySession.canMakePayments?.() === true;
+    } catch {
+      apple = false;
+    }
+    // Google Pay rides on the Payment Request API, and Google supports it on
+    // every modern browser including Safari — so an Apple device gets this
+    // button too. Only Apple Pay is device-locked, which is why only it is
+    // hidden; nothing here guesses on Google's behalf.
+    const google = typeof window.PaymentRequest !== 'undefined';
+    setWalletSupport({ apple, google });
+  }, []);
 
   // Contact Modal States
   const [contactModalOpen, setContactModalOpen] = useState(false);
@@ -5603,8 +5631,8 @@ export default function CatalogPage() {
                       ? (lang === 'en' ? 'Under maintenance' : 'En mantenimiento')
                       : (CARD_CHECKOUT_LIVE
                         ? (lang === 'en'
-                          ? 'Credit/Debit • Apple\u00A0Pay • Google\u00A0Pay'
-                          : 'Crédito/Débito • Apple\u00A0Pay • Google\u00A0Pay')
+                          ? `Credit/Debit${walletSupport.apple ? ' • Apple\u00A0Pay' : ''}${walletSupport.google ? ' • Google\u00A0Pay' : ''}`
+                          : `Crédito/Débito${walletSupport.apple ? ' • Apple\u00A0Pay' : ''}${walletSupport.google ? ' • Google\u00A0Pay' : ''}`)
                         : (lang === 'en' ? 'Sandbox test mode' : 'Modo de prueba sandbox')),
                     badge: !CARD_CHECKOUT_AVAILABLE
                       ? (lang === 'en' ? 'Maintenance' : 'Mantenimiento')
@@ -5715,8 +5743,9 @@ export default function CatalogPage() {
                     button. Inside the scrolling notes a phone tap lands on
                     the text instead of the button. */}
                 <div className="cart-sticky-submit">
-                  {!cardRetryBlocked && (
+                  {!cardRetryBlocked && (walletSupport.apple || walletSupport.google) && (
                     <div className="wallet-pay-row">
+                      {walletSupport.apple && (
                       <button
                         type="button"
                         className="apple-pay-btn"
@@ -5729,6 +5758,8 @@ export default function CatalogPage() {
                         </svg>
                         <span>Pay</span>
                       </button>
+                      )}
+                      {walletSupport.google && (
                       <button
                         type="button"
                         className="google-pay-btn"
@@ -5744,6 +5775,7 @@ export default function CatalogPage() {
                         </svg>
                         <span>Pay</span>
                       </button>
+                      )}
                     </div>
                   )}
                   <button
@@ -5771,9 +5803,13 @@ export default function CatalogPage() {
                   </button>
                   <p className="card-payment-caption">
                     {CARD_CHECKOUT_LIVE
-                      ? (lang === 'en'
-                        ? 'Apple Pay, Google Pay, or card. Same page.'
-                        : 'Apple Pay, Google Pay o tarjeta. La misma página.')
+                      // Names only the wallets this device is being offered.
+                      ? ((walletSupport.apple || walletSupport.google)
+                        ? `${[
+                          ...(walletSupport.apple ? ['Apple Pay'] : []),
+                          ...(walletSupport.google ? ['Google Pay'] : []),
+                        ].join(', ')}${lang === 'en' ? ', or card. Same page.' : ' o tarjeta. La misma página.'}`
+                        : (lang === 'en' ? 'Secure card checkout.' : 'Pago seguro con tarjeta.'))
                       : (lang === 'en'
                         ? 'Secure card checkout powered by Chargex sandbox'
                         : 'Pago seguro con tarjeta mediante Chargex sandbox')}
