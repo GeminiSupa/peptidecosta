@@ -619,7 +619,11 @@ export default function TwilioPanel() {
             {twilioData.newFlowSid ? `${twilioData.newFlowSid.slice(0, 10)}…` : 'FW51f1184a…'}
           </div>
         </div>
-        <div className="admin-grid-card">
+        <button
+          type="button"
+          className="admin-grid-card twilio-grid-card-action"
+          onClick={() => setActiveTab('calls')}
+        >
           <div className="admin-grid-title"><Phone size={14} /> Browser Calls</div>
           <div className="admin-grid-value" style={{ fontSize: '0.88rem' }}>
             {twilioData.voiceReady ? (
@@ -628,11 +632,19 @@ export default function TwilioPanel() {
               <span style={{ color: '#f87171' }}>Setup required</span>
             )}
           </div>
-        </div>
-        <div className="admin-grid-card">
+          <span className="twilio-grid-card-cta">
+            {twilioData.voiceReady ? 'Make a call →' : 'See what is missing →'}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="admin-grid-card twilio-grid-card-action"
+          onClick={() => setActiveTab('logs')}
+        >
           <div className="admin-grid-title"><MessageSquare size={14} /> Logged Messages</div>
           <div className="admin-grid-value">{twilioData.messages?.length || 0}</div>
-        </div>
+          <span className="twilio-grid-card-cta">View the log →</span>
+        </button>
       </div>
 
       {/* Sub-Navigation Tabs */}

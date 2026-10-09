@@ -12916,3 +12916,31 @@
 }
 [data-theme="light"] .twilio-switch-text { color: #64748b; }
 [data-theme="light"] .twilio-switch.is-on .twilio-switch-text { color: #15803d; }
+
+/* ══ CLICKABLE STATUS TILES ══ */
+/* A tile that reports a state should also be the way to act on it. */
+.twilio-grid-card-action {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.twilio-grid-card-action:hover {
+    border-color: rgba(56, 189, 248, 0.5);
+    transform: translateY(-1px);
+}
+.twilio-grid-card-action:focus-visible {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
+}
+.twilio-grid-card-cta {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #38bdf8;
+}
+[data-theme="light"] .twilio-grid-card-cta { color: #0066ff; }
