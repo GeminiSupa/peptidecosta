@@ -820,12 +820,21 @@ export default function ManualOrderModal({
           style={{ zIndex: 240 }}
           onClick={(e) => { e.stopPropagation(); setRemovePromptOpen(false); }}
         >
+          {/* The colours are set here rather than left to .modal-content. That
+              class takes --bg-card, which is the storefront's white card, and
+              the admin's own buttons are near-white text — so the two choices
+              under the first one were invisible. */}
           <div
             className="modal-content"
-            style={{ maxWidth: '440px' }}
+            style={{
+              maxWidth: '440px',
+              background: '#111c33',
+              border: '1px solid rgba(148, 163, 184, 0.25)',
+              color: '#e2e8f0',
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 800 }}>Remove the automatic discount?</h3>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.05rem', fontWeight: 800, color: '#f8fafc' }}>Remove the automatic discount?</h3>
             <p style={{ margin: '0 0 16px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.5 }}>
               {autoDiscount.label
                 ? `This order currently gets ${autoDiscount.label}.`
