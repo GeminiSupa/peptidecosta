@@ -115,9 +115,22 @@ function pricingLines(items = [], products = []) {
  * `tests/manual-order-auto-discount.test.mjs` prices the same carts through
  * both and fails if they drift apart.
  */
-export function previewAutomaticDiscount({ items = [], deal = null, products = [], currency = 'CRC' } = {}) {
+export function previewAutomaticDiscount({
+  items = [],
+  deal = null,
+  products = [],
+  currency = 'CRC',
+  // An order being edited keeps the tier it was priced at, so a deal-week
+  // order does not drop to the standing rate just because it was reopened.
+  // The offers are weighed against that same rate, exactly as the server
+  // weighs them (authoritativeCheckout's volumeDiscountPctOverride).
+  volumePctOverride = null,
+} = {}) {
   const lines = pricingLines(items, products);
-  const volumePct = getAdminVolumeDiscountPct(lines);
+  const overridden = Number(volumePctOverride);
+  const volumePct = Number.isFinite(overridden) && volumePctOverride !== null
+    ? Math.max(0, overridden)
+    : getAdminVolumeDiscountPct(lines);
   const offers = dealOffersForPricing(deal);
   const empty = { kind: 'none', label: '', nudge: '', volumePct: 0, offerDiscount: 0, freeLines: [], choice: null };
 

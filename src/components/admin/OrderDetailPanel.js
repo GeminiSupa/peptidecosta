@@ -17,6 +17,7 @@ import { isAgentReferralSource, isSalesAgentAffiliate } from '@/lib/salesAgentAf
 import { OWNER_REASON_MAX, OWNER_REASON_MIN, sameOwner } from '@/lib/orderOwnership.mjs';
 import OrderOwnerDialog from './OrderOwnerDialog';
 import { bacGiftShortfall } from '@/lib/bacWater.mjs';
+import { previewAutomaticDiscount } from '@/lib/manualOrderDiscount.mjs';
 import { formatAmount as formatRefundMoney, orderCanBeRefunded } from '@/lib/orderRefund.mjs';
 import {
   ORDER_PAYMENT_METHODS,
@@ -164,6 +165,9 @@ export default function OrderDetailPanel({
   const initialShipping = order ? inferShippingCosts(order, exchangeRate) : { crc: 0, usd: 0 };
   const initialCurrency = normalizeAdminOrderCurrency(order?.currency);
   const [notes, setNotes] = useState(order.internal_notes || '');
+  // The running promotion, read from the endpoint the storefront reads, so an
+  // edit previews the same discount the save will apply.
+  const [liveDeal, setLiveDeal] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [shippingAmount, setShippingAmount] = useState(
     (initialCurrency === 'USD' ? initialShipping.usd : initialShipping.crc) || ''
@@ -215,6 +219,24 @@ export default function OrderDetailPanel({
   //    line with it.
   const shownOrderRef = useRef(null);
   const fullReloadNextRef = useRef(false);
+
+  // Read once per opened order, not once per session: a sale can start or be
+  // stopped by hand while this panel sits in a tab all day.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/deals/current', { cache: 'no-store' });
+        const data = await res.json();
+        if (!cancelled) setLiveDeal(res.ok ? (data.deal || null) : null);
+      } catch {
+        // No deal information is better than a panel that will not open. The
+        // server still prices the live offer when the edit is saved.
+        if (!cancelled) setLiveDeal(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [order?.id]);
 
   useEffect(() => {
     if (!order) return;
@@ -368,6 +390,33 @@ export default function OrderDetailPanel({
   const promoDiscount = orderCurrency === 'USD'
     ? Number(order.discount_amount_usd || 0)
     : Number(order.discount_amount_crc || 0);
+  // Manual orders only. A website order's volume discount is the offer the
+  // customer accepted at checkout and is not staff's to overwrite.
+  const replaceVolumeDiscount = manualDiscountReplacesVolume(
+    order.source, manualDiscountType, manualDiscountValue,
+  );
+  // Vial count picks the tier; the recorded rate only pins the 10+ % when the
+  // cart still qualifies (deal-week orders keep their elevated rate).
+  const storedVolumePct = resolveOrderVolumePct(editItems, storedOrderVolumePct(order));
+
+  // What the running promotion is worth on the items as they stand now. The
+  // save re-prices against the same offers, so adding a vial during a sale no
+  // longer quietly charges full price for it.
+  const autoDiscount = previewAutomaticDiscount({
+    items: editItems,
+    deal: replaceVolumeDiscount ? null : liveDeal,
+    products,
+    currency: orderCurrency,
+    volumePctOverride: storedVolumePct,
+  });
+  // An offer only replaces the figure already on the order when there is no
+  // promo code to weigh it against: deal-versus-code is the server's call and
+  // the browser has no honest number for the code.
+  const offerBeatsTier = !order.promo_code
+    && autoDiscount.kind !== 'none'
+    && autoDiscount.kind !== 'volume'
+    && autoDiscount.offerDiscount > 0;
+
   const {
     itemsSubtotal,
     discountPct,
@@ -376,17 +425,12 @@ export default function OrderDetailPanel({
     manualDiscountAmount,
     total: orderTotal,
   } = calculateAdminOrderTotals(editItems, shipping, {
-    promoDiscountAmount: promoDiscount,
+    promoDiscountAmount: offerBeatsTier ? autoDiscount.offerDiscount : promoDiscount,
     manualDiscountType,
     manualDiscountValue,
-    // Vial count picks the tier; the recorded rate only pins the 10+ % when
-    // the cart still qualifies (deal-week orders keep their elevated rate).
-    volumeDiscountPct: resolveOrderVolumePct(editItems, storedOrderVolumePct(order)),
-    // Manual orders only. A website order's volume discount is the offer the
-    // customer accepted at checkout and is not staff's to overwrite.
-    replaceVolumeDiscount: manualDiscountReplacesVolume(
-      order.source, manualDiscountType, manualDiscountValue,
-    ),
+    // A winning offer switches the tier off, exactly as the server does.
+    volumeDiscountPct: offerBeatsTier ? 0 : storedVolumePct,
+    replaceVolumeDiscount,
   });
   const totalCosts = getAdminCurrencyPair(orderTotal, orderCurrency, exchangeRate);
 
@@ -1443,8 +1487,12 @@ export default function OrderDetailPanel({
               </div>
             )}
             {promoDiscountAmount > 0 && (
-              <div style={{ color: '#38bdf8' }}>
-                <span>Promo discount{order.promo_code ? ` (${order.promo_code})` : ''}</span>
+              <div style={{ color: offerBeatsTier ? '#16a34a' : '#38bdf8' }}>
+                <span>
+                  {offerBeatsTier
+                    ? autoDiscount.label
+                    : `Promo discount${order.promo_code ? ` (${order.promo_code})` : ''}`}
+                </span>
                 <span>{orderCurrency === 'USD' ? `-$${promoDiscountAmount.toFixed(2)}` : `-₡${Math.round(promoDiscountAmount).toLocaleString()}`}</span>
               </div>
             )}

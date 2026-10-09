@@ -197,3 +197,70 @@ test('custom and none both keep the running sale off the order', () => {
     assert.equal(totals.total, expected, `${mode} charges ${expected}`);
   }
 });
+
+/**
+ * Editing an order re-prices it. The order panel previews that in the browser
+ * and /api/admin/orders/update does it again before saving, so the same
+ * divergence that let a flash sale show one price and charge another applies
+ * here too - with the extra wrinkle that an edited order keeps the volume rate
+ * it was priced at, and the offers must be weighed against that same rate.
+ */
+for (const storedPct of [0, 15, 35]) {
+  for (const currency of ['USD', 'CRC']) {
+    const cart = [{ product: GHK, qty: 2 }, { product: TIRZ, qty: 4 }];
+    test(`order panel and update route agree on an edit — ${currency}, tier ${storedPct}%`, () => {
+      const items = formItems(cart, currency);
+      const server = authoritativeCheckout({
+        postedOrder: { currency, items: cart, lang: 'en' },
+        products,
+        exchangeRate: EXCHANGE_RATE,
+        dealOffers: pooled.offers,
+        volumeDiscountPctOverride: storedPct,
+        keepPostedGifts: true,
+      });
+      assert.equal(server.ok, true);
+
+      const auto = previewAutomaticDiscount({
+        items,
+        deal: pooled,
+        products: adminProducts,
+        currency,
+        volumePctOverride: storedPct,
+      });
+      const offerWon = auto.kind !== 'none' && auto.kind !== 'volume' && auto.offerDiscount > 0;
+      const preview = calculateAdminOrderTotals(items, 0, {
+        promoDiscountAmount: offerWon ? auto.offerDiscount : 0,
+        volumeDiscountPct: offerWon ? 0 : storedPct,
+        replaceVolumeDiscount: false,
+      });
+
+      const serverGoods = server.total - server.shipping;
+      const tolerance = currency === 'USD' ? 0.011 : 1;
+      assert.ok(
+        Math.abs(preview.total - serverGoods) <= tolerance,
+        `preview ${preview.total} vs server ${serverGoods}`,
+      );
+    });
+  }
+}
+
+test('a stored 35% tier still beats a 10% Mix & Match on an edit', () => {
+  const items = formItems([{ product: TIRZ, qty: 5 }], 'USD');
+  const auto = previewAutomaticDiscount({
+    items,
+    deal: weeklyMix,
+    products: adminProducts,
+    currency: 'USD',
+    volumePctOverride: 35,
+  });
+  assert.equal(auto.kind, 'volume', 'the rate the order was priced at wins');
+  assert.equal(auto.volumePct, 35);
+});
+
+test('turning the automatic discount off keeps the offers out of an edit', () => {
+  const items = formItems([{ product: GHK, qty: 2 }], 'USD');
+  // What the panel passes when a negotiated discount replaces the tier.
+  const auto = previewAutomaticDiscount({ items, deal: null, products: adminProducts, currency: 'USD' });
+  assert.equal(auto.offerDiscount, 0);
+  assert.equal(auto.kind, 'none');
+});

@@ -4,7 +4,10 @@ import { verifyAdminSession } from '@/lib/adminAuth';
 import { recordAdminActivity, summariseChanges } from '@/lib/adminActivityLog.mjs';
 import { appendOrderActivity } from '@/lib/orderActivity';
 import { stripGiftSuffix } from '@/lib/bacWater.mjs';
-import { authoritativeCheckout, productNameResolver } from '@/lib/authoritativeCheckout.mjs';
+import { activeDealForOrder, authoritativeCheckout, productNameResolver } from '@/lib/authoritativeCheckout.mjs';
+import { combineLiveDeals } from '@/lib/dealOfWeek.mjs';
+import { getLiveDeals } from '@/lib/dealsEngine';
+import { dealOffersForPricing } from '@/lib/manualOrderDiscount.mjs';
 import { affiliateCommissionPatch } from '@/lib/affiliateCommission.mjs';
 import { getDatabaseBackedUsdToCrcRate } from '@/lib/exchangeRate';
 import { isRefundStatus } from '@/lib/orderRefund.mjs';
@@ -230,6 +233,29 @@ export async function PATCH(request) {
         ? 0
         : resolveOrderVolumePct(items, storedOrderVolumePct(currentOrder));
 
+      // Editing the items re-prices the order, and until now that was done
+      // with no knowledge of the running promotion: adding a vial to an order
+      // during a sale charged the customer full price for it. The offers are
+      // read the same way the storefront and the New Order screen read them.
+      //
+      // Known limit: an order edited after its own deal has ended is priced
+      // against whatever is live today, or against nothing. The ended deal's
+      // discount was already lost on edit before this, so nothing got worse -
+      // but an old order should be edited with that in mind.
+      let liveDealOffers = null;
+      let matchedDealId = null;
+      if (!replaceVolumeDiscount) {
+        try {
+          const pooled = combineLiveDeals(await getLiveDeals(supabase));
+          const matched = activeDealForOrder(pooled ? [pooled] : [], items);
+          liveDealOffers = dealOffersForPricing(matched);
+          matchedDealId = matched?.id || null;
+        } catch (dealError) {
+          // An edit must still save when the deal lookup fails.
+          console.warn('[admin/orders/update] live deal lookup skipped:', dealError.message);
+        }
+      }
+
       const authoritative = authoritativeCheckout({
         postedOrder: { ...currentOrder, items, currency },
         products: productsAvailableToThisOrder,
@@ -237,6 +263,7 @@ export async function PATCH(request) {
         exchangeRate: rateResult.rate,
         suppressVolumeDiscount: replaceVolumeDiscount,
         volumeDiscountPctOverride: resolvedVolumePct,
+        dealOffers: liveDealOffers,
         // A free vial a deal gave this order stays on it through an edit.
         keepPostedGifts: true,
       });
@@ -252,6 +279,9 @@ export async function PATCH(request) {
       patch.discount_amount_crc = promoDiscountPair.crc;
       patch.discount_amount_usd = promoDiscountPair.usd;
       patch.volume_discount_pct = authoritative.volumeDiscountPct ?? 0;
+      // Credit the promotion whose offer actually discounted the edited order.
+      const dealIdForOrder = authoritative.dealOfferDealId || (liveDealOffers ? matchedDealId : null);
+      if (dealIdForOrder) patch.deal_id = dealIdForOrder;
 
       const totals = calculateAdminOrderTotals(authoritative.items, shipping, {
         promoDiscountAmount: authoritative.promoDiscount,
@@ -437,7 +467,7 @@ export async function PATCH(request) {
 
     const { data, error, droppedColumns } = await writeDroppingMissingColumns(
       patch,
-      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS, ...ORDER_VOLUME_DISCOUNT_PCT_COLUMNS],
+      [...ORDER_ATTRIBUTION_COLUMNS, ...ORDER_INVENTORY_COLUMNS, ...ORDER_FULFILLMENT_COLUMNS, ...ORDER_VOLUME_DISCOUNT_PCT_COLUMNS, 'deal_id'],
       (row) => supabase
         .from('orders')
         .update(row)
