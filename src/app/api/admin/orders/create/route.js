@@ -190,15 +190,20 @@ export async function POST(request) {
     // which meant the confirmation reached the customer carrying a price
     // nobody had agreed to. Same validation as /api/admin/orders/update so the
     // two entry points cannot disagree about what a valid discount is.
-    // Which of the three discounts this order asked for. A sales agent may now
-    // choose a custom figure instead of the automatic one - the whole point of
-    // the change, so the team stops hand-typing live offers - but a non-
-    // superadmin has to say why, because that reason is what the owner reads
-    // when a total looks wrong, and it prints on the customer's receipt.
+    // Which of the three discounts this order asked for. A typed figure stays
+    // superadmin-only, exactly as it was: the automatic discount is what the
+    // sales team gets, and "no discount" is the choice they already had.
     const discountMode = resolveManualOrderDiscountMode(order);
     const requestedManualDiscountType = normalizeManualDiscountType(order.manual_discount_type);
     const requestedManualDiscountValue = Number(order.manual_discount_value || 0);
-    const wantsCustomDiscount = discountMode === DISCOUNT_MODE_CUSTOM
+    if (!auth.profile.is_superadmin && requestedManualDiscountType && requestedManualDiscountValue > 0) {
+      return NextResponse.json({
+        error: 'Only a superadmin can add a manual order discount. Use the automatic discount or a valid promo code.',
+      }, { status: 403 });
+    }
+
+    const wantsCustomDiscount = auth.profile.is_superadmin
+      && discountMode === DISCOUNT_MODE_CUSTOM
       && requestedManualDiscountType
       && requestedManualDiscountValue > 0;
     const manualDiscountType = wantsCustomDiscount ? requestedManualDiscountType : null;
@@ -206,11 +211,6 @@ export async function POST(request) {
     const manualDiscountReason = wantsCustomDiscount
       ? String(order.manual_discount_reason || '').trim()
       : '';
-    if (wantsCustomDiscount && !auth.profile.is_superadmin && !manualDiscountReason) {
-      return NextResponse.json({
-        error: 'Give a reason for the custom discount. It is shown on the receipt and in the order history.',
-      }, { status: 400 });
-    }
     if (!Number.isFinite(manualDiscountValue) || manualDiscountValue < 0) {
       return NextResponse.json({ error: 'Discount value must be zero or greater' }, { status: 400 });
     }
