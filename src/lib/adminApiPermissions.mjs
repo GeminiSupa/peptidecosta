@@ -34,6 +34,11 @@ const rules = [
   // The Bin itself is reachable by anyone with the tab; which entries they
   // actually see is filtered per row against the module each one came from.
   { pattern: /^\/api\/admin\/recycle-bin(?:\/|$)/, permissions: ['recycle_bin'] },
+  // SMS, bulk campaigns, Studio Flows, browser calls and the message log
+  // all sit under this one path. Without a rule here any admin could reach
+  // them by URL, tab or no tab, and every one of them either spends money
+  // or hands back customer phone numbers.
+  { pattern: /^\/api\/admin\/twilio(?:\/|$)/, permissions: ['twilio'] },
   { pattern: /^\/api\/admin\/whatsapp-analytics$/, permissions: ['whatsapp_ai'] },
   { pattern: /^\/api\/admin\/whatsapp-channels(?:\/|$)/, permissions: ['whatsapp_ai'] },
   { pattern: /^\/api\/admin\/whatsapp-conversations(?:\/|$)/, permissions: ['whatsapp_ai', 'wa_session'] },
