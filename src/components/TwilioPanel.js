@@ -73,6 +73,8 @@ export default function TwilioPanel() {
     error: null,
   });
   const [savingRecording, setSavingRecording] = useState(false);
+  // 'unknown' until asked · 'prompt' the browser will ask · 'granted' · 'denied'
+  const [micState, setMicState] = useState('unknown');
 
   const [activeTab, setActiveTab] = useState('sms'); // 'sms' | 'bulk' | 'flow' | 'calls' | 'whatsapp' | 'logs'
   const [searchTerm, setSearchTerm] = useState('');
@@ -259,14 +261,63 @@ export default function TwilioPanel() {
     }
   }, [twilioData.voiceReady, showCallFeedback, fetchCallLogs]);
 
+  /**
+   * Get the microphone ready before anyone presses Call.
+   *
+   * Opening the tab is the moment to ask: the browser shows its own "Allow
+   * microphone?" dialog there, which is the only thing that can grant it. If
+   * it was refused once the browser will never ask again, so that case has to
+   * be explained on screen instead — nothing in the page can reopen it.
+   */
+  const requestMicrophone = useCallback(async ({ silent = false } = {}) => {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setMicState('denied');
+      return false;
+    }
+
+    // Permissions API is not in every browser; absence just means "ask".
+    try {
+      const status = await navigator.permissions?.query({ name: 'microphone' });
+      if (status?.state === 'denied') {
+        setMicState('denied');
+        return false;
+      }
+      if (status?.state === 'granted') {
+        setMicState('granted');
+        return true;
+      }
+    } catch {
+      // Safari and others throw on the 'microphone' name. Fall through and ask.
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Release it straight away; Twilio opens its own when a call starts, and
+      // leaving this one running keeps the browser's red dot on.
+      stream.getTracks().forEach((track) => track.stop());
+      setMicState('granted');
+      return true;
+    } catch (err) {
+      console.error('[TwilioVoice] microphone refused:', err);
+      setMicState('denied');
+      if (!silent) {
+        showCallFeedback('error', 'The microphone is blocked. See the note above the dialpad.');
+      }
+      return false;
+    }
+  }, [showCallFeedback]);
+
   useEffect(() => {
     if (activeTab === 'calls' && twilioData.voiceReady) {
       loadVoiceDevice();
+      // Silent: opening the tab should not throw an error banner at someone
+      // who has not tried to call yet. The on-screen note covers it.
+      requestMicrophone({ silent: true });
     }
     return () => {
       // Don't destroy the device on tab switch — just leave it alive
     };
-  }, [activeTab, twilioData.voiceReady, loadVoiceDevice]);
+  }, [activeTab, twilioData.voiceReady, loadVoiceDevice, requestMicrophone]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -287,17 +338,9 @@ export default function TwilioPanel() {
       return;
     }
 
-    // A call with no microphone is not a call. Asking here, before Twilio
-    // tries, means the browser's own prompt appears at the moment the person
-    // pressed Call — and a refusal can be explained in plain words.
-    try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      console.error('[TwilioVoice] microphone refused:', err);
-      showCallFeedback(
-        'error',
-        'Your browser is blocking the microphone. Click the padlock in the address bar, set Microphone to Allow, then reload this page.'
-      );
+    // A call with no microphone is not a call. Usually granted already when
+    // the tab opened; this covers the person who dismissed the dialog.
+    if (!(await requestMicrophone())) {
       setCallStatus(CALL_STATUS.ERROR);
       setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 6000);
       return;
@@ -342,7 +385,7 @@ export default function TwilioPanel() {
       setCallStatus(CALL_STATUS.ERROR);
       setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 3000);
     }
-  }, [callTo, showCallFeedback, fetchCallLogs]);
+  }, [callTo, showCallFeedback, fetchCallLogs, requestMicrophone]);
 
   const handleHangUp = useCallback(() => {
     if (activeCallRef.current) {
@@ -1056,6 +1099,30 @@ export default function TwilioPanel() {
               <span className="twilio-switch-text">{recordingEnabled ? 'On' : 'Off'}</span>
             </button>
           </div>
+
+          {/* A browser that has been told "block" will never ask again, and
+              no code on the page can reopen that dialog — only the person can,
+              from the address bar. So say exactly that. */}
+          {micState === 'denied' && (
+            <div className="twilio-setup-banner twilio-mic-banner">
+              <div className="twilio-setup-banner-icon"><MicOff size={20} /></div>
+              <div>
+                <strong>Your browser is blocking the microphone</strong>
+                <ol className="twilio-setup-steps">
+                  <li>Click the <strong>padlock</strong> at the left of the address bar</li>
+                  <li>Set <strong>Microphone</strong> to <strong>Allow</strong></li>
+                  <li>Reload this page</li>
+                </ol>
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-secondary twilio-mic-retry"
+                  onClick={() => requestMicrophone()}
+                >
+                  <Mic size={14} /> Check again
+                </button>
+              </div>
+            </div>
+          )}
 
           {callFeedback && (
             <div className={`twilio-alert ${callFeedback.type}`}>

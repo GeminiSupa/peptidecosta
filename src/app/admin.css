@@ -12944,3 +12944,17 @@
     color: #38bdf8;
 }
 [data-theme="light"] .twilio-grid-card-cta { color: #0066ff; }
+
+/* ══ MICROPHONE BLOCKED NOTICE ══ */
+.twilio-mic-banner {
+    background: rgba(248, 113, 113, 0.08);
+    border-color: rgba(248, 113, 113, 0.28);
+}
+.twilio-mic-banner strong { color: #fca5a5; }
+.twilio-mic-banner .twilio-setup-banner-icon { color: #f87171; }
+.twilio-mic-retry { margin-top: 10px; }
+[data-theme="light"] .twilio-mic-banner {
+    background: #fef2f2;
+    border-color: rgba(220, 38, 38, 0.3);
+}
+[data-theme="light"] .twilio-mic-banner strong { color: #b91c1c; }
