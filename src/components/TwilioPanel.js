@@ -287,6 +287,22 @@ export default function TwilioPanel() {
       return;
     }
 
+    // A call with no microphone is not a call. Asking here, before Twilio
+    // tries, means the browser's own prompt appears at the moment the person
+    // pressed Call — and a refusal can be explained in plain words.
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      console.error('[TwilioVoice] microphone refused:', err);
+      showCallFeedback(
+        'error',
+        'Your browser is blocking the microphone. Click the padlock in the address bar, set Microphone to Allow, then reload this page.'
+      );
+      setCallStatus(CALL_STATUS.ERROR);
+      setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 6000);
+      return;
+    }
+
     try {
       setCallStatus(CALL_STATUS.CONNECTING);
       setCallDuration(0);
@@ -311,7 +327,13 @@ export default function TwilioPanel() {
       });
       call.on('error', (err) => {
         clearInterval(durationTimerRef.current);
-        showCallFeedback('error', `Call error: ${err.message}`);
+        const micBlocked = err?.code === 31401 || /user media|input audio/i.test(err?.message || '');
+        showCallFeedback(
+          'error',
+          micBlocked
+            ? 'Your browser is blocking the microphone. Click the padlock in the address bar, set Microphone to Allow, then reload this page.'
+            : `Call error: ${err.message}`
+        );
         setCallStatus(CALL_STATUS.ERROR);
         setTimeout(() => setCallStatus(CALL_STATUS.IDLE), 3000);
       });
