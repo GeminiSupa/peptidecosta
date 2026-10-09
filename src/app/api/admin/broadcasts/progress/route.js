@@ -6,6 +6,7 @@ import {
   writeDroppingMissingColumns, BROADCAST_PACING_COLUMNS, BROADCAST_WINDOW_COLUMNS,
 } from '@/lib/optionalColumns.mjs';
 import { MAX_BATCH_SIZE, MAX_DELAY_SECONDS } from '@/lib/broadcastPacing.mjs';
+import { broadcastListPreview, broadcastMessageDetails } from '@/lib/broadcastMessageDetails.mjs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,27 @@ export async function GET(request) {
 
   try {
     const supabase = getSupabaseAdmin();
+
+    // Message bodies can contain a complete HTML email, so keep the frequent
+    // progress response small and fetch one broadcast's content only when an
+    // admin explicitly opens it.
+    const detailId = new URL(request.url).searchParams.get('id');
+    if (detailId) {
+      const { data: broadcast, error: detailError } = await supabase
+        .from('scheduled_broadcasts')
+        .select('id, message, channels')
+        .eq('id', detailId)
+        .maybeSingle();
+
+      if (detailError) {
+        console.error('[admin/broadcasts/progress/detail]', detailError.message);
+        return NextResponse.json({ error: detailError.message }, { status: 500 });
+      }
+      if (!broadcast) {
+        return NextResponse.json({ error: 'Broadcast not found' }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true, details: broadcastMessageDetails(broadcast) });
+    }
 
     const { data: broadcasts, error: broadcastError } = await supabase
       .from('scheduled_broadcasts')
@@ -77,7 +99,7 @@ export async function GET(request) {
         status: broadcast.status,
         scheduledAt: broadcast.scheduled_at,
         createdAt: broadcast.created_at,
-        preview: String(broadcast.message || '').slice(0, 120),
+        preview: broadcastListPreview(broadcast),
         progress,
         estimate: progress.isComplete ? null : estimateCompletion(broadcastEvents, progress.remaining, now),
         problems,

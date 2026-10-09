@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader, Zap, Gauge } from 'lucide-react';
+import { Activity, CheckCircle2, XCircle, ShieldOff, Clock, ChevronDown, ChevronUp, Loader, Zap, Gauge, Eye, Mail, MessageCircle } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
+import { fillWhatsAppTemplate, whatsappTemplateBodyFromDetails } from '@/lib/broadcastMessageDetails.mjs';
 
 const POLL_MS = 5000;
 
@@ -26,11 +27,87 @@ function formatDuration(ms) {
 
 const STAT_STYLE = { display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem', fontWeight: 600 };
 
-export default function BroadcastProgress() {
+function messageValues(details) {
+  const whatsapp = details?.whatsapp;
+  if (!whatsapp) return [];
+  if (whatsapp.parameterMode === 'custom') return whatsapp.parameters || [];
+  if (whatsapp.parameterMode === 'message') return [String(details.message || '').replace(/\s+/g, ' ').trim()];
+  if (whatsapp.parameterMode === 'greeting' || whatsapp.greetingVariable) return ['[personalized greeting]'];
+  return ['[customer first name]'];
+}
+
+function BroadcastMessage({ details, templateDetails }) {
+  const whatsapp = details?.whatsapp;
+  const templateBody = whatsapp?.templateBody
+    || whatsappTemplateBodyFromDetails(templateDetails, whatsapp?.templateName, whatsapp?.language);
+  const whatsappText = templateBody
+    ? fillWhatsAppTemplate(templateBody, messageValues(details))
+    : details?.message;
+
+  return (
+    <div style={{ marginTop: '10px', display: 'grid', gap: '10px' }}>
+      {details?.email && (
+        <section style={{ border: '1px solid #334155', borderRadius: '10px', overflow: 'hidden' }}>
+          <div style={{ padding: '10px 12px', background: '#111c30', borderBottom: '1px solid #334155' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#7dd3fc', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <Mail size={13} /> Email
+            </div>
+            <div style={{ marginTop: '5px', color: '#f8fafc', fontSize: '0.82rem' }}>
+              <span style={{ color: '#94a3b8' }}>Subject:</span> {details.email.subject}
+            </div>
+          </div>
+          {details.email.html ? (
+            <iframe
+              title="Sent email preview"
+              sandbox=""
+              referrerPolicy="no-referrer"
+              srcDoc={details.email.html}
+              style={{ display: 'block', width: '100%', height: '420px', border: 0, background: '#fff' }}
+            />
+          ) : (
+            <div style={{ padding: '14px', background: '#f8fafc', color: '#1e293b' }}>
+              {details.email.imageUrl && (
+                <img src={details.email.imageUrl} alt="" style={{ display: 'block', maxWidth: '220px', maxHeight: '220px', objectFit: 'contain', margin: '0 auto 14px' }} />
+              )}
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6, fontSize: '0.85rem' }}>
+                {details.message || 'No plain-text message was saved.'}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {whatsapp && (
+        <section style={{ padding: '12px 14px', background: '#111c30', border: '1px solid #334155', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#4ade80', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            <MessageCircle size={13} /> WhatsApp
+          </div>
+          {whatsapp.templateName && (
+            <div style={{ marginTop: '7px', color: '#94a3b8', fontSize: '0.72rem' }}>
+              Approved template: <span style={{ color: '#cbd5e1', fontFamily: 'monospace' }}>{whatsapp.templateName}</span> ({whatsapp.language})
+            </div>
+          )}
+          <div style={{ marginTop: '9px', padding: '11px 12px', background: '#0b251d', color: '#e2e8f0', borderRadius: '9px', whiteSpace: 'pre-wrap', lineHeight: 1.55, fontSize: '0.84rem' }}>
+            {whatsappText || (whatsapp.templateName ? 'The template wording is not available, but the template name used is shown above.' : 'No message was saved.')}
+          </div>
+          {(whatsapp.parameterMode === 'name' || whatsapp.parameterMode === 'greeting' || whatsapp.greetingVariable) && (
+            <div style={{ marginTop: '7px', color: '#64748b', fontSize: '0.7rem' }}>Personalized text varied by recipient.</div>
+          )}
+        </section>
+      )}
+    </div>
+  );
+}
+
+export default function BroadcastProgress({ whatsappTemplateDetails = [] }) {
   const [broadcasts, setBroadcasts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState({});
+  const [messageExpanded, setMessageExpanded] = useState({});
+  const [messageDetails, setMessageDetails] = useState({});
+  const [messageErrors, setMessageErrors] = useState({});
+  const [loadingMessageId, setLoadingMessageId] = useState(null);
   const [stoppingId, setStoppingId] = useState(null);
   const [releasingId, setReleasingId] = useState(null);
   const [pacingEdit, setPacingEdit] = useState({});   // broadcast id -> draft values
@@ -132,6 +209,25 @@ export default function BroadcastProgress() {
     }
   };
 
+  const handleToggleMessage = async (broadcast) => {
+    const willOpen = !messageExpanded[broadcast.id];
+    setMessageExpanded((prev) => ({ ...prev, [broadcast.id]: willOpen }));
+    if (!willOpen || messageDetails[broadcast.id] || loadingMessageId === broadcast.id) return;
+
+    setLoadingMessageId(broadcast.id);
+    setMessageErrors((prev) => ({ ...prev, [broadcast.id]: null }));
+    try {
+      const res = await adminFetch(`/api/admin/broadcasts/progress?id=${encodeURIComponent(broadcast.id)}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      setMessageDetails((prev) => ({ ...prev, [broadcast.id]: data.details }));
+    } catch (err) {
+      setMessageErrors((prev) => ({ ...prev, [broadcast.id]: err.message }));
+    } finally {
+      setLoadingMessageId(null);
+    }
+  };
+
   const visible = broadcasts.filter((b) => b.progress?.total > 0 || !b.progress?.isComplete);
 
   if (loading) {
@@ -166,6 +262,7 @@ export default function BroadcastProgress() {
           const canStop = !done && ['pending', 'processing'].includes(String(b.status || '').toLowerCase());
           const barColor = isStopped ? '#f59e0b' : done ? '#10b981' : '#38bdf8';
           const isOpen = !!expanded[b.id];
+          const isMessageOpen = !!messageExpanded[b.id];
           const eta = b.estimate ? formatDuration(b.estimate.remainingMs) : null;
 
           return (
@@ -245,8 +342,26 @@ export default function BroadcastProgress() {
                 )}
               </div>
 
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #1e293b' }}>
+                <button
+                  type="button"
+                  onClick={() => handleToggleMessage(b)}
+                  aria-expanded={isMessageOpen}
+                  style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  {loadingMessageId === b.id ? <Loader size={14} className="sync-spinner" /> : <Eye size={14} />}
+                  {isMessageOpen ? 'Hide message' : 'View message sent'}
+                </button>
+                {isMessageOpen && messageErrors[b.id] && (
+                  <div style={{ marginTop: '8px', color: '#fca5a5', fontSize: '0.78rem' }}>Couldn&apos;t load the message: {messageErrors[b.id]}</div>
+                )}
+                {isMessageOpen && messageDetails[b.id] && (
+                  <BroadcastMessage details={messageDetails[b.id]} templateDetails={whatsappTemplateDetails} />
+                )}
+              </div>
+
               {canStop && (
-                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #1e293b' }}>
+                <div style={{ marginTop: '12px' }}>
                   {!pacingEdit[b.id] ? (
                     <button
                       type="button"

@@ -444,6 +444,9 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
     emailSubject,
     emailImageUrl,
     emailHtmlContent: hasEmailHtml ? emailHtmlContent : null,
+    // Keep an immutable copy for the audit/history view. Existing broadcasts
+    // can still resolve their wording from Meta's loaded template definitions.
+    whatsappTemplateBody: channels.whatsapp ? (selectedTemplateBody || null) : null,
     whatsappCategory: channels.whatsapp ? whatsappCategory : null,
     whatsappCategoryReason: channels.whatsapp ? whatsappCategoryReason : null
   });
@@ -1414,7 +1417,7 @@ export default function BroadcastsPanel({ products = [], draft = null, onDraftAp
           {result.success ? '✅' : '❌'} {result.text}
         </div>
       )}
-      <BroadcastProgress />
+      <BroadcastProgress whatsappTemplateDetails={metaTemplateDetails} />
 
       {scheduledBroadcasts.length > 0 && (
         <div style={{ marginTop: '32px', padding: '24px', background: 'rgba(30, 41, 59, 0.5)', borderRadius: '16px', border: '1px solid rgba(56, 189, 248, 0.15)' }}>
