@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import twilio from 'twilio';
 
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 import { formatE164Phone, getTwilioConfig } from '@/lib/twilio';
@@ -8,6 +9,11 @@ import {
   dialRecordAttribute,
   readCallRecordingSetting,
 } from '@/lib/twilioCallRecording.mjs';
+import {
+  checkTwilioSignature,
+  publicWebhookUrl,
+  SIGNATURE_HEADER,
+} from '@/lib/twilioWebhookSignature.mjs';
 
 /**
  * Is recording switched on right now?
@@ -38,8 +44,9 @@ export const dynamic = 'force-dynamic';
  * TwiML webhook called by Twilio when an outbound call is initiated from the browser.
  * Returns TwiML XML instructing Twilio to dial the target number.
  *
- * NOTE: This endpoint is called server-to-server by Twilio — no admin session check.
- * Security is provided by Twilio's request signature validation (optional enhancement).
+ * NOTE: This endpoint is called server-to-server by Twilio — no admin session
+ * is available. Twilio's request signature is what proves the caller, and in
+ * production an unsigned or wrongly signed request is refused.
  */
 export async function POST(request) {
   let formData;
@@ -52,9 +59,30 @@ export async function POST(request) {
     });
   }
 
+  // Prove Twilio sent this before acting on it. Anyone can reach the URL.
+  const params = {};
+  for (const [key, value] of formData.entries()) params[key] = String(value);
+
+  const config = getTwilioConfig();
+  const signatureCheck = checkTwilioSignature({
+    signature: request.headers.get(SIGNATURE_HEADER),
+    authToken: config.authToken,
+    url: publicWebhookUrl(request),
+    params,
+    validate: twilio.validateRequest,
+    isProduction: process.env.NODE_ENV === 'production',
+  });
+
+  if (!signatureCheck.ok) {
+    console.warn('[twilio/voice] refused a request:', signatureCheck.reason);
+    return new NextResponse('<Response><Say>Unauthorized.</Say></Response>', {
+      status: 403,
+      headers: { 'Content-Type': 'text/xml' },
+    });
+  }
+
   // Twilio passes the dialed number as the 'To' param from the browser SDK call
   const rawTo = formData.get('To') || '';
-  const config = getTwilioConfig();
 
   if (!rawTo || !config.isConfigured) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
