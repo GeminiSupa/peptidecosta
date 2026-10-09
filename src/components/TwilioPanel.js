@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { adminFetch } from '@/lib/adminApi';
 import {
   MessageSquare, Send, Zap, RefreshCw, PhoneCall, CheckCircle2,
   AlertCircle, ShieldCheck, Clock, Search, Smartphone, Layers,
@@ -125,7 +126,7 @@ export default function TwilioPanel() {
   const fetchTwilioData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/twilio');
+      const res = await adminFetch('/api/admin/twilio');
       const data = await res.json();
       setTwilioData(data);
       if (data.newFlowSid) setSelectedFlowSid(data.newFlowSid);
@@ -144,7 +145,7 @@ export default function TwilioPanel() {
   const toggleCallRecording = useCallback(async (nextEnabled) => {
     setSavingRecording(true);
     try {
-      const res = await fetch('/api/admin/twilio', {
+      const res = await adminFetch('/api/admin/twilio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set_call_recording', enabled: nextEnabled }),
@@ -167,7 +168,7 @@ export default function TwilioPanel() {
   const fetchCallLogs = useCallback(async () => {
     setCallLogsLoading(true);
     try {
-      const res = await fetch('/api/admin/twilio/calls');
+      const res = await adminFetch('/api/admin/twilio/calls');
       if (res.ok) {
         const data = await res.json();
         setCallLogs(data.calls || []);
@@ -204,7 +205,7 @@ export default function TwilioPanel() {
         });
       }
 
-      const tokenRes = await fetch('/api/admin/twilio/token');
+      const tokenRes = await adminFetch('/api/admin/twilio/token');
       if (!tokenRes.ok) throw new Error('Failed to get Voice token');
       const { token } = await tokenRes.json();
 
@@ -330,7 +331,7 @@ export default function TwilioPanel() {
     if (!smsTo.trim() || !smsBody.trim()) return;
     setSendingSms(true);
     try {
-      const res = await fetch('/api/admin/twilio', {
+      const res = await adminFetch('/api/admin/twilio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'send_sms', to: smsTo, message: smsBody }),
@@ -409,7 +410,7 @@ export default function TwilioPanel() {
       const fromNum = pool.length > 0 ? pool[i % pool.length] : null;
 
       try {
-        const res = await fetch('/api/admin/twilio', {
+        const res = await adminFetch('/api/admin/twilio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -496,7 +497,7 @@ export default function TwilioPanel() {
       }
     }
     try {
-      const res = await fetch('/api/admin/twilio', {
+      const res = await adminFetch('/api/admin/twilio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'trigger_flow', to: flowTo, flowSid: selectedFlowSid, parameters: parsedParams }),
@@ -521,7 +522,7 @@ export default function TwilioPanel() {
     if (!waTo.trim() || !waBody.trim()) return;
     setSendingWa(true);
     try {
-      const res = await fetch('/api/admin/twilio', {
+      const res = await adminFetch('/api/admin/twilio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'send_whatsapp', to: waTo, message: waBody }),
