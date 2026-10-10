@@ -935,7 +935,7 @@ export default function OrderDetailPanel({
             </div>
             {order.payment_transaction_id && (
               <div>
-                <label>Shield transaction ID</label>
+                <label>Chargex transaction ID</label>
                 <span style={{ fontFamily: 'monospace' }}>{order.payment_transaction_id}</span>
               </div>
             )}

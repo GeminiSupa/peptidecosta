@@ -3295,7 +3295,7 @@ export default function CatalogPage() {
       // "Declined". And any customer who closed the tab got nothing at all.
       //
       // /api/shieldhubpay/process-card now sends it, from the status it wrote
-      // to the order — and /api/shieldhubpay/webhook sends it for the 3DS
+      // to the order — and /api/chargx/webhook sends it for the 3DS
       // answers that arrive after this page is gone.
       if (data.paymentUrl) {
         // Stashed before leaving for the bank: the customer comes back to

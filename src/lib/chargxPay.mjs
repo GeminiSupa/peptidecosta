@@ -287,3 +287,24 @@ export function verifyChargxWebhookSignature({ secret, timestamp, signatureHeade
   const expectedBuf = Buffer.from(expected);
   return offered.some((part) => crypto.timingSafeEqual(Buffer.from(part), expectedBuf));
 }
+
+/**
+ * A cardholder name the gateway will accept.
+ *
+ * Accents are stripped and anything that is not a letter or a space is
+ * dropped: a Costa Rican name typed with tildes used to be rejected outright.
+ * Lived in the old Shield Hub Pay client; it is a card-field rule, not that
+ * gateway's, so it moved here when that gateway was removed.
+ */
+export function normalizeCardHolderName(value, fallback = 'Customer') {
+  const clean = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (clean) return clean;
+  if (fallback && fallback !== value) return normalizeCardHolderName(fallback, 'Customer');
+  return 'Customer';
+}

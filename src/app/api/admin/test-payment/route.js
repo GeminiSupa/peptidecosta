@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { verifyAdminSession } from '@/lib/adminAuth';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { normalizeShieldHubPayName } from '@/lib/shieldHubPay';
-import { isChargxConfigured, processChargxCardPayment } from '@/lib/chargxPay.mjs';
+import { isChargxConfigured, normalizeCardHolderName, processChargxCardPayment } from '@/lib/chargxPay.mjs';
 import { claimOrderForPayment, releaseOrderClaim, describeOrderPaymentState } from '@/lib/cardPaymentLock';
 import { getPublicSiteUrl } from '@/lib/publicUrl';
 import { classifyPaymentOutcome, declineReasonFrom, gatewayStatusToOrderStatus } from '@/lib/paymentOutcome.mjs';
@@ -28,7 +27,7 @@ function normalizeCard(card = {}) {
   const expiryYear = yearDigits.length === 4 ? yearDigits.slice(2) : yearDigits;
 
   return {
-    holder: normalizeShieldHubPayName(card.holder, 'Test Admin'),
+    holder: normalizeCardHolderName(card.holder, 'Test Admin'),
     number: String(card.number || '').replace(/\D/g, ''),
     cvv: String(card.cvv || '').replace(/\D/g, ''),
     expiry_month: expiryMonth,

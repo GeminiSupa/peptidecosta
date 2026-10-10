@@ -117,7 +117,7 @@ export async function sendPaymentResultEmails(baseUrl, order, orderNumber, {
  * bounced to their bank with no record of the order at all until the webhook
  * lands — and if the webhook never lands, with nothing ever. So it is kept,
  * saying honestly that the payment is still being confirmed, and the real
- * answer follows from /api/shieldhubpay/webhook.
+ * answer follows from /api/chargx/webhook.
  *
  * The team is not copied: /api/orders/create has already raised its alert for
  * this order, and a hand-off is not news.
