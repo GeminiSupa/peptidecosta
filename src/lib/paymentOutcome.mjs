@@ -68,7 +68,7 @@ export const isDeclinedOutcome = (status) => classifyPaymentOutcome(status) === 
 export const isPendingOutcome = (status) => classifyPaymentOutcome(status) === 'pending';
 
 /**
- * Turn Shield Hub Pay's transaction status into one of ours.
+ * Turn the card gateway's transaction status into one of ours.
  *
  * Case-insensitive: the direct charge answers "Approved" while a transaction
  * re-fetched for a webhook has come back "approved", and the old exact-match

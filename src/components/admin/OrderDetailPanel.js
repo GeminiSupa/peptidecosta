@@ -940,7 +940,7 @@ export default function OrderDetailPanel({
               </div>
             )}
             {order.payment_provider_status && (
-              <div><label>Shield status</label><span>{order.payment_provider_status}</span></div>
+              <div><label>Chargex status</label><span>{order.payment_provider_status}</span></div>
             )}
             {order.payment_authorization && (
               <div><label>Authorization</label><span style={{ fontFamily: 'monospace' }}>{order.payment_authorization}</span></div>

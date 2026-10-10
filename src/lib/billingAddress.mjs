@@ -1,5 +1,5 @@
 /**
- * The billing address Shield Hub Pay is given for a card charge.
+ * The billing address the card gateway is given for a charge.
  *
  * This used to be two identical copies that trusted the shipping address to be
  * the catalog's three-line format:
@@ -35,7 +35,7 @@ const POSTAL_CODE_PATTERN = /^\d{4,6}$/;
  * Reduce free text to something a payment gateway will accept.
  *
  * Accents are stripped rather than passed through: cardholder names have
- * always been normalised this way for Shield Hub Pay, and the billing fields
+ * always been normalised this way for the gateway, and the billing fields
  * beside them never were.
  */
 export function gatewaySafeText(value, maxLength) {

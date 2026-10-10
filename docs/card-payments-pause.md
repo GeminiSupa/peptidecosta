@@ -56,7 +56,7 @@ a card gets charged on this site, and the pause has to close all of them.
 
 | Path | Who reaches it | Closed by |
 |---|---|---|
-| Storefront checkout, `POST /api/shieldhubpay/process-card` | Any customer on `/catalog` | Card tile disabled, plus a refusal at the top of the route |
+| Storefront checkout, `POST /api/chargx/process-card` | Any customer on `/catalog` | Card tile disabled, plus a refusal at the top of the route |
 | Pay-by-link, `POST /api/card-payment-link/pay` | Anyone holding a link we already sent | Apology on `/pay-card`, plus a refusal at the top of the route |
 | New payment links, `POST /api/admin/orders/card-payment-link` | Staff, from the Orders screen | Route refuses with a 503 |
 
@@ -131,7 +131,7 @@ file.
 |---|---|
 | `src/lib/cardPaymentsPaused.mjs` | The switch. Read `areCardPaymentsPaused` on the server, `areCardPaymentsPausedForClient` in client components |
 | `src/lib/cardCheckoutMessages.mjs` | The `paused` copy, ES + EN |
-| `src/app/api/shieldhubpay/process-card/route.js` | Storefront charge, refused |
+| `src/app/api/chargx/process-card/route.js` | Storefront charge, refused |
 | `src/app/api/card-payment-link/pay/route.js` | Pay-by-link charge, refused |
 | `src/app/api/admin/orders/card-payment-link/route.js` | Link generation, refused |
 | `src/app/catalog/page.js` | Card tile disabled, apology shown |

@@ -27,7 +27,7 @@ test('gateway status transitions append an auditable status-change entry', () =>
       at: '<dynamic>',
       type: 'status_change',
       message: 'Status changed to Paid',
-      by: 'Shield Hub Pay',
+      by: 'Chargex',
     },
   );
   assert.equal(Number.isNaN(Date.parse(patch.activity_log[0].at)), false);

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { FlaskConical, Loader2, Trash2, Zap, CreditCard } from 'lucide-react';
 import { adminFetch } from '@/lib/adminApi';
 
-// Superadmin-only sandbox payment tester. Every charge here goes to the Shield
+// Superadmin-only sandbox payment tester. Every charge here goes to the Chargex
 // Hub Pay SANDBOX account — no real money moves. Orders are TEST- prefixed and
 // payment_method 'card-test', and the burst button exists to demonstrate the
 // atomic double-charge lock: 5 concurrent attempts must yield exactly 1 charge.

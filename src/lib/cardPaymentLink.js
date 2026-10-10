@@ -3,8 +3,44 @@ import { getPublicSiteUrl } from './publicUrl.js';
 
 const CHECKOUT_TOKEN_TTL_SECONDS = 30 * 60;
 
+/**
+ * Every secret a card-payment link may have been signed with, newest first.
+ *
+ * A payment link has no expiry: one sent on WhatsApp last week is still a
+ * working link today. So the secret cannot simply be swapped - signing with a
+ * new one while checking against only that one would turn every link already
+ * in a customer's hands into "invalid link" the moment it was rotated.
+ *
+ * Links are therefore signed with the first secret present and accepted if
+ * they match any of them. `SHIELD_HUB_PAY_API_SECRET` is named after a gateway
+ * we no longer use and is kept purely so old links keep working; once
+ * CARD_PAYMENT_LINK_SECRET is set and the old links have been used or
+ * reissued, it can be deleted from Vercel.
+ */
+function paymentLinkSecrets() {
+  return [
+    process.env.CARD_PAYMENT_LINK_SECRET,
+    process.env.SHIELD_HUB_PAY_API_SECRET,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
 function paymentLinkSecret() {
-  return process.env.SHIELD_HUB_PAY_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  return paymentLinkSecrets()[0] || '';
+}
+
+/** Constant-time compare that does not leak which secret matched. */
+function matchesAnySecret(makeExpected, supplied) {
+  const suppliedBuffer = Buffer.from(String(supplied));
+  let matched = false;
+  for (const secret of paymentLinkSecrets()) {
+    const expectedBuffer = Buffer.from(makeExpected(secret));
+    if (expectedBuffer.length !== suppliedBuffer.length) continue;
+    if (crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) matched = true;
+  }
+  return matched;
 }
 
 export function canSignCardPaymentLinks() {
@@ -26,12 +62,10 @@ export function signCardPaymentOrder(orderNumber) {
 export function verifyCardPaymentOrderToken(orderNumber, token) {
   if (!paymentLinkSecret() || !orderNumber || !token) return false;
 
-  const expected = signCardPaymentOrder(orderNumber);
-  const expectedBuffer = Buffer.from(expected);
-  const tokenBuffer = Buffer.from(String(token));
-
-  if (expectedBuffer.length !== tokenBuffer.length) return false;
-  return crypto.timingSafeEqual(expectedBuffer, tokenBuffer);
+  return matchesAnySecret(
+    (secret) => crypto.createHmac('sha256', secret).update(String(orderNumber || '')).digest('base64url'),
+    token,
+  );
 }
 
 /**
@@ -58,16 +92,16 @@ export function createCardCheckoutToken(orderNumber, orderId, {
 }
 
 export function verifyCardCheckoutToken(token, orderNumber, { now = Date.now() } = {}) {
-  const secret = paymentLinkSecret();
-  if (!secret || !token || !orderNumber) return null;
+  if (!paymentLinkSecret() || !token || !orderNumber) return null;
   const [payload, supplied, extra] = String(token).split('.');
   if (!payload || !supplied || extra) return null;
 
-  const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-  const expectedBuffer = Buffer.from(expected);
-  const suppliedBuffer = Buffer.from(supplied);
-  if (expectedBuffer.length !== suppliedBuffer.length
-      || !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)) return null;
+  // Checked against every secret too: a checkout token issued minutes before a
+  // secret change must still complete the payment it was issued for.
+  if (!matchesAnySecret(
+    (candidate) => crypto.createHmac('sha256', candidate).update(payload).digest('base64url'),
+    supplied,
+  )) return null;
 
   try {
     const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
