@@ -932,7 +932,7 @@ export async function POST(request) {
       // which could only ever say "PENDING - CARD", whether the card was about
       // to be approved or refused. The bell row above is raised either way, so
       // the order is never invisible while the charge is in flight.
-      // Sent by /api/shieldhubpay/process-card, or by the webhook for 3DS.
+      // Sent by /api/chargx/process-card, or by the webhook for 3DS.
       order.payment_method === 'card'
         ? ['admin email (deferred to payment result)', Promise.resolve()]
         : ['order emails', sendAdminOrderEmail(baseUrl, savedOrderForAlerts, data.order_number, {

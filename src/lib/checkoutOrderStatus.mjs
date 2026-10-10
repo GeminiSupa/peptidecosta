@@ -14,7 +14,7 @@
  * else opens at 'Pending' and is settled by hand. Both are derived from the
  * payment method, so the body never has to be consulted at all.
  *
- * A real payment moves the order on from here: /api/shieldhubpay/process-card,
+ * A real payment moves the order on from here: /api/chargx/process-card,
  * the webhook, or a staff member in the admin panel. Those paths are
  * authenticated or answer to the gateway; this one is not, so it may only ever
  * open an order as unpaid.

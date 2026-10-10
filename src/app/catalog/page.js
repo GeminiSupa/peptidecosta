@@ -3263,7 +3263,7 @@ export default function CatalogPage() {
     }
 
     try {
-      const res = await fetch('/api/shieldhubpay/process-card', {
+      const res = await fetch('/api/chargx/process-card', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3294,7 +3294,7 @@ export default function CatalogPage() {
       // failed or timed out, a charge that had actually cleared was mailed as
       // "Declined". And any customer who closed the tab got nothing at all.
       //
-      // /api/shieldhubpay/process-card now sends it, from the status it wrote
+      // /api/chargx/process-card now sends it, from the status it wrote
       // to the order — and /api/chargx/webhook sends it for the 3DS
       // answers that arrive after this page is gone.
       if (data.paymentUrl) {

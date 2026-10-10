@@ -136,13 +136,13 @@ test('the ChargX webhook is what reserves stock for a card order now', () => {
 });
 
 test('one copy of the stock rule, shared by both payment paths', () => {
-  const card = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const card = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
   assert.match(card, /import \{ reservePaidOrderInventory \} from '@\/lib\/orderInventoryServer'/);
   assert.equal(card.includes('async function reserveInventoryAfterApprovedPayment'), false);
 });
 
 test('handing the customer to ChargX sends the team alert that was held back', () => {
-  const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const route = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
   const redirectBranch = route.slice(route.indexOf('ORDER_STATUS.CARD_3DS && transaction.redirect_url'));
   assert.match(redirectBranch, /await sendHeldTeamAlert\(orderNumber/);
   // Team only: the customer must not be told "processing" before the payment

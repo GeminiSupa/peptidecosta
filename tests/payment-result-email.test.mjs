@@ -111,7 +111,7 @@ test('the team new-order alert is unchanged and still admin-only', () => {
 });
 
 test('opening Chargex does not mail the customer that payment is processing', () => {
-  const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const route = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
   assert.equal(route.includes('sendCardHandoffReceipt'), false);
 });
 

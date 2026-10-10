@@ -87,7 +87,7 @@ test('a database error is not mistaken for a successful claim', async () => {
 });
 
 test('the card route charges the stored total and never the posted amount', () => {
-  const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const route = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
 
   // The figure handed to the gateway must be derived from the claimed row.
   assert.match(route, /const storedAmount = Number\(claim\.order\?\.total_usd \|\| 0\)/);
@@ -104,7 +104,7 @@ test('the card route charges the stored total and never the posted amount', () =
 });
 
 test('an order with no usable total releases its lock instead of stranding', () => {
-  const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const route = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
   const guard = route.slice(
     route.indexOf('const storedAmount'),
     route.indexOf('const formattedAmount'),

@@ -112,7 +112,7 @@ export async function notifyLowInventory(supabase, changes = []) {
 /**
  * Take a paid order's vials out of stock, once.
  *
- * This body used to live inside /api/shieldhubpay/process-card, which was the
+ * This body used to live inside /api/chargx/process-card, which was the
  * only place that could learn a card order had been paid: it charged the card
  * itself and deducted in the same request. With the ChargX hand-off the answer
  * arrives at /api/chargx/webhook instead, long after the customer has left the

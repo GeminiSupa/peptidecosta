@@ -4,7 +4,7 @@ import fs from 'node:fs';
 
 import { CARD_CHECKOUT_MESSAGE_KEYS, cardCheckoutMessage } from '../src/lib/cardCheckoutMessages.mjs';
 
-const route = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+const route = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
 const catalog = fs.readFileSync('src/app/catalog/page.js', 'utf8');
 
 test('no internal wording can reach a customer from the card route', () => {

@@ -103,7 +103,7 @@ test('all service-consuming routes carry their required guards', () => {
   const recoveryMail = fs.readFileSync('src/app/api/abandoned-cart-notification/route.js', 'utf8');
   const createOrder = fs.readFileSync('src/app/api/orders/create/route.js', 'utf8');
   const ai = fs.readFileSync('src/app/api/ai/route.js', 'utf8');
-  const card = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+  const card = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
   const catalog = fs.readFileSync('src/app/catalog/page.js', 'utf8');
 
   assert.match(orderMail, /verifyInternalRequest/);

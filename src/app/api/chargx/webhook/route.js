@@ -145,7 +145,7 @@ export async function POST(req) {
       // Take the vials out of stock.
       //
       // Nothing here used to: the old gateway charged the card inside
-      // /api/shieldhubpay/process-card and deducted in that same request, and
+      // /api/chargx/process-card and deducted in that same request, and
       // the ChargX hand-off moved the moment an order becomes paid to this
       // webhook — which left every card sale deducting nothing at all. Safe to
       // reach twice: a row that already carries a reservation is skipped.

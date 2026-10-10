@@ -8,7 +8,7 @@ import {
 } from '../src/lib/cardPaymentsPaused.mjs';
 import { cardCheckoutMessage } from '../src/lib/cardCheckoutMessages.mjs';
 
-const processCard = fs.readFileSync('src/app/api/shieldhubpay/process-card/route.js', 'utf8');
+const processCard = fs.readFileSync('src/app/api/chargx/process-card/route.js', 'utf8');
 const payByLink = fs.readFileSync('src/app/api/card-payment-link/pay/route.js', 'utf8');
 const adminLink = fs.readFileSync('src/app/api/admin/orders/card-payment-link/route.js', 'utf8');
 const catalog = fs.readFileSync('src/app/catalog/page.js', 'utf8');

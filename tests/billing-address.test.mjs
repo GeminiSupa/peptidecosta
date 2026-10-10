@@ -90,7 +90,7 @@ test('both card routes use the shared parser and actually import it', () => {
   // adding the import leaves an undefined reference that only fails in
   // production, since `node --check` does not resolve imports.
   for (const f of [
-    'src/app/api/shieldhubpay/process-card/route.js',
+    'src/app/api/chargx/process-card/route.js',
     'src/app/api/card-payment-link/pay/route.js',
   ]) {
     const source = fs.readFileSync(f, 'utf8');
